@@ -5,13 +5,11 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 
 export async function login(formData: FormData) {
-  const supabase = await createClient(); // <--- Aggiungi await qui
+  const supabase = await createClient()
 
-  // Prendiamo i dati dal form
   const email = formData.get('email') as string
   const password = formData.get('password') as string
 
-  // Chiediamo a Supabase di loggarci
   const { error } = await supabase.auth.signInWithPassword({
     email,
     password,
@@ -21,13 +19,12 @@ export async function login(formData: FormData) {
     return redirect('/login?message=Credenziali errate')
   }
 
-  // Se va tutto bene, aggiorniamo la cache e andiamo ai cantieri
   revalidatePath('/', 'layout')
   redirect('/cantieri')
 }
 
 export async function signup(formData: FormData) {
-  const supabase = createClient()
+  const supabase = await createClient() // Corretto: aggiunto await
 
   const email = formData.get('email') as string
   const password = formData.get('password') as string
@@ -37,10 +34,10 @@ export async function signup(formData: FormData) {
     email,
     password,
     options: {
-        data: {
-            full_name: nome,
-        }
-    }
+      data: {
+        full_name: nome,
+      },
+    },
   })
 
   if (error) {
