@@ -13,28 +13,31 @@ export async function creaCantiere(formData: FormData) {
   const budgetStr = formData.get('budget') as string
   const budget = budgetStr ? parseFloat(budgetStr) : 0
 
-  console.log("Tentativo inserimento cantiere:", { codice, descrizione, indirizzo, budget });
+  // Log di controllo per vedere cosa inviamo
+  console.log("Dati inviati:", { codice, descrizione, indirizzo, budget });
 
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from('cantieri')
     .insert([
       {
+        nome: descrizione,      // FIX: Usiamo 'nome' come richiesto dal tuo DB
         codice: codice,
-        descrizione: descrizione,
         indirizzo: indirizzo,
         budget: budget,
         stato: 'aperto'
+        // 'descrizione' la togliamo se non esiste nella tabella o la lasciamo se vuoi duplicare
       }
     ])
-    .select()
 
   if (error) {
-    // Questo log apparirà nei "Runtime Logs" di Vercel
-    console.error("Errore Supabase dettagliato:", error.message, error.details, error.hint)
+    console.error("Errore Supabase:", error.message)
     redirect(`/cantieri/nuovo?error=${encodeURIComponent(error.message)}`)
   }
 
-  console.log("Cantiere creato con successo:", data);
+  // Sincronizza i dati
   revalidatePath('/cantieri')
-  redirect('/cantieri')
+  revalidatePath('/')
+  
+  // Ritorna alla Home (schermata principale) dopo il salvataggio
+  redirect('/')
 }
