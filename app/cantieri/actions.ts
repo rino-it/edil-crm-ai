@@ -10,22 +10,31 @@ export async function creaCantiere(formData: FormData) {
   const codice = formData.get('codice') as string
   const descrizione = formData.get('descrizione') as string
   const indirizzo = formData.get('indirizzo') as string
-  const budget = formData.get('budget') as string
+  const budgetStr = formData.get('budget') as string
+  const budget = budgetStr ? parseFloat(budgetStr) : 0
 
-  const { error } = await supabase.from('cantieri').insert({
-    codice,
-    descrizione,
-    indirizzo,
-    budget: parseFloat(budget),
-    stato: 'aperto'
-  })
+  console.log("Tentativo inserimento cantiere:", { codice, descrizione, indirizzo, budget });
+
+  const { data, error } = await supabase
+    .from('cantieri')
+    .insert([
+      {
+        codice: codice,
+        descrizione: descrizione,
+        indirizzo: indirizzo,
+        budget: budget,
+        stato: 'aperto'
+      }
+    ])
+    .select()
 
   if (error) {
-    console.error(error)
-    // FIX: Usiamo redirect invece di 'return' per soddisfare TypeScript
-    redirect('/cantieri/nuovo?error=true')
+    // Questo log apparirà nei "Runtime Logs" di Vercel
+    console.error("Errore Supabase dettagliato:", error.message, error.details, error.hint)
+    redirect(`/cantieri/nuovo?error=${encodeURIComponent(error.message)}`)
   }
 
+  console.log("Cantiere creato con successo:", data);
   revalidatePath('/cantieri')
   redirect('/cantieri')
 }
