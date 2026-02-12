@@ -22,7 +22,8 @@ export async function creaCantiere(formData: FormData) {
 
   if (error) {
     console.error(error)
-    return { error: 'Errore nella creazione del cantiere' }
+    // FIX: Usiamo redirect invece di 'return' per soddisfare TypeScript
+    redirect('/cantieri/nuovo?error=true')
   }
 
   revalidatePath('/cantieri')
