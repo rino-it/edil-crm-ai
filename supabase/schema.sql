@@ -1,32 +1,29 @@
--- 1. Tabella Cantieri
-CREATE TABLE cantieri (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  nome TEXT NOT NULL,
-  indirizzo TEXT,
-  budget_stimato DECIMAL(12,2) DEFAULT 0,
-  stato TEXT DEFAULT 'in_corso',
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- ... (tabelle cantieri, movimenti, users già presenti) ...
+
+-- 5. Tabella MATERIALI (Se esiste già nel DB, assicurati che abbia queste colonne)
+create table if not exists public.materiali (
+  id uuid default gen_random_uuid() primary key,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  nome text not null,
+  unita_misura text, -- es. "kg", "mq", "pz"
+  costo_unitario_default numeric
 );
 
--- 2. Tabella Movimenti
-CREATE TABLE movimenti (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  cantiere_id UUID REFERENCES cantieri(id) ON DELETE CASCADE,
-  tipo TEXT NOT NULL,
-  descrizione TEXT,
-  importo DECIMAL(12,2) NOT NULL,
-  fornitore TEXT,
-  data_movimento DATE DEFAULT CURRENT_DATE,
-  file_url TEXT,
-  ai_metadata JSONB,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- 6. Tabella CHAT_LOG (ESSENZIALE per Fase 3 - AI & WhatsApp)
+create table if not exists public.chat_log (
+  id uuid default gen_random_uuid() primary key,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  raw_text text,          -- Il messaggio originale ricevuto da WhatsApp
+  media_url text,         -- URL della foto (se presente)
+  sender_number text,     -- Numero di telefono del mittente (es. capocantiere)
+  status_ai text default 'pending', -- Stati: 'pending', 'processed', 'error'
+  ai_response jsonb       -- La risposta strutturata dell'AI
 );
 
--- 3. Tabella Log WhatsApp
-CREATE TABLE whatsapp_logs (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  mittente TEXT NOT NULL,
-  messaggio_raw JSONB,
-  elaborato BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+-- Abilita RLS per sicurezza
+alter table public.materiali enable row level security;
+alter table public.chat_log enable row level security;
+
+-- Policy di accesso (modifica se necessario)
+create policy "Accesso materiali" on public.materiali for all using (auth.role() = 'authenticated');
+create policy "Accesso chat_log" on public.chat_log for all using (auth.role() = 'authenticated');
