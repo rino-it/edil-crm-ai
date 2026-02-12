@@ -15,97 +15,153 @@ export async function uploadComputo(formData: FormData) {
   }
 
   const text = await file.text()
-  
-  // 1. Pulizia e Parsing CSV (Gestisce sia virgola che punto e virgola)
   const rows = text.split('\n')
   const dataToInsert = []
 
-  // Variabili per mappare le colonne dinamicamente
-  let colIndexDescrizione = -1
-  let colIndexBudget = -1
-  let foundHeader = false
+  // Variabili per la mappatura colonne
+  let colDesc = -1
+  let colQty = -1
+  let colUnit = -1
+  let colPrice = -1
+  let colTotal = -1
+  let detectedUnitName = 'corpo' // Default se non troviamo colonne specifiche
+  let headerFound = false
 
+  // Parole chiave per il riconoscimento colonne
+  const keywords = {
+    desc: ['descrizione', 'lavorazione', 'tipo', 'oggetto', 'ditta'], // 'ditta' spesso contiene info utili se manca la descrizione
+    qty: ['q.ta', 'q.tà', 'quantita', 'quantità', 'nr.', 'num'],
+    unit: ['u.m.', 'um', 'unita', 'unità'],
+    price: ['prezzo', 'unitario', '€/'], // Cerca parziali come €/mc
+    total: ['importo', 'totale', 'lavori previsti', 'imponibile']
+  }
+
+  // Unità di misura che spesso appaiono COME intestazione colonna (es. "mq", "mc")
+  const unitHeaders = ['mq', 'mc', 'kg', 'ml', 'pz', 'cad', 'nr', 'ore']
+
+  // 1. Trova l'intestazione e mappa le colonne
   for (let i = 0; i < rows.length; i++) {
-    const rowRaw = rows[i].trim();
-    if (!rowRaw) continue;
+    const rowRaw = rows[i].trim()
+    if (!rowRaw) continue
 
-    // Rimuove caratteri speciali e splitta
-    // Nota: il tuo CSV sembra usare la virgola, ma gestiamo anche il ; per sicurezza
-    const cols = rowRaw.split(/[,;](?=(?:(?:[^"]*"){2})*[^"]*$)/).map(c => c.replace(/^"|"$/g, '').trim());
+    // Supporto per CSV separati da virgola o punto e virgola, gestendo i testi tra virgolette
+    const cols = rowRaw.split(/[,;](?=(?:(?:[^"]*"){2})*[^"]*$)/).map(c => c.replace(/^"|"$/g, '').trim().toLowerCase())
 
-    // 2. Cerchiamo l'intestazione (Header)
-    if (!foundHeader) {
-      // Cerchiamo la colonna "LAVORAZIONE" o "TIPO"
-      const indexLav = cols.findIndex(c => c.toUpperCase().includes('LAVORAZIONE') || c.toUpperCase().includes('TIPO'));
+    // Cerchiamo di capire se questa riga è l'header
+    if (!headerFound) {
+      // Strategia: Se troviamo almeno una colonna "Prezzo" o "Totale" e una "Descrizione", è l'header
+      colDesc = cols.findIndex(c => keywords.desc.some(k => c.includes(k)))
+      colTotal = cols.findIndex(c => keywords.total.some(k => c.includes(k)))
       
-      // Cerchiamo la colonna del budget (nel tuo file è "lavori previsti a contratto" o "IMPORTO")
-      // Se "lavori previsti" è vuoto, useremo "IMPORTO" come fallback o viceversa a tua scelta.
-      // Qui cerco specificamente le colonne del tuo file RIEPILOGO.
-      const indexBudget = cols.findIndex(c => 
-        c.toLowerCase().includes('previsti a contratto') || 
-        c.toLowerCase().includes('lavori a finire') 
-      );
+      // Se troviamo l'header, cerchiamo le altre colonne specifiche
+      if (colDesc !== -1 && (colTotal !== -1 || cols.length > 2)) {
+        headerFound = true
+        
+        // Mappatura Standard
+        colPrice = cols.findIndex(c => keywords.price.some(k => c.includes(k)))
+        colQty = cols.findIndex(c => keywords.qty.some(k => c.includes(k)))
+        colUnit = cols.findIndex(c => keywords.unit.some(k => c.includes(k)))
 
-      if (indexLav !== -1) {
-        colIndexDescrizione = indexLav;
-        colIndexBudget = indexBudget; // Se non lo trova è -1
-        foundHeader = true;
-        console.log(`Trovato Header: Descrizione col ${colIndexDescrizione}, Budget col ${colIndexBudget}`);
-        continue; // Salta la riga di intestazione
-      }
-    }
-
-    // 3. Elaborazione Righe Dati
-    if (foundHeader && cols.length > colIndexDescrizione) {
-      const descrizione = cols[colIndexDescrizione];
-      
-      // Saltiamo righe di riepilogo o totali vuoti
-      if (!descrizione || descrizione.toUpperCase().includes('TOTALE')) continue;
-
-      // Parsing del Budget (Gestione numeri italiani 1.000,00 o inglesi 1000.00)
-      let budgetVal = 0;
-      if (colIndexBudget !== -1 && cols[colIndexBudget]) {
-        let cleanNum = cols[colIndexBudget].replace(/€/g, '').trim();
-        // Se c'è la virgola come decimale e nessun punto, sostituisci virgola con punto
-        if (cleanNum.includes(',') && !cleanNum.includes('.')) {
-            cleanNum = cleanNum.replace(',', '.');
+        // Mappatura "Speciale": Se una colonna si chiama "mc" o "mq", quella è la Qty e l'unità è il nome stesso
+        if (colQty === -1) {
+          const unitIdx = cols.findIndex(c => unitHeaders.includes(c))
+          if (unitIdx !== -1) {
+            colQty = unitIdx
+            detectedUnitName = cols[unitIdx] // Es. 'mc'
+          }
         }
-        budgetVal = parseFloat(cleanNum) || 0;
+
+        console.log(`Header Trovato (Riga ${i}): Desc=${colDesc}, Qty=${colQty} (${detectedUnitName}), Price=${colPrice}, Total=${colTotal}`)
+        continue // Passa alla riga dati successiva
+      }
+    }
+
+    // 2. Importazione Dati
+    if (headerFound) {
+      const rowCols = rowRaw.split(/[,;](?=(?:(?:[^"]*"){2})*[^"]*$)/).map(c => c.replace(/^"|"$/g, '').trim())
+      
+      // Salta righe vuote o sballate
+      if (rowCols.length <= colDesc) continue 
+
+      const descrizione = rowCols[colDesc]
+      if (!descrizione || descrizione.toLowerCase().includes('totale')) continue
+
+      // Funzione helper per pulire i numeri (gestisce 1.000,00 e 1,000.00)
+      const parseNum = (str: string) => {
+        if (!str) return 0
+        let clean = str.replace(/€/g, '').trim()
+        // Se contiene , e . assumiamo che l'ultimo sia il decimale. 
+        // Se contiene solo , e sembra un decimale (es 10,50), sostituiamo.
+        if (clean.indexOf(',') > -1 && clean.indexOf('.') > -1) {
+          if (clean.indexOf(',') < clean.indexOf('.')) clean = clean.replace(/,/g, '') // 1,000.00 -> 1000.00
+          else clean = clean.replace(/\./g, '').replace(',', '.') // 1.000,00 -> 1000.00
+        } else if (clean.indexOf(',') > -1) {
+          clean = clean.replace(',', '.')
+        }
+        return parseFloat(clean) || 0
       }
 
-      // Se abbiamo una descrizione valida, aggiungiamo
-      dataToInsert.push({
-        cantiere_id: cantiereId,
-        codice: cols[0] || '', // Colonna N
-        descrizione: descrizione, // Colonna LAVORAZIONE
-        unita_misura: 'corpo',    // Default per macro-voci
-        quantita: 1,              // Default
-        prezzo_unitario: budgetVal, // Mettiamo tutto il budget qui
-        // Totale verrà calcolato automaticamente dal DB (quantita * prezzo)
-      })
+      let qta = (colQty !== -1) ? parseNum(rowCols[colQty]) : 1
+      let price = (colPrice !== -1) ? parseNum(rowCols[colPrice]) : 0
+      let total = (colTotal !== -1) ? parseNum(rowCols[colTotal]) : 0
+
+      // Logica di fallback se mancano dati
+      if (price === 0 && total !== 0 && qta !== 0) {
+        price = total / qta // Ricava il prezzo unitario
+      } else if (total === 0 && price !== 0 && qta !== 0) {
+        total = price * qta // Ricava il totale
+      } else if (price === 0 && total !== 0) {
+        price = total // Caso "a corpo"
+        qta = 1
+      }
+
+      // Determina unità di misura
+      let unit = detectedUnitName
+      if (colUnit !== -1 && rowCols[colUnit]) {
+        unit = rowCols[colUnit]
+      }
+      // Se abbiamo trovato una colonna prezzo tipo "€/mc", estraiamo "mc"
+      if (unit === 'corpo' && colPrice !== -1) {
+        const headerPrice = rows[i].trim().split(/[,;]/)[colPrice]?.toLowerCase() || '' // Recupera header originale se possibile, qui approssimiamo
+        if (headerPrice.includes('/')) unit = headerPrice.split('/')[1].replace(/[^a-z]/g, '')
+      }
+
+      if (total > 0 || price > 0) { // Importa solo righe con valore
+        dataToInsert.push({
+          cantiere_id: cantiereId,
+          codice: rowCols[0] || '', // Spesso la prima colonna è un ID o N.
+          descrizione: descrizione,
+          unita_misura: unit,
+          quantita: qta,
+          prezzo_unitario: price
+        })
+      }
     }
   }
 
+  // 3. Salvataggio
   if (dataToInsert.length === 0) {
-    return redirect(`/cantieri/${cantiereId}/computo?error=Nessuna riga valida trovata. Controlla che il CSV abbia la colonna 'LAVORAZIONE'.`)
+    return redirect(`/cantieri/${cantiereId}/computo?error=Nessuna riga importata. Verifica il formato CSV.`)
   }
 
-  // 4. Inserimento nel DB
-  // Prima puliamo eventuali vecchie voci per questo cantiere (opzionale, per evitare duplicati in fase di test)
-  await supabase.from('computo_voci').delete().eq('cantiere_id', cantiereId)
+  // Pulizia vecchi dati (opzionale: rimuovi se vuoi APPENDERE invece di SOVRASCRIVERE)
+  // await supabase.from('computo_voci').delete().eq('cantiere_id', cantiereId)
 
-  const { error } = await supabase
-    .from('computo_voci')
-    .insert(dataToInsert)
+  const { error } = await supabase.from('computo_voci').insert(dataToInsert)
 
   if (error) {
-    console.error("Errore importazione:", error)
+    console.error(error)
     return redirect(`/cantieri/${cantiereId}/computo?error=${encodeURIComponent(error.message)}`)
   }
 
-  // 5. Aggiorniamo il Budget Totale del Cantiere
-  const totaleBudget = dataToInsert.reduce((acc, row) => acc + row.prezzo_unitario, 0)
-  await supabase.from('cantieri').update({ budget: totaleBudget }).eq('id', cantiereId)
+  // Aggiorna budget totale cantiere
+  const newTotal = dataToInsert.reduce((acc, r) => acc + (r.quantita * r.prezzo_unitario), 0)
+  // Nota: questo aggiorna il budget aggiungendo ai valori esistenti se non abbiamo cancellato prima.
+  // Per sicurezza, ricalcoliamo il totale DAL DB
+  const { data: allVoci } = await supabase.from('computo_voci').select('quantita, prezzo_unitario').eq('cantiere_id', cantiereId)
+  const realTotal = allVoci?.reduce((acc, r) => acc + (r.quantita * r.prezzo_unitario), 0) || newTotal
+
+  await supabase.from('cantieri').update({ budget: realTotal }).eq('id', cantiereId)
 
   revalidatePath(`/cantieri/${cantiereId}`)
   redirect(`/cantieri/${cantiereId}/computo`)
