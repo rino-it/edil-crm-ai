@@ -4,8 +4,8 @@ import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table" // Assicurati di avere npx shadcn@latest add table
-import { ArrowLeft, Wallet, TrendingDown, Hammer, FileText, Clock, ShoppingCart } from "lucide-react"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { ArrowLeft, Wallet, TrendingDown, Hammer, FileText, Clock, ShoppingCart, ListChecks } from "lucide-react"
 
 export default async function CantierePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -63,42 +63,62 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
             </h1>
             <p className="text-zinc-500">{cantiere.indirizzo} • Cod: {cantiere.codice}</p>
           </div>
-          <div className="flex gap-2">
-             <Link href={`/cantieri/${id}/spesa`}>
-               <Button>+ Nuova Spesa / DDT</Button>
-             </Link>
+          
+          <div className="flex flex-wrap gap-2">
+            <Link href={`/cantieri/${id}/computo`}>
+              <Button variant="outline" className="flex items-center gap-2">
+                <ListChecks className="h-4 w-4" />
+                Computo Metrico
+              </Button>
+            </Link>
+            <Link href={`/cantieri/${id}/spesa`}>
+              <Button className="flex items-center gap-2">
+                <ShoppingCart className="h-4 w-4" />
+                + Nuova Spesa / DDT
+              </Button>
+            </Link>
           </div>
         </div>
 
         {/* KPIs Finanziari */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card>
+          <Card shadow-sm>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Budget Totale</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Budget Totale</CardTitle>
               <Wallet className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">€ {budget.toLocaleString('it-IT')}</div>
+              <div className="text-2xl font-bold">€ {budget.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</div>
+              <div className="mt-2 h-1.5 w-full bg-zinc-100 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-blue-500 transition-all" 
+                  style={{ width: `${Math.min(percentualeSpesa, 100)}%` }}
+                />
+              </div>
             </CardContent>
           </Card>
-          <Card>
+          
+          <Card shadow-sm>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Speso ad oggi</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Speso ad oggi</CardTitle>
               <TrendingDown className="h-4 w-4 text-red-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-red-600">€ {totaleSpeso.toLocaleString('it-IT')}</div>
+              <div className="text-2xl font-bold text-red-600">€ {totaleSpeso.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</div>
+              <p className="text-xs text-muted-foreground mt-1">{percentualeSpesa.toFixed(1)}% del budget utilizzato</p>
             </CardContent>
           </Card>
-          <Card>
+          
+          <Card shadow-sm>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Margine</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Margine Rimanente</CardTitle>
               <Hammer className="h-4 w-4 text-green-500" />
             </CardHeader>
             <CardContent>
               <div className={`text-2xl font-bold ${rimanente < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                € {rimanente.toLocaleString('it-IT')}
+                € {rimanente.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
               </div>
+              <p className="text-xs text-muted-foreground mt-1">Fondi ancora disponibili</p>
             </CardContent>
           </Card>
         </div>
@@ -106,11 +126,13 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
         {/* Tabella Movimenti */}
         <Card>
           <CardHeader>
-            <CardTitle>Storico Movimenti</CardTitle>
+            <CardTitle className="text-lg font-semibold">Storico Movimenti</CardTitle>
           </CardHeader>
           <CardContent>
             {(!movimenti || movimenti.length === 0) ? (
-              <div className="text-center py-10 text-muted-foreground">Nessuna spesa registrata.</div>
+              <div className="text-center py-10 text-muted-foreground bg-zinc-50/50 rounded-lg border border-dashed">
+                Nessuna spesa registrata per questo cantiere.
+              </div>
             ) : (
               <Table>
                 <TableHeader>
@@ -124,14 +146,16 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
                 <TableBody>
                   {movimenti.map((mov) => (
                     <TableRow key={mov.id}>
-                      <TableCell>{new Date(mov.data_movimento).toLocaleDateString('it-IT')}</TableCell>
+                      <TableCell className="font-medium">
+                        {new Date(mov.data_movimento).toLocaleDateString('it-IT')}
+                      </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2 capitalize">
-                          {getIcon(mov.tipo)} {mov.tipo}
+                        <div className="flex items-center gap-2 capitalize text-xs">
+                          {getIcon(mov.tipo)} {mov.tipo.replace('_', ' ')}
                         </div>
                       </TableCell>
-                      <TableCell>{mov.descrizione}</TableCell>
-                      <TableCell className="text-right font-medium">
+                      <TableCell className="max-w-[300px] truncate">{mov.descrizione}</TableCell>
+                      <TableCell className="text-right font-bold text-zinc-900">
                         € {mov.importo?.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
                       </TableCell>
                     </TableRow>
