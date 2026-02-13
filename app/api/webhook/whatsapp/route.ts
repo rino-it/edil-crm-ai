@@ -1,49 +1,47 @@
 import { createClient } from '@/utils/supabase/server'
-import { NextResponse } from 'next/server'
+import { NextResponse, NextRequest } from 'next/server'
 
-// 1. VERIFICA DEL WEBHOOK (Meta chiama qui per validare il token)
-export async function GET(request: Request) {
+// FORZIAMO LA DINAMICITÀ (Fondamentale per i Webhook!)
+export const dynamic = 'force-dynamic' 
+
+// 1. VERIFICA DEL WEBHOOK
+export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
+    // Usiamo nextUrl che è più affidabile su Vercel
+    const searchParams = request.nextUrl.searchParams
     
-    // Estraiamo i parametri che ci manda Meta
     const mode = searchParams.get('hub.mode')
     const token = searchParams.get('hub.verify_token')
     const challenge = searchParams.get('hub.challenge')
 
     const VERIFY_TOKEN = 'edil-crm-segreto-2024'
 
-    // --- LOG DI DEBUG (QUINTESSENZIALE) ---
-    console.log("🔍 [WEBHOOK GET] Tentativo di verifica ricevuto!")
-    console.log(`➡️ Mode ricevuto: '${mode}'`)
-    console.log(`➡️ Token ricevuto: '${token}'`) // Le virgolette ' ' ci mostrano se ci sono spazi!
-    console.log(`🔐 Token atteso:   '${VERIFY_TOKEN}'`)
-    console.log(`❓ Challenge:      '${challenge}'`)
-    // ---------------------------------------
+    console.log("🔍 [WEBHOOK GET] URL Completo:", request.url)
+    console.log(`➡️ Mode: '${mode}', Token: '${token}', Challenge: '${challenge}'`)
 
-    // Verifica stretta
     if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-      console.log("✅ [WEBHOOK GET] Verifica RIUSCITA. Rispondo con challenge.")
+      console.log("✅ Verifica RIUSCITA.")
+      // Rispondiamo SOLO con la challenge, status 200, plain text
       return new NextResponse(challenge, { status: 200 })
     } else {
-      console.log("❌ [WEBHOOK GET] Verifica FALLITA. I token non corrispondono.")
-      return new NextResponse('Token non valido o errato', { status: 403 })
+      console.log("❌ Verifica FALLITA.")
+      return new NextResponse('Token non valido', { status: 403 })
     }
   } catch (error) {
-    console.error("🔥 [WEBHOOK GET] Errore interno:", error)
+    console.error("🔥 Errore GET:", error)
     return new NextResponse('Errore server', { status: 500 })
   }
 }
 
-// 2. RICEZIONE MESSAGGI (Meta invia qui i messaggi)
-export async function POST(request: Request) {
+// 2. RICEZIONE MESSAGGI
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const supabase = await createClient()
 
-    console.log("📩 [WEBHOOK POST] Messaggio ricevuto da Meta")
+    // Debug rapido per vedere se Meta ci parla
+    console.log("📩 [POST] Body ricevuto (estratto):", JSON.stringify(body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0] || "Nessun messaggio"))
 
-    // Controllo se è un messaggio WhatsApp
     if (body.object === 'whatsapp_business_account') {
       const entry = body.entry?.[0]
       const changes = entry?.changes?.[0]
@@ -54,7 +52,6 @@ export async function POST(request: Request) {
         const sender = message.from 
         const type = message.type
         
-        // Estrazione contenuto
         let rawContent = ''
         let mediaId = null
 
@@ -68,28 +65,22 @@ export async function POST(request: Request) {
             mediaId = message.document?.id
         }
 
-        console.log(`👤 Mittente: ${sender} | Tipo: ${type} | Contenuto: ${rawContent}`)
+        console.log(`👤 Mittente: ${sender} | Tipo: ${type}`)
 
-        // Salvataggio su Supabase
-        const { error } = await supabase.from('chat_log').insert({
+        // Salvataggio DB
+        await supabase.from('chat_log').insert({
             raw_text: rawContent,
             sender_number: sender,
             media_url: mediaId, 
             status_ai: 'pending',
             ai_response: body
         })
-
-        if (error) {
-            console.error('❌ Errore salvataggio DB:', error)
-        } else {
-            console.log('💾 Messaggio salvato correttamente nel DB')
-        }
       }
     }
 
     return new NextResponse('Ricevuto', { status: 200 })
   } catch (error) {
-    console.error('🔥 [WEBHOOK POST] Errore critico:', error)
+    console.error('🔥 Errore POST:', error)
     return new NextResponse('Errore interno', { status: 500 })
   }
 }
