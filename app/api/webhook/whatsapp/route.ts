@@ -1,32 +1,49 @@
 import { createClient } from '@/utils/supabase/server'
 import { NextResponse } from 'next/server'
 
-// 1. VERIFICA DEL WEBHOOK (Meta chiama questo endpoint quando configuri l'app)
+// 1. VERIFICA DEL WEBHOOK (Meta chiama qui per validare il token)
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url)
-  const mode = searchParams.get('hub.mode')
-  const token = searchParams.get('hub.verify_token')
-  const challenge = searchParams.get('hub.challenge')
+  try {
+    const { searchParams } = new URL(request.url)
+    
+    // Estraiamo i parametri che ci manda Meta
+    const mode = searchParams.get('hub.mode')
+    const token = searchParams.get('hub.verify_token')
+    const challenge = searchParams.get('hub.challenge')
 
-  // Inventa una password sicura per il webhook (es. "edil-crm-segreto-2024")
-  // Dovrai inserirla uguale identica nel pannello di Meta
-  const VERIFY_TOKEN = 'edil-crm-segreto-2024'
+    const VERIFY_TOKEN = 'edil-crm-segreto-2024'
 
-  if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-    console.log('Webhook verificato con successo!')
-    return new NextResponse(challenge, { status: 200 })
+    // --- LOG DI DEBUG (QUINTESSENZIALE) ---
+    console.log("🔍 [WEBHOOK GET] Tentativo di verifica ricevuto!")
+    console.log(`➡️ Mode ricevuto: '${mode}'`)
+    console.log(`➡️ Token ricevuto: '${token}'`) // Le virgolette ' ' ci mostrano se ci sono spazi!
+    console.log(`🔐 Token atteso:   '${VERIFY_TOKEN}'`)
+    console.log(`❓ Challenge:      '${challenge}'`)
+    // ---------------------------------------
+
+    // Verifica stretta
+    if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+      console.log("✅ [WEBHOOK GET] Verifica RIUSCITA. Rispondo con challenge.")
+      return new NextResponse(challenge, { status: 200 })
+    } else {
+      console.log("❌ [WEBHOOK GET] Verifica FALLITA. I token non corrispondono.")
+      return new NextResponse('Token non valido o errato', { status: 403 })
+    }
+  } catch (error) {
+    console.error("🔥 [WEBHOOK GET] Errore interno:", error)
+    return new NextResponse('Errore server', { status: 500 })
   }
-
-  return new NextResponse('Token non valido', { status: 403 })
 }
 
-// 2. RICEZIONE MESSAGGI (Meta invia qui i messaggi che ricevi su WhatsApp)
+// 2. RICEZIONE MESSAGGI (Meta invia qui i messaggi)
 export async function POST(request: Request) {
   try {
     const body = await request.json()
     const supabase = await createClient()
 
-    // Controllo rapido se è un messaggio WhatsApp valido
+    console.log("📩 [WEBHOOK POST] Messaggio ricevuto da Meta")
+
+    // Controllo se è un messaggio WhatsApp
     if (body.object === 'whatsapp_business_account') {
       const entry = body.entry?.[0]
       const changes = entry?.changes?.[0]
@@ -34,31 +51,45 @@ export async function POST(request: Request) {
       const message = value?.messages?.[0]
 
       if (message) {
-        // Estraiamo i dati essenziali
-        const sender = message.from // Chi ha mandato il messaggio (es. Capocantiere)
-        const text = message.text?.body || '' // Il testo del messaggio
-        const mediaId = message.image?.id || message.document?.id // Se c'è una foto/pdf
-        const type = message.type // 'text', 'image', 'document'
+        const sender = message.from 
+        const type = message.type
+        
+        // Estrazione contenuto
+        let rawContent = ''
+        let mediaId = null
 
-        console.log(`Messaggio ricevuto da ${sender}: ${type}`)
+        if (type === 'text') {
+            rawContent = message.text?.body || ''
+        } else if (type === 'image') {
+            rawContent = message.image?.caption || '[FOTO]'
+            mediaId = message.image?.id
+        } else if (type === 'document') {
+            rawContent = message.document?.caption || message.document?.filename || '[DOCUMENTO]'
+            mediaId = message.document?.id
+        }
 
-        // Salviamo grezzo nel database per processarlo dopo con l'AI
+        console.log(`👤 Mittente: ${sender} | Tipo: ${type} | Contenuto: ${rawContent}`)
+
+        // Salvataggio su Supabase
         const { error } = await supabase.from('chat_log').insert({
-            raw_text: text || `[Allegato ${type}]`,
+            raw_text: rawContent,
             sender_number: sender,
-            media_url: mediaId, // Per ora salviamo l'ID, poi scaricheremo il file
-            status_ai: 'pending', // Dice al sistema: "Ehi AI, c'è lavoro per te"
-            ai_response: body // Salviamo tutto il JSON per debug (opzionale)
+            media_url: mediaId, 
+            status_ai: 'pending',
+            ai_response: body
         })
 
-        if (error) console.error('Errore salvataggio DB:', error)
+        if (error) {
+            console.error('❌ Errore salvataggio DB:', error)
+        } else {
+            console.log('💾 Messaggio salvato correttamente nel DB')
+        }
       }
     }
 
-    // Rispondiamo sempre 200 OK a Meta, altrimenti smette di inviarci messaggi
     return new NextResponse('Ricevuto', { status: 200 })
   } catch (error) {
-    console.error('Errore Webhook:', error)
+    console.error('🔥 [WEBHOOK POST] Errore critico:', error)
     return new NextResponse('Errore interno', { status: 500 })
   }
 }
