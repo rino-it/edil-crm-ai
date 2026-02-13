@@ -1,30 +1,31 @@
 import { createClient } from '@/utils/supabase/server'
 import { NextResponse, NextRequest } from 'next/server'
 
-// FORZIAMO LA DINAMICITÀ (Fondamentale per i Webhook!)
+// FORZIAMO LA DINAMICITÀ (Fondamentale su Vercel)
 export const dynamic = 'force-dynamic' 
 
-// 1. VERIFICA DEL WEBHOOK
+// 1. GESTIONE VERIFICA (GET)
 export async function GET(request: NextRequest) {
   try {
-    // Usiamo nextUrl che è più affidabile su Vercel
-    const searchParams = request.nextUrl.searchParams
-    
-    const mode = searchParams.get('hub.mode')
-    const token = searchParams.get('hub.verify_token')
-    const challenge = searchParams.get('hub.challenge')
+    const url = new URL(request.url)
+    const mode = url.searchParams.get('hub.mode')
+    const token = url.searchParams.get('hub.verify_token')
+    const challenge = url.searchParams.get('hub.challenge')
 
+    // CASO 1: Visita dal Browser (Tu che controlli se funziona)
+    if (!mode || !token) {
+      console.log("👀 Visita manuale rilevata (Browser)")
+      return new NextResponse('Webhook Attivo e Pronto! 🚀 (Invia un messaggio su WhatsApp per testare)', { status: 200 })
+    }
+
+    // CASO 2: Verifica ufficiale di Meta
     const VERIFY_TOKEN = 'edil-crm-segreto-2024'
 
-    console.log("🔍 [WEBHOOK GET] URL Completo:", request.url)
-    console.log(`➡️ Mode: '${mode}', Token: '${token}', Challenge: '${challenge}'`)
-
     if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-      console.log("✅ Verifica RIUSCITA.")
-      // Rispondiamo SOLO con la challenge, status 200, plain text
+      console.log("✅ Verifica Meta RIUSCITA.")
       return new NextResponse(challenge, { status: 200 })
     } else {
-      console.log("❌ Verifica FALLITA.")
+      console.log("❌ Tentativo di accesso negato (Token errato).")
       return new NextResponse('Token non valido', { status: 403 })
     }
   } catch (error) {
@@ -33,15 +34,15 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// 2. RICEZIONE MESSAGGI
+// 2. RICEZIONE MESSAGGI (POST)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const supabase = await createClient()
 
-    // Debug rapido per vedere se Meta ci parla
-    console.log("📩 [POST] Body ricevuto (estratto):", JSON.stringify(body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0] || "Nessun messaggio"))
-
+    console.log("📩 [POST] Nuova notifica da WhatsApp!")
+    
+    // Controllo struttura messaggio
     if (body.object === 'whatsapp_business_account') {
       const entry = body.entry?.[0]
       const changes = entry?.changes?.[0]
@@ -55,6 +56,7 @@ export async function POST(request: NextRequest) {
         let rawContent = ''
         let mediaId = null
 
+        // Estrazione intelligente del contenuto in base al tipo
         if (type === 'text') {
             rawContent = message.text?.body || ''
         } else if (type === 'image') {
@@ -65,16 +67,21 @@ export async function POST(request: NextRequest) {
             mediaId = message.document?.id
         }
 
-        console.log(`👤 Mittente: ${sender} | Tipo: ${type}`)
+        console.log(`👤 Mittente: ${sender} | Tipo: ${type} | Contenuto: ${rawContent}`)
 
-        // Salvataggio DB
-        await supabase.from('chat_log').insert({
+        // Salviamo nel database
+        const { error } = await supabase.from('chat_log').insert({
             raw_text: rawContent,
             sender_number: sender,
             media_url: mediaId, 
             status_ai: 'pending',
             ai_response: body
         })
+
+        if (error) console.error("❌ Errore DB:", error)
+        else console.log("💾 Messaggio salvato correttamente!")
+      } else {
+        console.log("⚠️ Webhook ricevuto ma nessun messaggio trovato (forse è una notifica di stato 'letto'/'consegnato')")
       }
     }
 
