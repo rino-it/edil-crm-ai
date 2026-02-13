@@ -40,9 +40,15 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // 4. Protezione Rotte (Logica Semplice)
-  // Se l'utente NON è loggato e cerca di andare nella dashboard (/cantieri, /analytics...)
-  if (!user && !request.nextUrl.pathname.startsWith("/login") && !request.nextUrl.pathname.startsWith("/auth")) {
+  // 4. Protezione Rotte
+  // FIX: Abbiamo aggiunto il controllo per escludere le rotte "/api" dal redirect forzato.
+  // Meta deve poter accedere a /api/webhook/whatsapp senza fare login.
+  if (
+    !user && 
+    !request.nextUrl.pathname.startsWith("/login") && 
+    !request.nextUrl.pathname.startsWith("/auth") &&
+    !request.nextUrl.pathname.startsWith("/api") // <--- QUESTA È LA RIGA AGGIUNTA CHE RISOLVE L'ERRORE META
+  ) {
     // Lo rispediamo al login
     const url = request.nextUrl.clone();
     url.pathname = "/login";
