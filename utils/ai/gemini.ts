@@ -4,8 +4,8 @@ const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
 
 export async function processWithGemini(text: string, imageUrl?: string) {
   try {
-    // FIX: Usiamo il tag 'latest' che è più robusto per l'API
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+    // FIX: Usiamo la versione specifica '001' che è stabile e garantita
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-001" });
 
     // Istruzioni per l'AI (System Prompt)
     const prompt = `
@@ -32,7 +32,7 @@ export async function processWithGemini(text: string, imageUrl?: string) {
     const response = result.response;
     const textResponse = response.text();
     
-    // Pulizia JSON (Rimuove eventuali ```json all'inizio/fine)
+    // Pulizia JSON
     const cleanJson = textResponse.replace(/```json|```/g, '').trim();
     
     return JSON.parse(cleanJson);
