@@ -4,8 +4,8 @@ const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
 
 export async function processWithGemini(text: string, imageUrl?: string) {
   try {
-    // Usiamo il modello Flash: veloce ed economico, perfetto per chat e OCR rapido
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    // FIX: Usiamo il tag 'latest' che è più robusto per l'API
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 
     // Istruzioni per l'AI (System Prompt)
     const prompt = `
@@ -21,28 +21,18 @@ export async function processWithGemini(text: string, imageUrl?: string) {
       
       Rispondi SOLO con un oggetto JSON (senza markdown) in questo formato:
       {
-        "category": "materiale" | "presenze" | "problema" | "altro",
+        "category": "materiale" | "presenze" | "problema" | "budget" | "altro",
         "summary": "Breve riassunto di cosa è successo",
         "reply_to_user": "La risposta da inviare su WhatsApp al capocantiere"
       }
     `;
 
-    let result;
-
-    if (imageUrl) {
-        // Se c'è un'immagine, Gemini deve scaricarla e analizzarla.
-        // Nota: Per ora passiamo solo il testo per impostare l'architettura.
-        // Gestire le immagini di WhatsApp richiede un passaggio extra (scaricare il blob)
-        // che aggiungeremo nello step successivo.
-        result = await model.generateContent([prompt]); 
-    } else {
-        result = await model.generateContent(prompt);
-    }
-
+    // Generazione contenuto
+    const result = await model.generateContent(prompt);
     const response = result.response;
     const textResponse = response.text();
     
-    // Puliamo il JSON se l'AI mette apici strani
+    // Pulizia JSON (Rimuove eventuali ```json all'inizio/fine)
     const cleanJson = textResponse.replace(/```json|```/g, '').trim();
     
     return JSON.parse(cleanJson);
@@ -52,7 +42,7 @@ export async function processWithGemini(text: string, imageUrl?: string) {
     return {
       category: "errore",
       summary: "Errore analisi AI",
-      reply_to_user: "Ho ricevuto il messaggio ma non riesco a elaborarlo al momento."
+      reply_to_user: "Ho ricevuto il messaggio, ma i miei sistemi AI sono momentaneamente offline. Controllo manualmente."
     };
   }
 }
