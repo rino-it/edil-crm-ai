@@ -1,10 +1,10 @@
-import { createClient } from '@/utils/supabase/server'
+import { createClient } from '@supabase/supabase-js' // Usa la libreria diretta, non quella server
 import { NextResponse, NextRequest } from 'next/server'
 
-// FORZIAMO LA DINAMICITÀ (Fondamentale su Vercel)
+// FORZIAMO LA DINAMICITÀ
 export const dynamic = 'force-dynamic' 
 
-// 1. GESTIONE VERIFICA (GET)
+// 1. GESTIONE VERIFICA (GET) - Resta uguale
 export async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url)
@@ -12,20 +12,16 @@ export async function GET(request: NextRequest) {
     const token = url.searchParams.get('hub.verify_token')
     const challenge = url.searchParams.get('hub.challenge')
 
-    // CASO 1: Visita dal Browser (Tu che controlli se funziona)
     if (!mode || !token) {
-      console.log("👀 Visita manuale rilevata (Browser)")
-      return new NextResponse('Webhook Attivo e Pronto! 🚀 (Invia un messaggio su WhatsApp per testare)', { status: 200 })
+      return new NextResponse('Webhook Attivo! Configura il Service Role per scrivere nel DB.', { status: 200 })
     }
 
-    // CASO 2: Verifica ufficiale di Meta
     const VERIFY_TOKEN = 'edil-crm-segreto-2024'
 
     if (mode === 'subscribe' && token === VERIFY_TOKEN) {
       console.log("✅ Verifica Meta RIUSCITA.")
       return new NextResponse(challenge, { status: 200 })
     } else {
-      console.log("❌ Tentativo di accesso negato (Token errato).")
       return new NextResponse('Token non valido', { status: 403 })
     }
   } catch (error) {
@@ -34,15 +30,27 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// 2. RICEZIONE MESSAGGI (POST)
+// 2. RICEZIONE MESSAGGI (POST) - Modificata per usare ADMIN
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const supabase = await createClient()
+    
+    // --- CREAZIONE CLIENT AMMINISTRATORE ---
+    // Usiamo la Service Role Key per scavalcare la RLS (Row Level Security)
+    // Meta non è un utente loggato, quindi serve i superpoteri.
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!, // Assicurati di averla messa su Vercel!
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      }
+    )
 
     console.log("📩 [POST] Nuova notifica da WhatsApp!")
     
-    // Controllo struttura messaggio
     if (body.object === 'whatsapp_business_account') {
       const entry = body.entry?.[0]
       const changes = entry?.changes?.[0]
@@ -56,7 +64,6 @@ export async function POST(request: NextRequest) {
         let rawContent = ''
         let mediaId = null
 
-        // Estrazione intelligente del contenuto in base al tipo
         if (type === 'text') {
             rawContent = message.text?.body || ''
         } else if (type === 'image') {
@@ -69,8 +76,8 @@ export async function POST(request: NextRequest) {
 
         console.log(`👤 Mittente: ${sender} | Tipo: ${type} | Contenuto: ${rawContent}`)
 
-        // Salviamo nel database
-        const { error } = await supabase.from('chat_log').insert({
+        // Usiamo supabaseAdmin (non supabase normale)
+        const { error } = await supabaseAdmin.from('chat_log').insert({
             raw_text: rawContent,
             sender_number: sender,
             media_url: mediaId, 
@@ -78,10 +85,12 @@ export async function POST(request: NextRequest) {
             ai_response: body
         })
 
-        if (error) console.error("❌ Errore DB:", error)
-        else console.log("💾 Messaggio salvato correttamente!")
-      } else {
-        console.log("⚠️ Webhook ricevuto ma nessun messaggio trovato (forse è una notifica di stato 'letto'/'consegnato')")
+        if (error) {
+            console.error("❌ Errore DB:", error)
+            // Non blocchiamo la risposta a Meta, altrimenti riprova all'infinito
+        } else {
+            console.log("💾 Messaggio salvato correttamente nel DB!")
+        }
       }
     }
 
