@@ -2,47 +2,55 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
 
+// Funzione interna per chiamare l'AI con un modello specifico
+async function callAI(modelName: string, prompt: string) {
+  console.log(`🤖 Tentativo con modello: ${modelName}`);
+  const model = genAI.getGenerativeModel({ model: modelName });
+  const result = await model.generateContent(prompt);
+  const response = result.response;
+  return response.text();
+}
+
 export async function processWithGemini(text: string, imageUrl?: string) {
+  // Prompt di sistema (uguale per tutti i modelli)
+  const prompt = `
+    Sei un assistente esperto per la gestione di cantieri edili.
+    Analizza il messaggio del capocantiere.
+    
+    MESSAGGIO: "${text}"
+    
+    Rispondi SOLO con un JSON valido (no markdown) in questo formato:
+    {
+      "category": "materiale" | "presenze" | "problema" | "budget" | "altro",
+      "summary": "Breve riassunto",
+      "reply_to_user": "Risposta breve da inviare su WhatsApp"
+    }
+  `;
+
   try {
-    // FIX: Usiamo la versione specifica '001' che è stabile e garantita
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-001" });
+    let jsonString = "";
 
-    // Istruzioni per l'AI (System Prompt)
-    const prompt = `
-      Sei un assistente esperto per la gestione di cantieri edili.
-      Il tuo compito è analizzare i messaggi o le foto inviate dai capicantiere.
+    // TENTATIVO 1: Usiamo il modello veloce (Flash)
+    try {
+      jsonString = await callAI("gemini-1.5-flash", prompt);
+    } catch (error: any) {
+      console.warn("⚠️ Gemini Flash fallito. Passo al modello di backup...");
       
-      OBIETTIVO:
-      1. Capire se si tratta di materiale (DDT), presenza operai, o un problema.
-      2. Estrarre dati utili (nomi, quantità, date).
-      3. Rispondere in modo breve e professionale al capocantiere confermando la ricezione.
+      // TENTATIVO 2: Usiamo il modello classico (Pro) - La "ruota di scorta"
+      // gemini-pro è il modello più stabile e diffuso
+      jsonString = await callAI("gemini-pro", prompt);
+    }
 
-      MESSAGGIO UTENTE: "${text}"
-      
-      Rispondi SOLO con un oggetto JSON (senza markdown) in questo formato:
-      {
-        "category": "materiale" | "presenze" | "problema" | "budget" | "altro",
-        "summary": "Breve riassunto di cosa è successo",
-        "reply_to_user": "La risposta da inviare su WhatsApp al capocantiere"
-      }
-    `;
-
-    // Generazione contenuto
-    const result = await model.generateContent(prompt);
-    const response = result.response;
-    const textResponse = response.text();
-    
-    // Pulizia JSON
-    const cleanJson = textResponse.replace(/```json|```/g, '').trim();
-    
+    // Pulizia della risposta (rimuove ```json e spazi)
+    const cleanJson = jsonString.replace(/```json|```/g, '').trim();
     return JSON.parse(cleanJson);
 
   } catch (error) {
-    console.error("Errore Gemini:", error);
+    console.error("🔥 Errore CRITICO Gemini (tutti i modelli falliti):", error);
     return {
       category: "errore",
-      summary: "Errore analisi AI",
-      reply_to_user: "Ho ricevuto il messaggio, ma i miei sistemi AI sono momentaneamente offline. Controllo manualmente."
+      summary: "Errore AI totale",
+      reply_to_user: "I miei sistemi AI sono temporaneamente non disponibili. Ho notificato l'ufficio."
     };
   }
 }
