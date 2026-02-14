@@ -2,9 +2,17 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
 
-// Funzione interna per chiamare l'AI con un modello specifico
-async function callAI(modelName: string, prompt: string) {
-  console.log(`🤖 Tentativo con modello: ${modelName}`);
+// LISTA DI MODELLI DA PROVARE (In ordine di preferenza)
+const MODELS_TO_TRY = [
+  "gemini-1.5-flash",          // Il più veloce e nuovo
+  "gemini-1.5-flash-latest",   // Alias alternativo
+  "gemini-1.5-flash-001",      // Versione specifica
+  "gemini-1.0-pro",            // Versione stabile vecchia
+  "gemini-pro"                 // Fallback finale
+];
+
+async function tryGenerateWithModel(modelName: string, prompt: string) {
+  console.log(`🤖 Tentativo con modello: ${modelName}...`);
   const model = genAI.getGenerativeModel({ model: modelName });
   const result = await model.generateContent(prompt);
   const response = result.response;
@@ -12,11 +20,9 @@ async function callAI(modelName: string, prompt: string) {
 }
 
 export async function processWithGemini(text: string, imageUrl?: string) {
-  // Prompt di sistema (uguale per tutti i modelli)
   const prompt = `
     Sei un assistente esperto per la gestione di cantieri edili.
     Analizza il messaggio del capocantiere.
-    
     MESSAGGIO: "${text}"
     
     Rispondi SOLO con un JSON valido (no markdown) in questo formato:
@@ -27,30 +33,27 @@ export async function processWithGemini(text: string, imageUrl?: string) {
     }
   `;
 
-  try {
-    let jsonString = "";
-
-    // TENTATIVO 1: Usiamo il modello veloce (Flash)
+  // CICLO "CARRARMATO": Prova i modelli uno alla volta
+  for (const modelName of MODELS_TO_TRY) {
     try {
-      jsonString = await callAI("gemini-1.5-flash", prompt);
-    } catch (error: any) {
-      console.warn("⚠️ Gemini Flash fallito. Passo al modello di backup...");
+      const jsonString = await tryGenerateWithModel(modelName, prompt);
       
-      // TENTATIVO 2: Usiamo il modello classico (Pro) - La "ruota di scorta"
-      // gemini-pro è il modello più stabile e diffuso
-      jsonString = await callAI("gemini-pro", prompt);
+      // Se arriviamo qui, ha funzionato! Puliamo e usciamo.
+      const cleanJson = jsonString.replace(/```json|```/g, '').trim();
+      console.log(`✅ Successo con il modello: ${modelName}`);
+      return JSON.parse(cleanJson);
+
+    } catch (error: any) {
+      console.warn(`⚠️ Fallito ${modelName}. Motivo: ${error.message?.split(' ')[0]}`);
+      // Continua col prossimo modello nel ciclo...
     }
-
-    // Pulizia della risposta (rimuove ```json e spazi)
-    const cleanJson = jsonString.replace(/```json|```/g, '').trim();
-    return JSON.parse(cleanJson);
-
-  } catch (error) {
-    console.error("🔥 Errore CRITICO Gemini (tutti i modelli falliti):", error);
-    return {
-      category: "errore",
-      summary: "Errore AI totale",
-      reply_to_user: "I miei sistemi AI sono temporaneamente non disponibili. Ho notificato l'ufficio."
-    };
   }
+
+  // Se siamo qui, hanno fallito TUTTI (drammatico)
+  console.error("🔥 TUTTI i modelli Gemini hanno fallito. Controlla la API KEY.");
+  return {
+    category: "errore",
+    summary: "Errore AI totale",
+    reply_to_user: "I miei sistemi AI sono temporaneamente non disponibili (Err. Key/Models)."
+  };
 }
