@@ -1,51 +1,74 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-// ⚠️ TEST DIRETTO: Incolla la tua chiave qui tra le virgolette
-// Esempio: const API_KEY = "AIzaSyDxxxx....";
-const API_KEY = "AIzaSyAg8MrYWH1hVyIdMEFeaGhk8-oEI5ldBaU"; 
-
-const genAI = new GoogleGenerativeAI(API_KEY);
-
 export async function processWithGemini(text: string, imageUrl?: string) {
-  const prompt = `
-    Sei un assistente esperto per la gestione di cantieri edili.
-    Analizza il messaggio: "${text}"
-    Rispondi SOLO JSON:
-    {
-      "category": "materiale" | "presenze" | "problema" | "budget" | "altro",
-      "summary": "Breve riassunto",
-      "reply_to_user": "Risposta WhatsApp"
-    }
-  `;
+  const apiKey = process.env.GOOGLE_API_KEY;
 
-  // Usiamo direttamente il modello che DOVREBBE funzionare
-  const modelName = "gemini-1.5-flash"; 
+  if (!apiKey) {
+    console.error("❌ MANCA LA GOOGLE_API_KEY SU VERCEL!");
+    return fallbackError("Errore configurazione Server (Manca Key)");
+  }
+
+  // Usiamo direttamente l'URL REST API (senza libreria SDK)
+  // Questo bypassa qualsiasi problema di versione del pacchetto npm
+  const model = "gemini-1.5-flash"; 
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+  const requestBody = {
+    contents: [{
+      parts: [{
+        text: `
+          Sei un assistente esperto per la gestione di cantieri edili.
+          Analizza il messaggio: "${text}"
+          
+          Rispondi SOLO JSON (no markdown):
+          {
+            "category": "materiale" | "presenze" | "problema" | "budget" | "altro",
+            "summary": "Breve riassunto",
+            "reply_to_user": "Risposta WhatsApp"
+          }
+        `
+      }]
+    }]
+  };
 
   try {
-    console.log(`🤖 Test Diretto con chiave hardcoded...`);
-    const model = genAI.getGenerativeModel({ model: modelName });
+    console.log(`🤖 Chiamata REST diretta a Gemini (${model})...`);
     
-    const result = await model.generateContent(prompt);
-    const response = result.response;
-    const jsonString = response.text();
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      // Se c'è un errore, leggiamo il messaggio VERO di Google
+      const errorData = await response.json();
+      console.error("🔥 ERRORE GOOGLE API:", JSON.stringify(errorData, null, 2));
+      throw new Error(`Errore API: ${response.status}`);
+    }
+
+    const data = await response.json();
     
-    const cleanJson = jsonString.replace(/```json|```/g, '').trim();
-    console.log(`✅ SUCCESSO! La chiave funziona.`);
+    // Estrazione risposta
+    const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    
+    if (!aiText) throw new Error("Risposta vuota da Gemini");
+
+    // Pulizia JSON
+    const cleanJson = aiText.replace(/```json|```/g, '').trim();
+    console.log("✅ Gemini ha risposto!");
+    
     return JSON.parse(cleanJson);
 
-  } catch (error: any) {
-    // STAMPIAMO L'ERRORE COMPLETO (Senza tagliarlo)
-    console.error("🔥 ERRORE DETTAGLIATO:", JSON.stringify(error, null, 2));
-    
-    // Se l'errore ha una risposta dal server, stampiamola
-    if (error.response) {
-        console.error("🔥 Server Response:", error.response);
-    }
-    
-    return {
-      category: "errore",
-      summary: "Errore API Key",
-      reply_to_user: "Errore di configurazione del sistema AI."
-    };
+  } catch (error) {
+    console.error("🔥 Errore Fetch:", error);
+    return fallbackError("I miei sistemi AI sono temporaneamente offline.");
   }
+}
+
+// Funzione di supporto per errore standard
+function fallbackError(msg: string) {
+  return {
+    category: "errore",
+    summary: "Errore Sistema",
+    reply_to_user: msg
+  };
 }
