@@ -2,73 +2,78 @@ export async function processWithGemini(text: string, imageUrl?: string) {
   const apiKey = process.env.GOOGLE_API_KEY;
 
   if (!apiKey) {
-    console.error("❌ MANCA LA GOOGLE_API_KEY SU VERCEL!");
-    return fallbackError("Errore configurazione Server (Manca Key)");
+    console.error("❌ MANCA LA GOOGLE_API_KEY!");
+    return fallbackError("Errore configurazione Server");
   }
 
-  // Usiamo direttamente l'URL REST API (senza libreria SDK)
-  // Questo bypassa qualsiasi problema di versione del pacchetto npm
-  const model = "gemini-1.5-flash"; 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  // 1. Proviamo a usare il modello FLASH (Il più comune)
+  const modelToUse = "gemini-1.5-flash"; 
+  const generateUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${apiKey}`;
 
   const requestBody = {
-    contents: [{
-      parts: [{
-        text: `
-          Sei un assistente esperto per la gestione di cantieri edili.
-          Analizza il messaggio: "${text}"
-          
-          Rispondi SOLO JSON (no markdown):
-          {
-            "category": "materiale" | "presenze" | "problema" | "budget" | "altro",
-            "summary": "Breve riassunto",
-            "reply_to_user": "Risposta WhatsApp"
-          }
-        `
-      }]
-    }]
+    contents: [{ parts: [{ text: `Analizza per cantiere: ${text}` }] }]
   };
 
   try {
-    console.log(`🤖 Chiamata REST diretta a Gemini (${model})...`);
+    console.log(`🤖 Tentativo chiamata a ${modelToUse}...`);
     
-    const response = await fetch(url, {
+    const response = await fetch(generateUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(requestBody)
     });
 
     if (!response.ok) {
-      // Se c'è un errore, leggiamo il messaggio VERO di Google
-      const errorData = await response.json();
-      console.error("🔥 ERRORE GOOGLE API:", JSON.stringify(errorData, null, 2));
-      throw new Error(`Errore API: ${response.status}`);
+      // ⚠️ SE FALLISCE: Facciamo partire l'indagine
+      console.error(`🔥 Errore Generazione (${response.status}). Avvio diagnostica...`);
+      
+      // Chiamiamo Google per farci dare la LISTA dei modelli attivi
+      await listAvailableModels(apiKey);
+      
+      throw new Error(`API Error: ${response.status}`);
     }
 
     const data = await response.json();
-    
-    // Estrazione risposta
     const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
     
-    if (!aiText) throw new Error("Risposta vuota da Gemini");
+    if (!aiText) throw new Error("Risposta vuota");
 
-    // Pulizia JSON
-    const cleanJson = aiText.replace(/```json|```/g, '').trim();
-    console.log("✅ Gemini ha risposto!");
-    
-    return JSON.parse(cleanJson);
+    // Se funziona, restituiamo un JSON finto per testare il flusso
+    return {
+      category: "test",
+      summary: "Funziona!",
+      reply_to_user: aiText.substring(0, 100)
+    };
 
   } catch (error) {
-    console.error("🔥 Errore Fetch:", error);
-    return fallbackError("I miei sistemi AI sono temporaneamente offline.");
+    console.error("🔥 Blocco Catch:", error);
+    return fallbackError("Sto diagnosticando il problema AI. Controlla i log.");
   }
 }
 
-// Funzione di supporto per errore standard
+// 🕵️‍♂️ FUNZIONE SPIA: Elenca i modelli disponibili
+async function listAvailableModels(key: string) {
+  try {
+    const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`;
+    console.log("🕵️‍♂️ Richiedo lista modelli a Google...");
+    
+    const response = await fetch(listUrl);
+    const data = await response.json();
+    
+    if (data.models) {
+      console.log("✅ MODELLI DISPONIBILI PER QUESTA CHIAVE:");
+      // Stampiamo solo i nomi dei modelli
+      const names = data.models.map((m: any) => m.name);
+      console.log(JSON.stringify(names, null, 2));
+    } else {
+      console.error("❌ NESSUN MODELLO TROVATO! (L'API è disattivata o la chiave è vuota)");
+      console.error("Dettaglio risposta:", JSON.stringify(data, null, 2));
+    }
+  } catch (e) {
+    console.error("❌ Errore durante la lista modelli:", e);
+  }
+}
+
 function fallbackError(msg: string) {
-  return {
-    category: "errore",
-    summary: "Errore Sistema",
-    reply_to_user: msg
-  };
+  return { category: "errore", summary: "Errore", reply_to_user: msg };
 }
