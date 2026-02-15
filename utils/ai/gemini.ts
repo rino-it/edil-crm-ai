@@ -6,31 +6,42 @@ export async function processWithGemini(text: string, imageUrl?: string) {
     return fallbackError("Errore configurazione Server");
   }
 
-  // 1. Proviamo a usare il modello FLASH (Il più comune)
-  const modelToUse = "gemini-1.5-flash"; 
-  const generateUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${apiKey}`;
+  // ✅ CORREZIONE: Usiamo un modello presente nella tua lista (2026)
+  const modelToUse = "gemini-2.5-flash"; 
+  
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${apiKey}`;
 
   const requestBody = {
-    contents: [{ parts: [{ text: `Analizza per cantiere: ${text}` }] }]
+    contents: [{
+      parts: [{
+        text: `
+          Sei un assistente esperto per la gestione di cantieri edili.
+          Analizza il messaggio: "${text}"
+          
+          Rispondi SOLO JSON (no markdown):
+          {
+            "category": "materiale" | "presenze" | "problema" | "budget" | "altro",
+            "summary": "Breve riassunto",
+            "reply_to_user": "Risposta WhatsApp"
+          }
+        `
+      }]
+    }]
   };
 
   try {
-    console.log(`🤖 Tentativo chiamata a ${modelToUse}...`);
+    console.log(`🤖 Chiamata Gemini 2.5 Flash...`);
     
-    const response = await fetch(generateUrl, {
+    const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(requestBody)
     });
 
     if (!response.ok) {
-      // ⚠️ SE FALLISCE: Facciamo partire l'indagine
-      console.error(`🔥 Errore Generazione (${response.status}). Avvio diagnostica...`);
-      
-      // Chiamiamo Google per farci dare la LISTA dei modelli attivi
-      await listAvailableModels(apiKey);
-      
-      throw new Error(`API Error: ${response.status}`);
+      const errorData = await response.json();
+      console.error(`🔥 Errore API ${modelToUse}:`, JSON.stringify(errorData, null, 2));
+      throw new Error(`Errore API: ${response.status}`);
     }
 
     const data = await response.json();
@@ -38,39 +49,15 @@ export async function processWithGemini(text: string, imageUrl?: string) {
     
     if (!aiText) throw new Error("Risposta vuota");
 
-    // Se funziona, restituiamo un JSON finto per testare il flusso
-    return {
-      category: "test",
-      summary: "Funziona!",
-      reply_to_user: aiText.substring(0, 100)
-    };
+    // Pulizia JSON aggressiva (per rimuovere ```json o altri artefatti)
+    const cleanJson = aiText.replace(/```json|```/g, '').trim();
+    console.log("✅ Gemini ha risposto!");
+    
+    return JSON.parse(cleanJson);
 
   } catch (error) {
-    console.error("🔥 Blocco Catch:", error);
-    return fallbackError("Sto diagnosticando il problema AI. Controlla i log.");
-  }
-}
-
-// 🕵️‍♂️ FUNZIONE SPIA: Elenca i modelli disponibili
-async function listAvailableModels(key: string) {
-  try {
-    const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`;
-    console.log("🕵️‍♂️ Richiedo lista modelli a Google...");
-    
-    const response = await fetch(listUrl);
-    const data = await response.json();
-    
-    if (data.models) {
-      console.log("✅ MODELLI DISPONIBILI PER QUESTA CHIAVE:");
-      // Stampiamo solo i nomi dei modelli
-      const names = data.models.map((m: any) => m.name);
-      console.log(JSON.stringify(names, null, 2));
-    } else {
-      console.error("❌ NESSUN MODELLO TROVATO! (L'API è disattivata o la chiave è vuota)");
-      console.error("Dettaglio risposta:", JSON.stringify(data, null, 2));
-    }
-  } catch (e) {
-    console.error("❌ Errore durante la lista modelli:", e);
+    console.error("🔥 Errore Fetch:", error);
+    return fallbackError("I miei sistemi AI sono temporaneamente offline.");
   }
 }
 
