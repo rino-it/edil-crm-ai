@@ -1,4 +1,31 @@
-export async function processWithGemini(text: string, imageUrl?: string) {
+// ============================================================
+// GEMINI 2.5 FLASH - Analisi testo + immagini (multimodale)
+// Nota: Nel nostro ambiente i modelli 1.5 restituiscono 404.
+// Usiamo gemini-2.5-flash confermato attivo dalla diagnostica.
+// ============================================================
+
+export interface GeminiResponse {
+  category: "materiale" | "presenze" | "problema" | "budget" | "ddt" | "preventivo" | "altro" | "errore";
+  search_key?: string | null;
+  summary: string;
+  reply_to_user: string;
+  extracted_data?: Record<string, unknown>;
+}
+
+interface MediaInput {
+  base64: string;
+  mimeType: string;
+}
+
+// ============================================================
+// FUNZIONE PRINCIPALE: Analisi messaggio (testo + eventuale foto)
+// Restituisce categoria, search_key per RAG, e risposta
+// ============================================================
+
+export async function processWithGemini(
+  text: string,
+  media?: MediaInput | null
+): Promise<GeminiResponse> {
   const apiKey = process.env.GOOGLE_API_KEY;
 
   if (!apiKey) {
@@ -6,36 +33,113 @@ export async function processWithGemini(text: string, imageUrl?: string) {
     return fallbackError("Errore configurazione Server");
   }
 
-  // ✅ CORREZIONE: Usiamo un modello presente nella tua lista (2026)
-  const modelToUse = "gemini-2.5-flash"; 
-  
+  const hasImage = !!media?.base64;
+
+  // --- Prompt diversi per testo vs immagine ---
+  const systemPrompt = hasImage
+    ? `Sei un assistente esperto per cantieri edili. Ti viene inviata una FOTO con eventuale testo.
+Se è un DDT, estrai: Fornitore, Materiali (con quantità), Data consegna, Numero DDT.
+Se è un Preventivo, estrai: Fornitore, Voci di spesa, Totale.
+Se è una foto generica di cantiere, descrivi cosa vedi.
+
+MESSAGGIO UTENTE: "${text}"
+
+Rispondi SOLO in JSON valido (no markdown, no backtick):
+{
+  "category": "ddt" | "preventivo" | "materiale" | "presenze" | "problema" | "budget" | "altro",
+  "search_key": null,
+  "summary": "Riassunto dettagliato con i dati estratti",
+  "reply_to_user": "Risposta professionale per WhatsApp (breve, chiara)",
+  "extracted_data": { "fornitore": "...", "materiali": [...], "data": "...", "numero_ddt": "..." }
+}`
+    : `Sei un assistente per un'impresa edile. Analizza il messaggio e classifica la richiesta.
+
+MESSAGGIO UTENTE: "${text}"
+
+ISTRUZIONI OBBLIGATORIE:
+- Se l'utente chiede di BUDGET, SPESE, COSTI, SOLDI, QUANTO MANCA, QUANTO ABBIAMO SPESO di un cantiere, DEVI:
+  1. Mettere category = "budget"
+  2. Estrarre il NOME DEL CANTIERE e metterlo in search_key (es. "Torre Boldone")
+  3. Lasciare reply_to_user come stringa VUOTA ""
+- Se l'utente chiede lo stato di TUTTI i cantieri (es. "come siamo messi?"), metti search_key = "__ALL__"
+- Per qualsiasi altra richiesta (problemi, presenze, materiali), rispondi direttamente in reply_to_user
+
+ESEMPI:
+- "Quanto ci manca di budget su Torre Boldone?" -> category:"budget", search_key:"Torre Boldone", reply_to_user:""
+- "Budget villa Almé" -> category:"budget", search_key:"Villa Almé", reply_to_user:""
+- "Stato cantieri?" -> category:"budget", search_key:"__ALL__", reply_to_user:""
+- "C'è un problema all'impianto" -> category:"problema", search_key:null, reply_to_user:"Descrivi meglio..."
+
+Rispondi SOLO con un JSON valido, senza markdown e senza backtick:
+{"category":"...","search_key":"...oppure null","summary":"...","reply_to_user":"...oppure stringa vuota"}`;
+
+  const parts: Array<Record<string, unknown>> = [{ text: systemPrompt }];
+
+  if (media?.base64) {
+    parts.push({
+      inline_data: {
+        mime_type: media.mimeType,
+        data: media.base64,
+      },
+    });
+  }
+
+  return await callGemini(parts, hasImage);
+}
+
+// ============================================================
+// SECONDA CHIAMATA: Sintesi con dati reali (RAG)
+// Riceve il messaggio originale + dati DB e formula la risposta
+// ============================================================
+
+export async function synthesizeWithData(
+  originalQuestion: string,
+  dbContext: string
+): Promise<GeminiResponse> {
+  const prompt = `Sei un assistente edile amministrativo. L'utente ha chiesto informazioni e il sistema ha trovato i dati nel database.
+
+DOMANDA ORIGINALE: "${originalQuestion}"
+
+${dbContext}
+
+Usando ESCLUSIVAMENTE i dati qui sopra, genera una risposta WhatsApp:
+- Professionale ma concisa
+- Includi i numeri esatti dal database
+- Se il budget è quasi esaurito (>85%), segnalalo come attenzione
+- NON inventare dati che non sono presenti sopra
+
+Rispondi SOLO in JSON valido (no markdown, no backtick):
+{
+  "category": "budget",
+  "search_key": null,
+  "summary": "Riepilogo con i dati trovati",
+  "reply_to_user": "Risposta WhatsApp con i dati reali"
+}`;
+
+  return await callGemini([{ text: prompt }], false);
+}
+
+// ============================================================
+// ENGINE: Chiamata HTTP a Gemini (condivisa tra le funzioni)
+// ============================================================
+
+async function callGemini(
+  parts: Array<Record<string, unknown>>,
+  hasImage: boolean
+): Promise<GeminiResponse> {
+  const apiKey = process.env.GOOGLE_API_KEY;
+  if (!apiKey) return fallbackError("Errore configurazione Server");
+
+  const modelToUse = "gemini-2.5-flash";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${apiKey}`;
 
-  const requestBody = {
-    contents: [{
-      parts: [{
-        text: `
-          Sei un assistente esperto per la gestione di cantieri edili.
-          Analizza il messaggio: "${text}"
-          
-          Rispondi SOLO JSON (no markdown):
-          {
-            "category": "materiale" | "presenze" | "problema" | "budget" | "altro",
-            "summary": "Breve riassunto",
-            "reply_to_user": "Risposta WhatsApp"
-          }
-        `
-      }]
-    }]
-  };
-
   try {
-    console.log(`🤖 Chiamata Gemini 2.5 Flash...`);
-    
+    console.log(`🤖 Chiamata Gemini ${modelToUse} (immagine: ${hasImage ? "SI" : "NO"})...`);
+
     const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify({ contents: [{ parts }] }),
     });
 
     if (!response.ok) {
@@ -46,21 +150,23 @@ export async function processWithGemini(text: string, imageUrl?: string) {
 
     const data = await response.json();
     const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    
-    if (!aiText) throw new Error("Risposta vuota");
 
-    // Pulizia JSON aggressiva (per rimuovere ```json o altri artefatti)
-    const cleanJson = aiText.replace(/```json|```/g, '').trim();
+    if (!aiText) throw new Error("Risposta vuota da Gemini");
+
+    const cleanJson = aiText.replace(/```json\s*|```\s*/g, "").trim();
     console.log("✅ Gemini ha risposto!");
-    
-    return JSON.parse(cleanJson);
 
+    return JSON.parse(cleanJson);
   } catch (error) {
-    console.error("🔥 Errore Fetch:", error);
-    return fallbackError("I miei sistemi AI sono temporaneamente offline.");
+    console.error("🔥 Errore Gemini:", error);
+    return fallbackError(
+      hasImage
+        ? "Non sono riuscito ad analizzare questa immagine. Riprova o descrivi il contenuto a parole."
+        : "I miei sistemi AI sono temporaneamente offline. Riprova tra poco."
+    );
   }
 }
 
-function fallbackError(msg: string) {
-  return { category: "errore", summary: "Errore", reply_to_user: msg };
+function fallbackError(msg: string): GeminiResponse {
+  return { category: "errore", summary: "Errore AI", reply_to_user: msg };
 }
