@@ -211,7 +211,7 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
             </CardContent>
         </Card>
 
-        {/* Sezione Movimenti / Materiali (esistente) */}
+        {/* Sezione Movimenti / Materiali */}
         <Card>
           <CardHeader>
             <CardTitle className="text-lg font-semibold flex items-center gap-2">
@@ -231,6 +231,7 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
                     <TableHead>Data</TableHead>
                     <TableHead>Tipo</TableHead>
                     <TableHead>Descrizione</TableHead>
+                    <TableHead>Allegato</TableHead> {/* AGGIUNTA COLONNA */}
                     <TableHead className="text-right">Importo</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -246,6 +247,24 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
                         </div>
                       </TableCell>
                       <TableCell className="max-w-[300px] truncate">{mov.descrizione}</TableCell>
+                      
+                      {/* AGGIUNTA CELLA ALLEGATO */}
+                      <TableCell>
+                        {mov.file_url ? (
+                          <a 
+                            href={mov.file_url} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="flex items-center gap-1 text-blue-600 hover:underline text-xs"
+                          >
+                            <FileText className="h-4 w-4" />
+                            Vedi
+                          </a>
+                        ) : (
+                          <span className="text-zinc-400 text-xs">-</span>
+                        )}
+                      </TableCell>
+
                       <TableCell className="text-right font-bold text-zinc-900">
                         € {mov.importo?.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
                       </TableCell>
