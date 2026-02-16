@@ -98,7 +98,6 @@ export async function POST(request: NextRequest) {
           .from('chat_log')
           .select('interaction_step, temp_data')
           .eq('sender_number', sender)
-          .in('interaction_step', ['waiting_confirm', 'waiting_cantiere', 'waiting_confirm_presenze'])
           .order('created_at', { ascending: false })
           .limit(1)
           .single()
