@@ -69,22 +69,29 @@ Rispondi SOLO con un JSON valido, senza markdown e senza backtick:
 
 MESSAGGIO UTENTE: "${text}"
 
-ISTRUZIONI OBBLIGATORIE:
-- Se l'utente chiede di BUDGET, SPESE, COSTI, SOLDI, QUANTO MANCA, QUANTO ABBIAMO SPESO di un cantiere, DEVI:
-  1. Mettere category = "budget"
-  2. Estrarre il NOME DEL CANTIERE e metterlo in search_key (es. "Torre Boldone")
-  3. Lasciare reply_to_user come stringa VUOTA ""
-- Se l'utente chiede lo stato di TUTTI i cantieri (es. "come siamo messi?"), metti search_key = "__ALL__"
-- Per qualsiasi altra richiesta (problemi, presenze, materiali), rispondi direttamente in reply_to_user
+CATEGORIE POSSIBILI:
+
+1. BUDGET: L'utente chiede di budget, spese, costi, soldi, quanto manca.
+   - Metti category="budget", search_key=nome cantiere (o "__ALL__" per tutti), reply_to_user=""
+
+2. PRESENZE/RAPPORTINO: L'utente comunica ore lavorate (es. "Io e Mario 8 ore a Torre Boldone", "Oggi 6 ore posa pavimenti").
+   - Metti category="presenze", reply_to_user=""
+   - In extracted_data metti:
+     - nomi_rilevati: array di nomi. Se dice "Io" o "me", scrivi "ME_STESSO". Esempi: ["ME_STESSO","Mario"]
+     - ore: numero di ore (es. 8)
+     - cantiere_rilevato: nome cantiere se menzionato, null altrimenti
+     - descrizione_lavoro: cosa hanno fatto se specificato, null altrimenti
+
+3. ALTRO: Problemi, domande generiche, materiali → rispondi direttamente.
 
 ESEMPI:
+- "Io e Mario 8 ore a Torre Boldone, massetto" -> category:"presenze", extracted_data:{nomi_rilevati:["ME_STESSO","Mario"],ore:8,cantiere_rilevato:"Torre Boldone",descrizione_lavoro:"massetto"}, reply_to_user:""
+- "Oggi 6 ore posa piastrelle torre boldone" -> category:"presenze", extracted_data:{nomi_rilevati:["ME_STESSO"],ore:6,cantiere_rilevato:"Torre Boldone",descrizione_lavoro:"posa piastrelle"}, reply_to_user:""
 - "Quanto ci manca di budget su Torre Boldone?" -> category:"budget", search_key:"Torre Boldone", reply_to_user:""
-- "Budget villa Almé" -> category:"budget", search_key:"Villa Almé", reply_to_user:""
 - "Stato cantieri?" -> category:"budget", search_key:"__ALL__", reply_to_user:""
-- "C'è un problema all'impianto" -> category:"problema", search_key:null, reply_to_user:"Descrivi meglio..."
 
 Rispondi SOLO con un JSON valido, senza markdown e senza backtick:
-{"category":"...","search_key":"...oppure null","summary":"...","reply_to_user":"...oppure stringa vuota"}`;
+{"category":"...","search_key":"...oppure null","summary":"...","reply_to_user":"...oppure stringa vuota","extracted_data":{...oppure null}}`;
 
   const parts: Array<Record<string, unknown>> = [{ text: systemPrompt }];
 

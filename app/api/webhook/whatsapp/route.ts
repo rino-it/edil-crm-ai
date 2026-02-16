@@ -8,6 +8,8 @@ import {
   formatCantiereForAI,
   formatCantieriListForAI,
   inserisciMovimento,
+  risolviPersonale,
+  inserisciPresenze,
 } from '@/utils/data-fetcher'
 
 export const dynamic = 'force-dynamic'
@@ -44,15 +46,16 @@ export async function GET(request: NextRequest) {
 // POST - Flusso principale con macchina a stati
 //
 // STATI (interaction_step in chat_log):
-//   idle              → nessuna conversazione attiva
-//   waiting_confirm   → DDT analizzato, in attesa di "Sì"
-//   waiting_cantiere  → DDT analizzato ma manca il cantiere
-//   completed         → DDT salvato con successo
+//   idle                    → nessuna conversazione attiva
+//   waiting_confirm         → DDT analizzato, in attesa di "Sì"
+//   waiting_cantiere        → DDT/Presenze: manca il cantiere
+//   waiting_confirm_presenze → Presenze analizzate, in attesa di "Sì"
+//   completed               → Operazione salvata con successo
 //
 // FLUSSO DDT:
-//   Foto → Gemini estrae dati → [cantiere trovato?]
-//     SÌ → chiede conferma → utente dice "Sì" → INSERT movimenti
-//     NO → chiede cantiere → utente scrive nome → chiede conferma → "Sì" → INSERT
+//   Foto → Gemini estrae dati → [cantiere?] → conferma → INSERT movimenti
+// FLUSSO PRESENZE:
+//   Testo → Gemini estrae nomi+ore → [cantiere?] → conferma → INSERT presenze
 // ============================================================
 export async function POST(request: NextRequest) {
   try {
@@ -95,7 +98,7 @@ export async function POST(request: NextRequest) {
           .from('chat_log')
           .select('interaction_step, temp_data')
           .eq('sender_number', sender)
-          .in('interaction_step', ['waiting_confirm', 'waiting_cantiere'])
+          .in('interaction_step', ['waiting_confirm', 'waiting_cantiere', 'waiting_confirm_presenze'])
           .order('created_at', { ascending: false })
           .limit(1)
           .single()
@@ -154,28 +157,112 @@ export async function POST(request: NextRequest) {
         }
 
         // =====================================================
-        // CASO B: L'utente sta INDICANDO IL CANTIERE
+        // CASO A-BIS: Conferma PRESENZE ("Sì" / "No")
+        // =====================================================
+        else if (pendingStep === 'waiting_confirm_presenze' && type === 'text') {
+          const confirmation = detectConfirmation(rawContent)
+
+          if (confirmation === 'yes') {
+            console.log("✅ Utente conferma presenze! Inserisco...")
+
+            const presenzeRows = (pendingData.presenze_da_inserire as any[]) || []
+            const result = await inserisciPresenze(presenzeRows)
+
+            if (result.success) {
+              const costoTotale = presenzeRows.reduce((acc: number, p: any) => acc + (p.costo_calcolato || 0), 0)
+              finalReply = `✅ Presenze registrate!\n\n` +
+                `• ${result.inserite} rapportino/i salvati su *${pendingData.cantiere_nome}*\n` +
+                `• Costo manodopera: €${costoTotale.toFixed(2)}`
+              interactionStep = 'completed'
+            } else {
+              finalReply = `❌ Errore nel salvataggio: ${result.error}`
+              interactionStep = 'idle'
+            }
+
+            aiAnalysis = { category: 'presenze', summary: `Presenze confermate su ${pendingData.cantiere_nome}` }
+
+          } else if (confirmation === 'no') {
+            finalReply = "❌ Rapportino annullato."
+            interactionStep = 'idle'
+            aiAnalysis = { category: 'presenze', summary: 'Presenze annullate' }
+          } else {
+            finalReply = `Sto aspettando conferma per le presenze.\nRispondi *Sì* per salvare o *No* per annullare.`
+            interactionStep = 'waiting_confirm_presenze'
+            tempData = pendingData
+            aiAnalysis = { category: 'presenze', summary: 'In attesa conferma presenze' }
+          }
+        }
+
+        // =====================================================
+        // CASO B: L'utente sta INDICANDO IL CANTIERE (DDT o Presenze)
         // =====================================================
         else if (pendingStep === 'waiting_cantiere' && type === 'text') {
-          console.log(`🔍 Utente indica cantiere: "${rawContent}"`)
-
-          const cantiere = await getCantiereData(rawContent)
-
-          if (cantiere) {
-            finalReply = `Ho trovato *${cantiere.nome}*.\n\nRegistro la spesa di €${pendingData.importo} da ${pendingData.fornitore || 'N/D'}?\n\nRispondi *Sì* per confermare o *No* per annullare.`
-            interactionStep = 'waiting_confirm'
-            tempData = {
-              ...pendingData,
-              cantiere_id: cantiere.id,
-              cantiere_nome: cantiere.nome,
-            }
+          // Controlla se è un "No" per annullare
+          const confirmation = detectConfirmation(rawContent)
+          if (confirmation === 'no') {
+            finalReply = "❌ Operazione annullata."
+            interactionStep = 'idle'
+            aiAnalysis = { category: pendingData._flow_type as string || 'altro', summary: 'Annullato' }
           } else {
-            finalReply = `Non ho trovato nessun cantiere con "${rawContent}".\nRiprova con il nome esatto o scrivi *No* per annullare.`
-            interactionStep = 'waiting_cantiere'
-            tempData = pendingData
-          }
+            console.log(`🔍 Utente indica cantiere: "${rawContent}"`)
+            const cantiere = await getCantiereData(rawContent)
 
-          aiAnalysis = { category: 'ddt', summary: `Ricerca cantiere: ${rawContent}` }
+            if (cantiere) {
+              // Controlliamo se è un flusso DDT o Presenze
+              if (pendingData._flow_type === 'presenze') {
+                // Flusso presenze: risolviamo le persone e prepariamo la conferma
+                const nomi = (pendingData.nomi_rilevati as string[]) || []
+                const ore = (pendingData.ore as number) || 0
+                const { trovati, nonTrovati } = await risolviPersonale(nomi, sender)
+
+                if (trovati.length === 0) {
+                  finalReply = `Ho trovato il cantiere *${cantiere.nome}*, ma non riconosco nessuno dei nomi indicati: ${nonTrovati.join(', ')}.\n\nVerifica che siano registrati nel sistema.`
+                  interactionStep = 'idle'
+                } else {
+                  const presenzeRows = trovati.map(t => ({
+                    cantiere_id: cantiere.id,
+                    personale_id: t.personale.id,
+                    ore,
+                    descrizione: (pendingData.descrizione_lavoro as string) || null,
+                    costo_calcolato: ore * t.personale.costo_orario,
+                  }))
+
+                  const costoTotale = presenzeRows.reduce((acc, p) => acc + p.costo_calcolato, 0)
+                  const listaNomi = trovati.map(t => `${t.personale.nome} (${ore}h × €${t.personale.costo_orario}/h)`).join('\n• ')
+
+                  let msg = `👷 *Rapportino*\n\n• ${listaNomi}\n\n📍 Cantiere: *${cantiere.nome}*\n💰 Costo totale: €${costoTotale.toFixed(2)}`
+                  if (nonTrovati.length > 0) {
+                    msg += `\n\n⚠️ Non trovati: ${nonTrovati.join(', ')}`
+                  }
+                  msg += `\n\nConfermi? Rispondi *Sì* o *No*.`
+
+                  finalReply = msg
+                  interactionStep = 'waiting_confirm_presenze'
+                  tempData = {
+                    ...pendingData,
+                    cantiere_id: cantiere.id,
+                    cantiere_nome: cantiere.nome,
+                    presenze_da_inserire: presenzeRows,
+                  }
+                }
+              } else {
+                // Flusso DDT (come prima)
+                finalReply = `Ho trovato *${cantiere.nome}*.\n\nRegistro la spesa di €${pendingData.importo} da ${pendingData.fornitore || 'N/D'}?\n\nRispondi *Sì* per confermare o *No* per annullare.`
+                interactionStep = 'waiting_confirm'
+                tempData = {
+                  ...pendingData,
+                  cantiere_id: cantiere.id,
+                  cantiere_nome: cantiere.nome,
+                }
+              }
+            } else {
+              finalReply = `Non ho trovato nessun cantiere con "${rawContent}".\nRiprova con il nome esatto o scrivi *No* per annullare.`
+              interactionStep = 'waiting_cantiere'
+              tempData = pendingData
+            }
+
+            aiAnalysis = { category: pendingData._flow_type as string || 'altro', summary: `Ricerca cantiere: ${rawContent}` }
+          }
         }
 
         // =====================================================
@@ -223,6 +310,7 @@ export async function POST(request: NextRequest) {
                 `Confermi la registrazione? Rispondi *Sì* o *No*.`
               interactionStep = 'waiting_confirm'
               tempData = {
+                _flow_type: 'ddt',
                 fornitore: dati.fornitore,
                 importo: dati.importo,
                 materiali: dati.materiali,
@@ -241,11 +329,84 @@ export async function POST(request: NextRequest) {
                 `A quale cantiere lo assegno? Scrivimi il nome.`
               interactionStep = 'waiting_cantiere'
               tempData = {
+                _flow_type: 'ddt',
                 fornitore: dati.fornitore,
                 importo: dati.importo,
                 materiali: dati.materiali,
                 data: dati.data,
                 numero_ddt: dati.numero_ddt,
+              }
+            }
+          }
+
+          // -------------------------------------------------
+          // SOTTO-CASO C4: PRESENZE / RAPPORTINO
+          // -------------------------------------------------
+          else if (geminiResult.category === 'presenze' && geminiResult.extracted_data) {
+            const dati = geminiResult.extracted_data
+            const nomi = (dati.nomi_rilevati as string[]) || []
+            const ore = (dati.ore as number) || 0
+            const cantiereNome = dati.cantiere_rilevato as string
+
+            console.log(`👷 Presenze: ${nomi.join(', ')} | ${ore}h | Cantiere: ${cantiereNome || 'N/D'}`)
+
+            // Cerchiamo il cantiere
+            let cantiere = null
+            if (cantiereNome) {
+              cantiere = await getCantiereData(cantiereNome)
+            }
+
+            if (cantiere) {
+              // Cantiere trovato → risolviamo le persone
+              const { trovati, nonTrovati } = await risolviPersonale(nomi, sender)
+
+              if (trovati.length === 0) {
+                finalReply = `Non riconosco nessuno dei nomi indicati: ${nonTrovati.join(', ')}.\n\nAssicurati che siano registrati nel sistema.`
+                interactionStep = 'idle'
+              } else {
+                // Prepariamo le righe da inserire
+                const presenzeRows = trovati.map(t => ({
+                  cantiere_id: cantiere!.id,
+                  personale_id: t.personale.id,
+                  ore,
+                  descrizione: (dati.descrizione_lavoro as string) || null,
+                  costo_calcolato: ore * t.personale.costo_orario,
+                }))
+
+                const costoTotale = presenzeRows.reduce((acc, p) => acc + p.costo_calcolato, 0)
+                const listaNomi = trovati.map(t => `${t.personale.nome} (${ore}h × €${t.personale.costo_orario}/h)`).join('\n• ')
+
+                let msg = `👷 *Rapportino*\n\n• ${listaNomi}\n\n📍 Cantiere: *${cantiere.nome}*`
+                if (dati.descrizione_lavoro) {
+                  msg += `\n🔧 Lavoro: ${dati.descrizione_lavoro}`
+                }
+                msg += `\n💰 Costo totale: €${costoTotale.toFixed(2)}`
+                if (nonTrovati.length > 0) {
+                  msg += `\n\n⚠️ Non trovati: ${nonTrovati.join(', ')}`
+                }
+                msg += `\n\nConfermi? Rispondi *Sì* o *No*.`
+
+                finalReply = msg
+                interactionStep = 'waiting_confirm_presenze'
+                tempData = {
+                  _flow_type: 'presenze',
+                  nomi_rilevati: nomi,
+                  ore,
+                  descrizione_lavoro: dati.descrizione_lavoro,
+                  cantiere_id: cantiere.id,
+                  cantiere_nome: cantiere.nome,
+                  presenze_da_inserire: presenzeRows,
+                }
+              }
+            } else {
+              // Cantiere non trovato → chiediamo
+              finalReply = `👷 Ho capito: ${nomi.length} persona/e, ${ore} ore${dati.descrizione_lavoro ? ', ' + dati.descrizione_lavoro : ''}.\n\nA quale cantiere assegno le ore? Scrivimi il nome.`
+              interactionStep = 'waiting_cantiere'
+              tempData = {
+                _flow_type: 'presenze',
+                nomi_rilevati: nomi,
+                ore,
+                descrizione_lavoro: dati.descrizione_lavoro,
               }
             }
           }

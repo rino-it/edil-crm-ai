@@ -163,6 +163,163 @@ export async function inserisciMovimento(
 }
 
 // ============================================================
+// PERSONALE: Cerca dipendente per nome (match parziale)
+// ============================================================
+
+export interface PersonaleData {
+  id: string;
+  nome: string;
+  telefono: string | null;
+  costo_orario: number;
+  ruolo: string;
+}
+
+export async function getPersonaleByNome(
+  nome: string
+): Promise<PersonaleData | null> {
+  if (!nome || nome.trim().length < 2) return null;
+
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from("personale")
+    .select("*")
+    .eq("attivo", true)
+    .ilike("nome", `%${nome.trim()}%`)
+    .limit(1)
+    .single();
+
+  if (error || !data) {
+    console.warn(`⚠️ Nessun dipendente trovato per: "${nome}"`);
+    return null;
+  }
+
+  return {
+    id: data.id,
+    nome: data.nome,
+    telefono: data.telefono,
+    costo_orario: data.costo_orario || 0,
+    ruolo: data.ruolo,
+  };
+}
+
+// ============================================================
+// PERSONALE: Cerca dipendente per numero telefono (per "Io")
+// ============================================================
+
+export async function getPersonaleByTelefono(
+  telefono: string
+): Promise<PersonaleData | null> {
+  if (!telefono) return null;
+
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from("personale")
+    .select("*")
+    .eq("attivo", true)
+    .eq("telefono", telefono)
+    .limit(1)
+    .single();
+
+  if (error || !data) {
+    console.warn(`⚠️ Nessun dipendente trovato per telefono: ${telefono}`);
+    return null;
+  }
+
+  return {
+    id: data.id,
+    nome: data.nome,
+    telefono: data.telefono,
+    costo_orario: data.costo_orario || 0,
+    ruolo: data.ruolo,
+  };
+}
+
+// ============================================================
+// PRESENZE: Risolvi lista nomi → lista PersonaleData
+// "ME_STESSO" viene risolto con il numero del mittente
+// ============================================================
+
+export interface PersonaRisolta {
+  personale: PersonaleData;
+  nome_originale: string; // Il nome come scritto dall'utente
+}
+
+export async function risolviPersonale(
+  nomi: string[],
+  senderPhone: string
+): Promise<{ trovati: PersonaRisolta[]; nonTrovati: string[] }> {
+  const trovati: PersonaRisolta[] = [];
+  const nonTrovati: string[] = [];
+
+  for (const nome of nomi) {
+    let persona: PersonaleData | null = null;
+
+    if (nome.toUpperCase() === "ME_STESSO") {
+      persona = await getPersonaleByTelefono(senderPhone);
+      if (persona) {
+        trovati.push({ personale: persona, nome_originale: "Io" });
+      } else {
+        nonTrovati.push("Te stesso (numero non registrato)");
+      }
+    } else {
+      persona = await getPersonaleByNome(nome);
+      if (persona) {
+        trovati.push({ personale: persona, nome_originale: nome });
+      } else {
+        nonTrovati.push(nome);
+      }
+    }
+  }
+
+  return { trovati, nonTrovati };
+}
+
+// ============================================================
+// PRESENZE: Inserisci presenze per più persone
+// ============================================================
+
+export interface PresenzaInput {
+  cantiere_id: string;
+  personale_id: string;
+  ore: number;
+  descrizione?: string;
+  data?: string;
+  costo_calcolato: number;
+}
+
+export async function inserisciPresenze(
+  presenze: PresenzaInput[]
+): Promise<{ success: boolean; inserite: number; error?: string }> {
+  const supabase = getSupabaseAdmin();
+
+  try {
+    const rows = presenze.map((p) => ({
+      cantiere_id: p.cantiere_id,
+      personale_id: p.personale_id,
+      ore: p.ore,
+      descrizione: p.descrizione || null,
+      data: p.data || new Date().toISOString().split("T")[0],
+      costo_calcolato: p.costo_calcolato,
+    }));
+
+    const { error } = await supabase.from("presenze").insert(rows);
+
+    if (error) {
+      console.error("❌ Errore insert presenze:", error);
+      return { success: false, inserite: 0, error: error.message };
+    }
+
+    console.log(`✅ ${rows.length} presenze inserite`);
+    return { success: true, inserite: rows.length };
+  } catch (error) {
+    console.error("🔥 Errore insert presenze:", error);
+    return { success: false, inserite: 0, error: "Errore imprevisto" };
+  }
+}
+
+// ============================================================
 // HELPER: Formatta i dati cantiere in testo leggibile per Gemini
 // ============================================================
 
