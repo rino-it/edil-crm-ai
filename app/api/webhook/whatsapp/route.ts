@@ -109,7 +109,8 @@ export async function POST(request: NextRequest) {
         let finalReply = ''
         let interactionStep = 'idle'
         let tempData: Record<string, unknown> = {}
-        let aiAnalysis: Record<string, unknown> = {}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let aiAnalysis: any = {}
 
         // =====================================================
         // CASO A: L'utente sta CONFERMANDO un DDT ("Sì" / "No")
