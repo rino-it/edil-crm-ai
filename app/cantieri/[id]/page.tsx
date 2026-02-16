@@ -31,9 +31,10 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
     .order('data_movimento', { ascending: false })
 
   // 3. Fetch Presenze (Manodopera) - JOIN con tabella Personale per avere i nomi
+  // Questa è la parte che mancava per vedere le righe singole
   const { data: presenze } = await supabase
     .from('presenze')
-    .select('*, personale(nome, ruolo)') // Assicurati che la foreign key esista su Supabase
+    .select('*, personale(nome, ruolo)')
     .eq('cantiere_id', id)
     .order('data', { ascending: false })
 
@@ -45,12 +46,13 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
   const totaleManodopera = presenze?.reduce((acc, p: any) => acc + (p.costo_calcolato || 0), 0) || 0
 
   const totaleSpeso = totaleMateriali + totaleManodopera
-  // Usiamo cantiere.budget come da CSV (31k)
+  
+  // Usiamo 'budget' (31k) come confermato dal tuo CSV, non 'budget_totale'
   const budget = cantiere.budget || 0 
   const rimanente = budget - totaleSpeso
   const percentualeSpesa = budget > 0 ? (totaleSpeso / budget) * 100 : 0
 
-  // Helper icone
+  // Helper per icone
   const getIcon = (tipo: string) => {
     switch(tipo) {
       case 'manodopera': return <Clock className="h-4 w-4 text-blue-500" />;
@@ -95,7 +97,7 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
           </div>
         </div>
 
-        {/* KPIs Finanziari Aggiornati */}
+        {/* KPIs Finanziari Aggiornati (Separati per Materiali e Manodopera) */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <Card shadow-sm className="md:col-span-1">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -151,7 +153,7 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
           </Card>
         </div>
 
-        {/* Sezione Presenze / Manodopera */}
+        {/* NUOVA SEZIONE: Tabella Presenze Singole */}
         <Card>
             <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="text-lg font-semibold flex items-center gap-2">
@@ -186,8 +188,9 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
                                     <TableCell>
                                         <div className="flex items-center gap-2">
                                             <User className="h-3 w-3 text-zinc-400" />
-                                            {/* Accesso sicuro ai dati joinati */}
-                                            {p.personale?.nome || 'Sconosciuto'}
+                                            <span className="font-medium text-zinc-700">
+                                                {p.personale?.nome || 'Sconosciuto'}
+                                            </span>
                                         </div>
                                     </TableCell>
                                     <TableCell>
@@ -208,7 +211,7 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
             </CardContent>
         </Card>
 
-        {/* Sezione Movimenti / Materiali */}
+        {/* Sezione Movimenti / Materiali (esistente) */}
         <Card>
           <CardHeader>
             <CardTitle className="text-lg font-semibold flex items-center gap-2">
