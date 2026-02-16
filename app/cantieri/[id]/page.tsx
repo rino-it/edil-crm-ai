@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ArrowLeft, Wallet, TrendingDown, Hammer, FileText, Clock, ShoppingCart, ListChecks } from "lucide-react"
+import { ArrowLeft, Wallet, TrendingDown, Hammer, FileText, Clock, ShoppingCart, ListChecks, User, HardHat } from "lucide-react"
 
 export default async function CantierePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -14,7 +14,7 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) redirect('/login')
 
-  // Dati Cantiere
+  // 1. Dati Cantiere
   const { data: cantiere, error: cantiereError } = await supabase
     .from('cantieri')
     .select('*')
@@ -23,19 +23,34 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
 
   if (cantiereError || !cantiere) notFound()
 
-  // Lista Movimenti
+  // 2. Fetch Movimenti (Materiali/DDT)
   const { data: movimenti } = await supabase
     .from('movimenti')
     .select('*')
     .eq('cantiere_id', id)
     .order('data_movimento', { ascending: false })
 
-  // Calcoli
-  const totaleSpeso = movimenti?.reduce((acc, mov) => acc + (mov.importo || 0), 0) || 0
-  const budget = cantiere.budget || 0
+  // 3. Fetch Presenze (Manodopera) - JOIN con tabella Personale per avere i nomi
+  const { data: presenze } = await supabase
+    .from('presenze')
+    .select('*, personale(nome, ruolo)') // Assicurati che la foreign key esista su Supabase
+    .eq('cantiere_id', id)
+    .order('data', { ascending: false })
+
+  // 4. CALCOLI UNIFICATI
+  const totaleMateriali = movimenti?.reduce((acc, mov) => acc + (mov.importo || 0), 0) || 0
+  
+  // Somma costo manodopera
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const totaleManodopera = presenze?.reduce((acc, p: any) => acc + (p.costo_calcolato || 0), 0) || 0
+
+  const totaleSpeso = totaleMateriali + totaleManodopera
+  // Usiamo cantiere.budget come da CSV (31k)
+  const budget = cantiere.budget || 0 
   const rimanente = budget - totaleSpeso
   const percentualeSpesa = budget > 0 ? (totaleSpeso / budget) * 100 : 0
 
+  // Helper icone
   const getIcon = (tipo: string) => {
     switch(tipo) {
       case 'manodopera': return <Clock className="h-4 w-4 text-blue-500" />;
@@ -80,9 +95,9 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
           </div>
         </div>
 
-        {/* KPIs Finanziari */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card shadow-sm>
+        {/* KPIs Finanziari Aggiornati */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <Card shadow-sm className="md:col-span-1">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Budget Totale</CardTitle>
               <Wallet className="h-4 w-4 text-muted-foreground" />
@@ -91,7 +106,7 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
               <div className="text-2xl font-bold">€ {budget.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</div>
               <div className="mt-2 h-1.5 w-full bg-zinc-100 rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-blue-500 transition-all" 
+                  className={`h-full transition-all ${percentualeSpesa > 90 ? 'bg-red-500' : 'bg-blue-500'}`}
                   style={{ width: `${Math.min(percentualeSpesa, 100)}%` }}
                 />
               </div>
@@ -100,12 +115,23 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
           
           <Card shadow-sm>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Speso ad oggi</CardTitle>
-              <TrendingDown className="h-4 w-4 text-red-500" />
+              <CardTitle className="text-sm font-medium text-muted-foreground">Spesa Materiali</CardTitle>
+              <ShoppingCart className="h-4 w-4 text-orange-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-red-600">€ {totaleSpeso.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</div>
-              <p className="text-xs text-muted-foreground mt-1">{percentualeSpesa.toFixed(1)}% del budget utilizzato</p>
+              <div className="text-2xl font-bold text-zinc-700">€ {totaleMateriali.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</div>
+              <p className="text-xs text-muted-foreground mt-1">DDT e Fatture</p>
+            </CardContent>
+          </Card>
+
+          <Card shadow-sm>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Spesa Manodopera</CardTitle>
+              <HardHat className="h-4 w-4 text-blue-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-zinc-700">€ {totaleManodopera.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</div>
+              <p className="text-xs text-muted-foreground mt-1">Ore lavorate</p>
             </CardContent>
           </Card>
           
@@ -118,15 +144,77 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
               <div className={`text-2xl font-bold ${rimanente < 0 ? 'text-red-600' : 'text-green-600'}`}>
                 € {rimanente.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">Fondi ancora disponibili</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Totale speso: {percentualeSpesa.toFixed(1)}%
+              </p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Tabella Movimenti */}
+        {/* Sezione Presenze / Manodopera */}
+        <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                    <HardHat className="h-5 w-5 text-blue-500" />
+                    Rapportini & Manodopera
+                </CardTitle>
+            </CardHeader>
+            <CardContent>
+                {(!presenze || presenze.length === 0) ? (
+                    <div className="text-center py-6 text-muted-foreground bg-zinc-50/50 rounded-lg border border-dashed">
+                        Nessuna ora lavorata registrata.
+                    </div>
+                ) : (
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Data</TableHead>
+                                <TableHead>Operaio</TableHead>
+                                <TableHead>Ruolo</TableHead>
+                                <TableHead>Descrizione</TableHead>
+                                <TableHead className="text-right">Ore</TableHead>
+                                <TableHead className="text-right">Costo</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                            {presenze.map((p: any) => (
+                                <TableRow key={p.id}>
+                                    <TableCell className="font-medium">
+                                        {new Date(p.data).toLocaleDateString('it-IT')}
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <User className="h-3 w-3 text-zinc-400" />
+                                            {/* Accesso sicuro ai dati joinati */}
+                                            {p.personale?.nome || 'Sconosciuto'}
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Badge variant="outline" className="text-xs font-normal">
+                                            {p.personale?.ruolo || 'N/D'}
+                                        </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-zinc-500">{p.descrizione || '-'}</TableCell>
+                                    <TableCell className="text-right font-medium">{p.ore} h</TableCell>
+                                    <TableCell className="text-right font-bold text-zinc-900">
+                                        € {p.costo_calcolato?.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                )}
+            </CardContent>
+        </Card>
+
+        {/* Sezione Movimenti / Materiali */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg font-semibold">Storico Movimenti</CardTitle>
+            <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                <ShoppingCart className="h-5 w-5 text-orange-500" />
+                Storico Acquisti & Materiali
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {(!movimenti || movimenti.length === 0) ? (
