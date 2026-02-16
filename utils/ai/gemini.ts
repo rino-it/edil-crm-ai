@@ -71,7 +71,7 @@ MESSAGGIO UTENTE: "${text}"
 
 CATEGORIE POSSIBILI:
 
-1. BUDGET: L'utente chiede di budget, spese, costi, soldi, quanto manca.
+1. BUDGET/MARGINI: L'utente chiede di budget, spese, costi, margini, guadagno, utile, quanto manca.
    - Metti category="budget", search_key=nome cantiere (o "__ALL__" per tutti), reply_to_user=""
 
 2. PRESENZE/RAPPORTINO: L'utente comunica ore lavorate (es. "Io e Mario 8 ore a Torre Boldone", "Oggi 6 ore posa pavimenti").
@@ -88,6 +88,8 @@ ESEMPI:
 - "Io e Mario 8 ore a Torre Boldone, massetto" -> category:"presenze", extracted_data:{nomi_rilevati:["ME_STESSO","Mario"],ore:8,cantiere_rilevato:"Torre Boldone",descrizione_lavoro:"massetto"}, reply_to_user:""
 - "Oggi 6 ore posa piastrelle torre boldone" -> category:"presenze", extracted_data:{nomi_rilevati:["ME_STESSO"],ore:6,cantiere_rilevato:"Torre Boldone",descrizione_lavoro:"posa piastrelle"}, reply_to_user:""
 - "Quanto ci manca di budget su Torre Boldone?" -> category:"budget", search_key:"Torre Boldone", reply_to_user:""
+- "Come andiamo a margini su Torre Boldone?" -> category:"budget", search_key:"Torre Boldone", reply_to_user:""
+- "Quanto abbiamo guadagnato?" -> category:"budget", search_key:"__ALL__", reply_to_user:""
 - "Stato cantieri?" -> category:"budget", search_key:"__ALL__", reply_to_user:""
 
 Rispondi SOLO con un JSON valido, senza markdown e senza backtick:
@@ -121,11 +123,14 @@ DOMANDA ORIGINALE: "${originalQuestion}"
 
 ${dbContext}
 
-Usando ESCLUSIVAMENTE i dati qui sopra, genera una risposta WhatsApp:
-- Professionale ma concisa
-- Includi i numeri esatti dal database
-- Se il budget è quasi esaurito (>85%), segnalalo come attenzione
-- NON inventare dati che non sono presenti sopra
+REGOLE PER LA RISPOSTA:
+- Se l'utente chiede "budget", "quanto manca", "costi": parla del Residuo Budget Costi
+- Se l'utente chiede "margine", "guadagno", "utile": parla del Margine Utile (Valore Vendita - Speso)
+- Se chiede genericamente "come andiamo": dai entrambi i dati
+- Se il budget costi è quasi esaurito (>85%), segnalalo con attenzione
+- Se il margine è negativo, segnalalo come ALLARME
+- Usa SOLO i numeri dal database, NON inventare
+- Rispondi in italiano, breve e professionale per WhatsApp
 
 Rispondi SOLO in JSON valido (no markdown, no backtick):
 {"category":"budget","search_key":null,"summary":"Riepilogo dati","reply_to_user":"Risposta WhatsApp con dati reali"}`;

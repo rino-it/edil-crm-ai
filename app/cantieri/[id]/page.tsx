@@ -40,17 +40,18 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
 
   // 4. CALCOLI UNIFICATI
   const totaleMateriali = movimenti?.reduce((acc, mov) => acc + (mov.importo || 0), 0) || 0
-  
+
   // Somma costo manodopera
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const totaleManodopera = presenze?.reduce((acc, p: any) => acc + (p.costo_calcolato || 0), 0) || 0
 
   const totaleSpeso = totaleMateriali + totaleManodopera
-  
-  // Usiamo 'budget' (31k) come confermato dal tuo CSV, non 'budget_totale'
-  const budget = cantiere.budget || 0 
-  const rimanente = budget - totaleSpeso
-  const percentualeSpesa = budget > 0 ? (totaleSpeso / budget) * 100 : 0
+
+  const budgetCosti = cantiere.budget || 0
+  const valoreVendita = cantiere.valore_vendita || 0
+  const residuoBudget = budgetCosti - totaleSpeso
+  const margineReale = valoreVendita - totaleSpeso
+  const percentualeSpesa = budgetCosti > 0 ? (totaleSpeso / budgetCosti) * 100 : 0
 
   // Helper per icone
   const getIcon = (tipo: string) => {
@@ -97,27 +98,28 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
           </div>
         </div>
 
-        {/* KPIs Finanziari Aggiornati (Separati per Materiali e Manodopera) */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <Card shadow-sm className="md:col-span-1">
+        {/* KPIs Finanziari */}
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Budget Totale</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Budget Costi</CardTitle>
               <Wallet className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">€ {budget.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</div>
+              <div className="text-2xl font-bold">€ {budgetCosti.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</div>
               <div className="mt-2 h-1.5 w-full bg-zinc-100 rounded-full overflow-hidden">
-                <div 
+                <div
                   className={`h-full transition-all ${percentualeSpesa > 90 ? 'bg-red-500' : 'bg-blue-500'}`}
                   style={{ width: `${Math.min(percentualeSpesa, 100)}%` }}
                 />
               </div>
+              <p className="text-xs text-muted-foreground mt-1">Residuo: € {residuoBudget.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</p>
             </CardContent>
           </Card>
-          
-          <Card shadow-sm>
+
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Spesa Materiali</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Materiali</CardTitle>
               <ShoppingCart className="h-4 w-4 text-orange-500" />
             </CardHeader>
             <CardContent>
@@ -126,9 +128,9 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
             </CardContent>
           </Card>
 
-          <Card shadow-sm>
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Spesa Manodopera</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Manodopera</CardTitle>
               <HardHat className="h-4 w-4 text-blue-500" />
             </CardHeader>
             <CardContent>
@@ -136,18 +138,33 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
               <p className="text-xs text-muted-foreground mt-1">Ore lavorate</p>
             </CardContent>
           </Card>
-          
-          <Card shadow-sm>
+
+          {valoreVendita > 0 && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Valore Appalto</CardTitle>
+                <TrendingDown className="h-4 w-4 text-purple-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-purple-700">€ {valoreVendita.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</div>
+                <p className="text-xs text-muted-foreground mt-1">Quanto paga il cliente</p>
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Margine Rimanente</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                {valoreVendita > 0 ? 'Margine Utile' : 'Residuo Budget'}
+              </CardTitle>
               <Hammer className="h-4 w-4 text-green-500" />
             </CardHeader>
             <CardContent>
-              <div className={`text-2xl font-bold ${rimanente < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                € {rimanente.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
+              <div className={`text-2xl font-bold ${(valoreVendita > 0 ? margineReale : residuoBudget) < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                € {(valoreVendita > 0 ? margineReale : residuoBudget).toLocaleString('it-IT', { minimumFractionDigits: 2 })}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Totale speso: {percentualeSpesa.toFixed(1)}%
+                Speso: {percentualeSpesa.toFixed(1)}% del budget
               </p>
             </CardContent>
           </Card>

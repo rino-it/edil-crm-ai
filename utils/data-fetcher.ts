@@ -23,10 +23,15 @@ function getSupabaseAdmin() {
 export interface CantiereData {
   id: string;
   nome: string;
-  budget_totale: number;
-  speso: number;
-  rimanente: number;
-  percentuale: number;
+  budget_costi: number;       // budget previsto per le spese
+  valore_vendita: number;     // valore appalto (quanto paga il cliente)
+  speso_materiali: number;
+  speso_manodopera: number;
+  speso_totale: number;
+  residuo_budget: number;     // budget_costi - speso_totale
+  margine: number;            // valore_vendita - speso_totale
+  percentuale_costi: number;  // % speso su budget_costi
+  percentuale_margine: number; // % margine su valore_vendita
   stato: string;
 }
 
@@ -68,22 +73,31 @@ export async function getCantiereData(
       return null;
     }
 
-    const percentuale =
-      data.budget_totale > 0
-        ? Math.round((data.speso / data.budget_totale) * 100)
+    const percentuale_costi =
+      data.budget_costi > 0
+        ? Math.round((data.speso_totale / data.budget_costi) * 100)
+        : 0;
+    const percentuale_margine =
+      data.valore_vendita > 0
+        ? Math.round((data.margine_reale / data.valore_vendita) * 100)
         : 0;
 
     console.log(
-      `📊 Cantiere trovato: ${data.nome} (id: ${data.id}) | €${data.speso}/${data.budget_totale} (${percentuale}%)`
+      `📊 Cantiere: ${data.nome} | Speso €${data.speso_totale}/${data.budget_costi} (${percentuale_costi}%) | Margine €${data.margine_reale}`
     );
 
     return {
       id: data.id,
       nome: data.nome,
-      budget_totale: data.budget_totale,
-      speso: data.speso,
-      rimanente: data.rimanente,
-      percentuale,
+      budget_costi: data.budget_costi,
+      valore_vendita: data.valore_vendita,
+      speso_materiali: data.speso_materiali,
+      speso_manodopera: data.speso_manodopera,
+      speso_totale: data.speso_totale,
+      residuo_budget: data.residuo_budget_costi,
+      margine: data.margine_reale,
+      percentuale_costi,
+      percentuale_margine,
       stato: data.stato,
     };
   } catch (error) {
@@ -114,12 +128,20 @@ export async function getCantieriAttivi(): Promise<CantiereData[]> {
     return data.map((c) => ({
       id: c.id,
       nome: c.nome,
-      budget_totale: c.budget_totale,
-      speso: c.speso,
-      rimanente: c.rimanente,
-      percentuale:
-        c.budget_totale > 0
-          ? Math.round((c.speso / c.budget_totale) * 100)
+      budget_costi: c.budget_costi,
+      valore_vendita: c.valore_vendita,
+      speso_materiali: c.speso_materiali,
+      speso_manodopera: c.speso_manodopera,
+      speso_totale: c.speso_totale,
+      residuo_budget: c.residuo_budget_costi,
+      margine: c.margine_reale,
+      percentuale_costi:
+        c.budget_costi > 0
+          ? Math.round((c.speso_totale / c.budget_costi) * 100)
+          : 0,
+      percentuale_margine:
+        c.valore_vendita > 0
+          ? Math.round((c.margine_reale / c.valore_vendita) * 100)
           : 0,
       stato: c.stato,
     }));
@@ -326,13 +348,22 @@ export async function inserisciPresenze(
 // ============================================================
 
 export function formatCantiereForAI(cantiere: CantiereData): string {
-  return `DATI REALI DAL DATABASE:
+  let text = `DATI REALI DAL DATABASE:
 - Cantiere: ${cantiere.nome}
-- Budget Totale: €${cantiere.budget_totale.toLocaleString("it-IT")}
-- Speso finora: €${cantiere.speso.toLocaleString("it-IT")} (somma movimenti registrati)
-- Rimanente: €${cantiere.rimanente.toLocaleString("it-IT")}
-- Avanzamento spesa: ${cantiere.percentuale}%
-- Stato cantiere: ${cantiere.stato}`;
+- Budget Costi Previsto: €${cantiere.budget_costi.toLocaleString("it-IT")}
+- Speso Materiali: €${cantiere.speso_materiali.toLocaleString("it-IT")}
+- Speso Manodopera: €${cantiere.speso_manodopera.toLocaleString("it-IT")}
+- TOTALE SPESO: €${cantiere.speso_totale.toLocaleString("it-IT")} (${cantiere.percentuale_costi}% del budget costi)
+- Residuo Budget Costi: €${cantiere.residuo_budget.toLocaleString("it-IT")}`;
+
+  if (cantiere.valore_vendita > 0) {
+    text += `
+- Valore Appalto (Vendita): €${cantiere.valore_vendita.toLocaleString("it-IT")}
+- MARGINE UTILE: €${cantiere.margine.toLocaleString("it-IT")} (${cantiere.percentuale_margine}% del valore vendita)`;
+  }
+
+  text += `\n- Stato: ${cantiere.stato}`;
+  return text;
 }
 
 export function formatCantieriListForAI(cantieri: CantiereData[]): string {
@@ -340,10 +371,13 @@ export function formatCantieriListForAI(cantieri: CantiereData[]): string {
 
   const header = `DATI REALI DAL DATABASE (${cantieri.length} cantieri aperti):`;
   const rows = cantieri
-    .map(
-      (c) =>
-        `- ${c.nome}: €${c.speso.toLocaleString("it-IT")} spesi su €${c.budget_totale.toLocaleString("it-IT")} di budget (${c.percentuale}%, rimangono €${c.rimanente.toLocaleString("it-IT")})`
-    )
+    .map((c) => {
+      let line = `- ${c.nome}: €${c.speso_totale.toLocaleString("it-IT")} spesi su €${c.budget_costi.toLocaleString("it-IT")} budget (${c.percentuale_costi}%, residuo €${c.residuo_budget.toLocaleString("it-IT")})`;
+      if (c.valore_vendita > 0) {
+        line += ` | Margine: €${c.margine.toLocaleString("it-IT")}`;
+      }
+      return line;
+    })
     .join("\n");
 
   return `${header}\n${rows}`;
