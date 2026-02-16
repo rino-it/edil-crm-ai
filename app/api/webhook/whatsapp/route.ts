@@ -44,12 +44,11 @@ export async function GET(request: NextRequest) {
 }
 
 // ============================================================
-// POST - Flusso principale con macchina a stati
+// POST - Flusso principale
 // ============================================================
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -64,7 +63,6 @@ export async function POST(request: NextRequest) {
       if (message) {
         const sender = message.from
         const type = message.type
-
         let rawContent = ''
         let mediaId: string | null = null
 
@@ -96,12 +94,45 @@ export async function POST(request: NextRequest) {
 
         console.log(`🔄 Stato conversazione: ${pendingStep}`)
 
+        // =====================================================
+        // GESTIONE MEDIA: Download + Upload su Supabase
+        // =====================================================
+        let mediaData = null
+        let uploadedFileUrl: string | null = null // Variabile per l'URL
+
+        if (mediaId) {
+          console.log(`📸 Tipo: ${type} | Media ID: ${mediaId} — download in corso...`)
+          mediaData = await downloadMedia(mediaId)
+          
+          // <--- 2. LOGICA DI UPLOAD INSERITA QUI (Usa mediaData.buffer nativo)
+          if (mediaData) {
+             const extension = mediaData.mimeType.split('/')[1] || 'jpg';
+             const fileName = `whatsapp_${mediaId}.${extension}`;
+             
+             // Carichiamo su Supabase (bucket cantiere-docs)
+             // TypeScript ora è felice perché .buffer è nell'interfaccia
+             uploadedFileUrl = await uploadFileToSupabase(
+                mediaData.buffer, 
+                fileName,
+                mediaData.mimeType
+             );
+             console.log("🌍 Foto caricata su Cloud:", uploadedFileUrl);
+          }
+          
+          if (!mediaData) {
+            console.warn("⚠️ Download media fallito, proseguo con solo testo")
+          }
+        }
+
+        // Chiamata Gemini
+        const geminiResult = await processWithGemini(rawContent, mediaData)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let aiAnalysis: any = geminiResult
+
         // Variabili per il risultato finale
         let finalReply = ''
         let interactionStep = 'idle'
         let tempData: Record<string, unknown> = {}
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let aiAnalysis: any = {}
 
         // =====================================================
         // CASO A: L'utente sta CONFERMANDO un DDT ("Sì" / "No")
@@ -119,7 +150,7 @@ export async function POST(request: NextRequest) {
               importo: (pendingData.importo as number) || 0,
               data_movimento: (pendingData.data as string) || new Date().toISOString().split('T')[0],
               fornitore: pendingData.fornitore as string,
-              file_url: (pendingData.file_url as string) || null // <--- 2. PASSIAMO L'URL AL DB (RECUPERATO DAI DATI TEMPORANEI)
+              file_url: (pendingData.file_url as string) || null // <--- 3. PASSIAMO L'URL AL DB
             })
 
             if (result.success) {
@@ -137,7 +168,6 @@ export async function POST(request: NextRequest) {
             interactionStep = 'idle'
             aiAnalysis = { category: 'ddt', summary: 'DDT annullato dall\'utente' }
           } else {
-            // Non ha detto né sì né no — spiegare
             finalReply = `Sto aspettando una conferma per il DDT da €${pendingData.importo}.\nRispondi *Sì* per salvare o *No* per annullare.`
             interactionStep = 'waiting_confirm'
             tempData = pendingData
@@ -187,7 +217,6 @@ export async function POST(request: NextRequest) {
         // CASO B: L'utente sta INDICANDO IL CANTIERE (DDT o Presenze)
         // =====================================================
         else if (pendingStep === 'waiting_cantiere' && type === 'text') {
-          // Controlla se è un "No" per annullare
           const confirmation = detectConfirmation(rawContent)
           if (confirmation === 'no') {
             finalReply = "❌ Operazione annullata."
@@ -198,9 +227,7 @@ export async function POST(request: NextRequest) {
             const cantiere = await getCantiereData(rawContent)
 
             if (cantiere) {
-              // Controlliamo se è un flusso DDT o Presenze
               if (pendingData._flow_type === 'presenze') {
-                // Flusso presenze: risolviamo le persone e prepariamo la conferma
                 const nomi = (pendingData.nomi_rilevati as string[]) || []
                 const ore = (pendingData.ore as number) || 0
                 const { trovati, nonTrovati } = await risolviPersonale(nomi, sender)
@@ -236,7 +263,7 @@ export async function POST(request: NextRequest) {
                   }
                 }
               } else {
-                // Flusso DDT (come prima)
+                // Flusso DDT
                 finalReply = `Ho trovato *${cantiere.nome}*.\n\nRegistro la spesa di €${pendingData.importo} da ${pendingData.fornitore || 'N/D'}?\n\nRispondi *Sì* per confermare o *No* per annullare.`
                 interactionStep = 'waiting_confirm'
                 tempData = {
@@ -260,36 +287,8 @@ export async function POST(request: NextRequest) {
         // CASO C: NESSUNO STATO ATTIVO → Flusso normale
         // =====================================================
         else {
-          // Download media se presente
-          let mediaData = null
-          let uploadedFileUrl: string | null = null // Variabile per l'URL
-
-          if (mediaId) {
-            console.log(`📸 Tipo: ${type} | Media ID: ${mediaId} — download in corso...`)
-            mediaData = await downloadMedia(mediaId)
-            
-            // <--- 3. LOGICA DI UPLOAD INSERITA QUI (CON FIX .buffer)
-            if (mediaData) {
-               const extension = mediaData.mimeType.split('/')[1] || 'jpg';
-               const fileName = `whatsapp_${mediaId}.${extension}`;
-               
-               // Carichiamo su Supabase
-               uploadedFileUrl = await uploadFileToSupabase(
-                  mediaData.buffer, // <--- USIAMO .buffer (non .data)
-                  fileName,
-                  mediaData.mimeType
-               );
-               console.log("🌍 Foto caricata su Cloud:", uploadedFileUrl);
-            }
-            
-            if (!mediaData) {
-              console.warn("⚠️ Download media fallito, proseguo con solo testo")
-            }
-          }
-
-          // Chiamata Gemini
-          const geminiResult = await processWithGemini(rawContent, mediaData)
-          aiAnalysis = geminiResult
+          // ... (Download media già fatto sopra) ...
+          // Chiamata Gemini (già fatta sopra)
 
           console.log("🔍 DEBUG AI FULL:", JSON.stringify(geminiResult))
           console.log(`🧠 Intent: ${geminiResult.category} | Key: ${geminiResult.search_key || 'MANCANTE'} | ${geminiResult.summary}`)
@@ -301,14 +300,12 @@ export async function POST(request: NextRequest) {
             const dati = geminiResult.extracted_data
             console.log(`📄 DDT rilevato: ${dati.fornitore} | €${dati.importo} | ${dati.materiali}`)
 
-            // Cerchiamo il cantiere (dalla didascalia o dall'indirizzo sul DDT)
             let cantiere = null
             if (dati.cantiere_rilevato) {
               cantiere = await getCantiereData(dati.cantiere_rilevato as string)
             }
 
             if (cantiere) {
-              // Cantiere trovato → chiediamo conferma
               finalReply = `📄 *DDT rilevato*\n\n` +
                 `• Fornitore: ${dati.fornitore || 'N/D'}\n` +
                 `• Importo: €${dati.importo || 0}\n` +
@@ -326,10 +323,9 @@ export async function POST(request: NextRequest) {
                 numero_ddt: dati.numero_ddt,
                 cantiere_id: cantiere.id,
                 cantiere_nome: cantiere.nome,
-                file_url: uploadedFileUrl // <--- SALVIAMO URL NEI DATI TEMPORANEI
+                file_url: uploadedFileUrl // <--- 4. SALVIAMO URL NEI DATI TEMPORANEI
               }
             } else {
-              // Cantiere non trovato → chiediamo quale
               finalReply = `📄 *DDT rilevato*\n\n` +
                 `• Fornitore: ${dati.fornitore || 'N/D'}\n` +
                 `• Importo: €${dati.importo || 0}\n` +
@@ -344,7 +340,7 @@ export async function POST(request: NextRequest) {
                 materiali: dati.materiali,
                 data: dati.data,
                 numero_ddt: dati.numero_ddt,
-                file_url: uploadedFileUrl // <--- SALVIAMO URL ANCHE QUI
+                file_url: uploadedFileUrl // <--- 4. SALVIAMO URL ANCHE QUI
               }
             }
           }
@@ -360,21 +356,18 @@ export async function POST(request: NextRequest) {
 
             console.log(`👷 Presenze: ${nomi.join(', ')} | ${ore}h | Cantiere: ${cantiereNome || 'N/D'}`)
 
-            // Cerchiamo il cantiere
             let cantiere = null
             if (cantiereNome) {
               cantiere = await getCantiereData(cantiereNome)
             }
 
             if (cantiere) {
-              // Cantiere trovato → risolviamo le persone
               const { trovati, nonTrovati } = await risolviPersonale(nomi, sender)
 
               if (trovati.length === 0) {
                 finalReply = `Non riconosco nessuno dei nomi indicati: ${nonTrovati.join(', ')}.\n\nAssicurati che siano registrati nel sistema.`
                 interactionStep = 'idle'
               } else {
-                // Prepariamo le righe da inserire
                 const presenzeRows = trovati.map(t => ({
                   cantiere_id: cantiere!.id,
                   personale_id: t.personale.id,
@@ -409,7 +402,6 @@ export async function POST(request: NextRequest) {
                 }
               }
             } else {
-              // Cantiere non trovato → chiediamo
               finalReply = `👷 Ho capito: ${nomi.length} persona/e, ${ore} ore${dati.descrizione_lavoro ? ', ' + dati.descrizione_lavoro : ''}.\n\nA quale cantiere assegno le ore? Scrivimi il nome.`
               interactionStep = 'waiting_cantiere'
               tempData = {

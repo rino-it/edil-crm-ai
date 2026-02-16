@@ -42,13 +42,12 @@ export async function sendWhatsAppMessage(to: string, body: string) {
 
 // ============================================================
 // DOWNLOAD MEDIA DA WHATSAPP CLOUD API
-// Meta non invia il file direttamente, ma un media_id.
-// Flusso: media_id → URL reale (protetto) → download blob → Base64
 // ============================================================
 
 export interface MediaDownloadResult {
   base64: string;
   mimeType: string;
+  buffer: Buffer; // <--- 1. AGGIUNTO: Esponiamo il buffer per l'upload su Supabase
 }
 
 export async function downloadMedia(mediaId: string): Promise<MediaDownloadResult | null> {
@@ -78,7 +77,7 @@ export async function downloadMedia(mediaId: string): Promise<MediaDownloadResul
 
     console.log(`🔗 URL media ottenuto (mime: ${mimeType}). Download in corso...`);
 
-    // Step 2: Scarichiamo i dati binari (serve il token anche qui!)
+    // Step 2: Scarichiamo i dati binari
     const mediaResponse = await fetch(mediaUrl, {
       headers: { Authorization: `Bearer ${token}` }
     });
@@ -87,15 +86,19 @@ export async function downloadMedia(mediaId: string): Promise<MediaDownloadResul
       throw new Error(`Impossibile scaricare file media: ${mediaResponse.status}`);
     }
 
-    // Step 3: Convertiamo in Base64 per Gemini
+    // Step 3: Convertiamo in Base64 per Gemini e Buffer per Supabase
     const arrayBuffer = await mediaResponse.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    const buffer = Buffer.from(arrayBuffer); // Il buffer viene creato qui
     const base64 = buffer.toString("base64");
 
     const sizeMB = (buffer.byteLength / (1024 * 1024)).toFixed(2);
     console.log(`📸 Media ${mediaId} scaricato! (${sizeMB} MB, ${mimeType})`);
 
-    return { base64, mimeType };
+    return { 
+        base64, 
+        mimeType, 
+        buffer // <--- 2. AGGIUNTO: Restituiamo il buffer
+    };
 
   } catch (error) {
     console.error("🔥 Errore download media:", error);
