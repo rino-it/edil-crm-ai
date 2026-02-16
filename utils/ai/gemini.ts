@@ -1,3 +1,13 @@
+Hai fatto benissimo a controllare. Il codice che mi hai incollato è **molto più avanzato** di quello standard (usa `gemini-2.5-flash` via HTTP diretto per evitare errori di libreria e gestisce le Presenze/Rapportini).
+
+Se avessimo usato il mio codice precedente "standard", avremmo perso la gestione specifica delle **Presenze** e la configurazione del modello **2.5 Flash**.
+
+Ecco la versione **IBRIDA PERFETTA**.
+Mantiene **tutta** la tua logica attuale (Presenze, Budget, HTTP Request, Modello 2.5) ma **aggiorna solo il PROMPT DELL'IMMAGINE** per renderlo aggressivo sul "Numero DDT", come abbiamo deciso.
+
+Copia e incolla questo nel file `utils/ai/gemini.ts`.
+
+```typescript
 // ============================================================
 // GEMINI 2.5 FLASH - Analisi testo + immagini (multimodale)
 // Nota: Nel nostro ambiente i modelli 1.5 restituiscono 404.
@@ -47,24 +57,23 @@ export async function processWithGemini(
   const hasImage = !!media?.base64;
 
   // --- Prompt diversi per immagine vs testo ---
+  // MODIFICA CRUCIALE: Aggiornato prompt immagine per forzare lettura Numero DDT
   const systemPrompt = hasImage
-    ? `Sei un assistente esperto per cantieri edili. Analizzi foto di DDT, fatture e documenti.
+    ? `Sei un assistente esperto per contabilità di cantiere. Analizzi foto di DDT, Bolle e Fatture.
 
 MESSAGGIO UTENTE (didascalia foto): "${text}"
 
-ANALISI DOCUMENTO:
-1. Se è un DDT o Fattura, estrai TUTTI questi campi:
-   - fornitore: nome del fornitore/azienda
-   - data: data del documento in formato YYYY-MM-DD
-   - importo: importo totale in numero (es. 1500.50). Se non c'è importo visibile, metti 0
-   - materiali: elenco breve dei materiali/prodotti
-   - numero_ddt: numero del documento se visibile
-   - cantiere_rilevato: cerca nella didascalia o nell'indirizzo di consegna un possibile nome di cantiere. Se non trovi nulla metti null
-
-2. Se è una foto generica di cantiere, descrivi cosa vedi.
+⚠️ PRIORITÀ ESTRAZIONE DATI (DALLA FOTO):
+1. **NUMERO DOCUMENTO (DDT)**: Cerca in alto a destra o sinistra. Cerca etichette come "DDT n.", "Doc n.", "Numero". È CRUCIALE per la riconciliazione automatica con le fatture. Se è scritto a mano, fai del tuo meglio per decifrarlo.
+2. **FORNITORE**: Cerca il logo o l'intestazione in alto.
+3. **DATA**: Data del documento (formato YYYY-MM-DD).
+4. **MATERIALI**: Elenco breve dei materiali consegnati.
+5. **CANTIERE**: Cerca l'indirizzo di destinazione ("Luogo di destinazione") per capire il cantiere.
+6. **IMPORTO**: Se c'è un totale visibile (es. 1500.50), estrailo. Altrimenti metti 0.
 
 Rispondi SOLO con un JSON valido, senza markdown e senza backtick:
-{"category":"ddt","search_key":null,"summary":"...","reply_to_user":"","extracted_data":{"fornitore":"...","data":"YYYY-MM-DD","importo":0,"materiali":"...","numero_ddt":"...","cantiere_rilevato":"...oppure null"}}`
+{"category":"ddt","search_key":null,"summary":"...","reply_to_user":"","extracted_data":{"fornitore":"...","data":"YYYY-MM-DD","importo":0,"materiali":"...","numero_ddt":"12345","cantiere_rilevato":"...oppure null"}}`
+    
     : `Sei un assistente per un'impresa edile. Analizza il messaggio e classifica la richiesta.
 
 MESSAGGIO UTENTE: "${text}"
@@ -211,3 +220,5 @@ async function callGemini(
 function fallbackError(msg: string): GeminiResponse {
   return { category: "errore", summary: "Errore AI", reply_to_user: msg };
 }
+
+```
