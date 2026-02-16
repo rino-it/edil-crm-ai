@@ -1,13 +1,3 @@
-Hai fatto benissimo a controllare. Il codice che mi hai incollato è **molto più avanzato** di quello standard (usa `gemini-2.5-flash` via HTTP diretto per evitare errori di libreria e gestisce le Presenze/Rapportini).
-
-Se avessimo usato il mio codice precedente "standard", avremmo perso la gestione specifica delle **Presenze** e la configurazione del modello **2.5 Flash**.
-
-Ecco la versione **IBRIDA PERFETTA**.
-Mantiene **tutta** la tua logica attuale (Presenze, Budget, HTTP Request, Modello 2.5) ma **aggiorna solo il PROMPT DELL'IMMAGINE** per renderlo aggressivo sul "Numero DDT", come abbiamo deciso.
-
-Copia e incolla questo nel file `utils/ai/gemini.ts`.
-
-```typescript
 // ============================================================
 // GEMINI 2.5 FLASH - Analisi testo + immagini (multimodale)
 // Nota: Nel nostro ambiente i modelli 1.5 restituiscono 404.
