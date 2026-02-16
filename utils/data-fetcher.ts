@@ -1,10 +1,10 @@
 // ============================================================
 // DATA FETCHER - Query Supabase per dati reali cantieri
 // Usato dal webhook per fornire contesto reale a Gemini (RAG)
+// e per inserire movimenti (DDT automatici)
 //
 // Legge da: vista_cantieri_budget (VIEW SQL)
-// La vista fa automaticamente JOIN cantieri + SUM(movimenti)
-// Colonne: id, nome, budget_totale, stato, speso, rimanente
+// Scrive su: movimenti (tabella reale)
 // ============================================================
 
 import { createClient } from "@supabase/supabase-js";
@@ -21,6 +21,7 @@ function getSupabaseAdmin() {
 // --- Interfacce ---
 
 export interface CantiereData {
+  id: string;
   nome: string;
   budget_totale: number;
   speso: number;
@@ -29,9 +30,17 @@ export interface CantiereData {
   stato: string;
 }
 
+export interface MovimentoInput {
+  cantiere_id: string;
+  tipo: "materiale" | "manodopera" | "spesa_generale";
+  descrizione: string;
+  importo: number;
+  data_movimento: string;
+  fornitore?: string;
+}
+
 // ============================================================
 // RICERCA CANTIERE PER NOME (match parziale con ILIKE)
-// Es. "Boldone" → trova "Torre Boldone - Ristrutturazione Villa"
 // Legge dalla vista che ha già speso e rimanente pre-calcolati
 // ============================================================
 
@@ -58,17 +67,17 @@ export async function getCantiereData(
       return null;
     }
 
-    // I dati arrivano già calcolati dalla vista SQL!
     const percentuale =
       data.budget_totale > 0
         ? Math.round((data.speso / data.budget_totale) * 100)
         : 0;
 
     console.log(
-      `📊 Cantiere trovato: ${data.nome} | €${data.speso}/${data.budget_totale} (${percentuale}%)`
+      `📊 Cantiere trovato: ${data.nome} (id: ${data.id}) | €${data.speso}/${data.budget_totale} (${percentuale}%)`
     );
 
     return {
+      id: data.id,
       nome: data.nome,
       budget_totale: data.budget_totale,
       speso: data.speso,
@@ -84,7 +93,6 @@ export async function getCantiereData(
 
 // ============================================================
 // LISTA TUTTI I CANTIERI APERTI (per domande generiche)
-// Es. "Quali cantieri abbiamo?" o "Come siamo messi?"
 // ============================================================
 
 export async function getCantieriAttivi(): Promise<CantiereData[]> {
@@ -103,6 +111,7 @@ export async function getCantieriAttivi(): Promise<CantiereData[]> {
     }
 
     return data.map((c) => ({
+      id: c.id,
       nome: c.nome,
       budget_totale: c.budget_totale,
       speso: c.speso,
@@ -116,6 +125,40 @@ export async function getCantieriAttivi(): Promise<CantiereData[]> {
   } catch (error) {
     console.error("🔥 Errore query cantieri aperti:", error);
     return [];
+  }
+}
+
+// ============================================================
+// INSERISCI MOVIMENTO (DDT confermato → scrivi in movimenti)
+// ============================================================
+
+export async function inserisciMovimento(
+  movimento: MovimentoInput
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = getSupabaseAdmin();
+
+  try {
+    const { error } = await supabase.from("movimenti").insert({
+      cantiere_id: movimento.cantiere_id,
+      tipo: movimento.tipo,
+      descrizione: movimento.descrizione,
+      importo: movimento.importo,
+      data_movimento: movimento.data_movimento,
+      fornitore: movimento.fornitore || null,
+    });
+
+    if (error) {
+      console.error("❌ Errore insert movimento:", error);
+      return { success: false, error: error.message };
+    }
+
+    console.log(
+      `✅ Movimento inserito: €${movimento.importo} su cantiere ${movimento.cantiere_id}`
+    );
+    return { success: true };
+  } catch (error) {
+    console.error("🔥 Errore insert movimento:", error);
+    return { success: false, error: "Errore imprevisto" };
   }
 }
 

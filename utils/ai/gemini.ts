@@ -2,6 +2,10 @@
 // GEMINI 2.5 FLASH - Analisi testo + immagini (multimodale)
 // Nota: Nel nostro ambiente i modelli 1.5 restituiscono 404.
 // Usiamo gemini-2.5-flash confermato attivo dalla diagnostica.
+//
+// Funzioni:
+//   processWithGemini()  - Analisi principale (testo/foto)
+//   synthesizeWithData() - Seconda chiamata con dati reali (RAG)
 // ============================================================
 
 export interface GeminiResponse {
@@ -9,7 +13,15 @@ export interface GeminiResponse {
   search_key?: string | null;
   summary: string;
   reply_to_user: string;
-  extracted_data?: Record<string, unknown>;
+  extracted_data?: {
+    fornitore?: string;
+    data?: string;
+    importo?: number;
+    materiali?: string;
+    numero_ddt?: string;
+    cantiere_rilevato?: string;
+    [key: string]: unknown;
+  };
 }
 
 interface MediaInput {
@@ -19,7 +31,6 @@ interface MediaInput {
 
 // ============================================================
 // FUNZIONE PRINCIPALE: Analisi messaggio (testo + eventuale foto)
-// Restituisce categoria, search_key per RAG, e risposta
 // ============================================================
 
 export async function processWithGemini(
@@ -35,23 +46,25 @@ export async function processWithGemini(
 
   const hasImage = !!media?.base64;
 
-  // --- Prompt diversi per testo vs immagine ---
+  // --- Prompt diversi per immagine vs testo ---
   const systemPrompt = hasImage
-    ? `Sei un assistente esperto per cantieri edili. Ti viene inviata una FOTO con eventuale testo.
-Se è un DDT, estrai: Fornitore, Materiali (con quantità), Data consegna, Numero DDT.
-Se è un Preventivo, estrai: Fornitore, Voci di spesa, Totale.
-Se è una foto generica di cantiere, descrivi cosa vedi.
+    ? `Sei un assistente esperto per cantieri edili. Analizzi foto di DDT, fatture e documenti.
 
-MESSAGGIO UTENTE: "${text}"
+MESSAGGIO UTENTE (didascalia foto): "${text}"
 
-Rispondi SOLO in JSON valido (no markdown, no backtick):
-{
-  "category": "ddt" | "preventivo" | "materiale" | "presenze" | "problema" | "budget" | "altro",
-  "search_key": null,
-  "summary": "Riassunto dettagliato con i dati estratti",
-  "reply_to_user": "Risposta professionale per WhatsApp (breve, chiara)",
-  "extracted_data": { "fornitore": "...", "materiali": [...], "data": "...", "numero_ddt": "..." }
-}`
+ANALISI DOCUMENTO:
+1. Se è un DDT o Fattura, estrai TUTTI questi campi:
+   - fornitore: nome del fornitore/azienda
+   - data: data del documento in formato YYYY-MM-DD
+   - importo: importo totale in numero (es. 1500.50). Se non c'è importo visibile, metti 0
+   - materiali: elenco breve dei materiali/prodotti
+   - numero_ddt: numero del documento se visibile
+   - cantiere_rilevato: cerca nella didascalia o nell'indirizzo di consegna un possibile nome di cantiere. Se non trovi nulla metti null
+
+2. Se è una foto generica di cantiere, descrivi cosa vedi.
+
+Rispondi SOLO con un JSON valido, senza markdown e senza backtick:
+{"category":"ddt","search_key":null,"summary":"...","reply_to_user":"","extracted_data":{"fornitore":"...","data":"YYYY-MM-DD","importo":0,"materiali":"...","numero_ddt":"...","cantiere_rilevato":"...oppure null"}}`
     : `Sei un assistente per un'impresa edile. Analizza il messaggio e classifica la richiesta.
 
 MESSAGGIO UTENTE: "${text}"
@@ -88,8 +101,7 @@ Rispondi SOLO con un JSON valido, senza markdown e senza backtick:
 }
 
 // ============================================================
-// SECONDA CHIAMATA: Sintesi con dati reali (RAG)
-// Riceve il messaggio originale + dati DB e formula la risposta
+// SECONDA CHIAMATA: Sintesi con dati reali (RAG budget)
 // ============================================================
 
 export async function synthesizeWithData(
@@ -109,14 +121,31 @@ Usando ESCLUSIVAMENTE i dati qui sopra, genera una risposta WhatsApp:
 - NON inventare dati che non sono presenti sopra
 
 Rispondi SOLO in JSON valido (no markdown, no backtick):
-{
-  "category": "budget",
-  "search_key": null,
-  "summary": "Riepilogo con i dati trovati",
-  "reply_to_user": "Risposta WhatsApp con i dati reali"
-}`;
+{"category":"budget","search_key":null,"summary":"Riepilogo dati","reply_to_user":"Risposta WhatsApp con dati reali"}`;
 
   return await callGemini([{ text: prompt }], false);
+}
+
+// ============================================================
+// HELPER: Riconosce se un messaggio è una conferma "sì" o "no"
+// Usato dalla macchina a stati in route.ts
+// Non chiama Gemini — è una regex locale (più veloce e affidabile)
+// ============================================================
+
+export function detectConfirmation(text: string): "yes" | "no" | null {
+  const cleaned = text.trim().toLowerCase();
+
+  // Conferme positive
+  if (/^(s[iì]|si|ok|conferm[oa]|va bene|esatto|corretto|procedi|fatto|yes)$/i.test(cleaned)) {
+    return "yes";
+  }
+
+  // Conferme negative
+  if (/^(no|annulla|cancel|sbagliato|errato|non va|stop)$/i.test(cleaned)) {
+    return "no";
+  }
+
+  return null;
 }
 
 // ============================================================

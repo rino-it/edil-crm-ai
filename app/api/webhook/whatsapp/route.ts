@@ -1,18 +1,19 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse, NextRequest } from 'next/server'
-import { processWithGemini, synthesizeWithData } from '@/utils/ai/gemini'
+import { processWithGemini, synthesizeWithData, detectConfirmation } from '@/utils/ai/gemini'
 import { sendWhatsAppMessage, downloadMedia } from '@/utils/whatsapp'
 import {
   getCantiereData,
   getCantieriAttivi,
   formatCantiereForAI,
   formatCantieriListForAI,
+  inserisciMovimento,
 } from '@/utils/data-fetcher'
 
 export const dynamic = 'force-dynamic'
 
 // ============================================================
-// GET - Verifica webhook Meta (rimane identico)
+// GET - Verifica webhook Meta
 // ============================================================
 export async function GET(request: NextRequest) {
   try {
@@ -40,17 +41,23 @@ export async function GET(request: NextRequest) {
 }
 
 // ============================================================
-// POST - Ricezione messaggi WhatsApp → DB → Gemini → Risposta
-// Flusso completo con RAG:
-//   Messaggio → DB → Download Media → Gemini (intent detection)
-//   → [se budget] Query DB cantieri → Gemini (sintesi dati reali)
-//   → Risposta WA → Update DB
+// POST - Flusso principale con macchina a stati
+//
+// STATI (interaction_step in chat_log):
+//   idle              → nessuna conversazione attiva
+//   waiting_confirm   → DDT analizzato, in attesa di "Sì"
+//   waiting_cantiere  → DDT analizzato ma manca il cantiere
+//   completed         → DDT salvato con successo
+//
+// FLUSSO DDT:
+//   Foto → Gemini estrae dati → [cantiere trovato?]
+//     SÌ → chiede conferma → utente dice "Sì" → INSERT movimenti
+//     NO → chiede cantiere → utente scrive nome → chiede conferma → "Sì" → INSERT
 // ============================================================
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
 
-    // Client Supabase con Service Role (bypassa RLS)
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -69,7 +76,6 @@ export async function POST(request: NextRequest) {
         let rawContent = ''
         let mediaId: string | null = null
 
-        // --- Estrazione dati in base al tipo di messaggio ---
         if (type === 'text') {
           rawContent = message.text?.body || ''
         } else if (type === 'image') {
@@ -82,130 +88,243 @@ export async function POST(request: NextRequest) {
 
         console.log(`👤 Mittente: ${sender} | Tipo: ${type} | Contenuto: ${rawContent}`)
 
-        // 1. SALVATAGGIO DB (stato: processing)
-        const { data: savedMsg, error } = await supabaseAdmin
+        // =====================================================
+        // STEP 0: Recupera lo stato precedente della conversazione
+        // =====================================================
+        const { data: lastInteraction } = await supabaseAdmin
           .from('chat_log')
-          .insert({
-            raw_text: rawContent,
-            sender_number: sender,
-            media_url: mediaId,
-            status_ai: 'processing',
-          })
-          .select()
+          .select('interaction_step, temp_data')
+          .eq('sender_number', sender)
+          .in('interaction_step', ['waiting_confirm', 'waiting_cantiere'])
+          .order('created_at', { ascending: false })
+          .limit(1)
           .single()
 
-        if (error) {
-          console.error("❌ Errore DB:", error)
-        } else {
-          console.log("💾 Messaggio salvato. Avvio pipeline AI...")
+        const pendingStep = lastInteraction?.interaction_step || 'idle'
+        const pendingData = lastInteraction?.temp_data || {}
 
-          // 2. DOWNLOAD MEDIA (se presente)
+        console.log(`🔄 Stato conversazione: ${pendingStep}`)
+
+        // Variabili per il risultato finale
+        let finalReply = ''
+        let interactionStep = 'idle'
+        let tempData: Record<string, unknown> = {}
+        let aiAnalysis: Record<string, unknown> = {}
+
+        // =====================================================
+        // CASO A: L'utente sta CONFERMANDO un DDT ("Sì" / "No")
+        // =====================================================
+        if (pendingStep === 'waiting_confirm' && type === 'text') {
+          const confirmation = detectConfirmation(rawContent)
+
+          if (confirmation === 'yes') {
+            console.log("✅ Utente conferma! Inserisco movimento...")
+
+            const result = await inserisciMovimento({
+              cantiere_id: pendingData.cantiere_id as string,
+              tipo: 'materiale',
+              descrizione: `DDT ${pendingData.fornitore || 'N/D'}: ${pendingData.materiali || 'Materiali vari'}`,
+              importo: (pendingData.importo as number) || 0,
+              data_movimento: (pendingData.data as string) || new Date().toISOString().split('T')[0],
+              fornitore: pendingData.fornitore as string,
+            })
+
+            if (result.success) {
+              finalReply = `✅ Registrato! Spesa di €${pendingData.importo} da ${pendingData.fornitore || 'N/D'} salvata su *${pendingData.cantiere_nome}*.\nIl budget è aggiornato automaticamente.`
+              interactionStep = 'completed'
+            } else {
+              finalReply = `❌ Errore nel salvataggio: ${result.error}. Riprova mandando di nuovo la foto.`
+              interactionStep = 'idle'
+            }
+
+            aiAnalysis = { category: 'ddt', summary: `DDT confermato: €${pendingData.importo} su ${pendingData.cantiere_nome}` }
+
+          } else if (confirmation === 'no') {
+            finalReply = "❌ Operazione annullata. Il DDT non è stato registrato."
+            interactionStep = 'idle'
+            aiAnalysis = { category: 'ddt', summary: 'DDT annullato dall\'utente' }
+          } else {
+            // Non ha detto né sì né no — spiegare
+            finalReply = `Sto aspettando una conferma per il DDT da €${pendingData.importo}.\nRispondi *Sì* per salvare o *No* per annullare.`
+            interactionStep = 'waiting_confirm'
+            tempData = pendingData
+            aiAnalysis = { category: 'ddt', summary: 'In attesa conferma' }
+          }
+        }
+
+        // =====================================================
+        // CASO B: L'utente sta INDICANDO IL CANTIERE
+        // =====================================================
+        else if (pendingStep === 'waiting_cantiere' && type === 'text') {
+          console.log(`🔍 Utente indica cantiere: "${rawContent}"`)
+
+          const cantiere = await getCantiereData(rawContent)
+
+          if (cantiere) {
+            finalReply = `Ho trovato *${cantiere.nome}*.\n\nRegistro la spesa di €${pendingData.importo} da ${pendingData.fornitore || 'N/D'}?\n\nRispondi *Sì* per confermare o *No* per annullare.`
+            interactionStep = 'waiting_confirm'
+            tempData = {
+              ...pendingData,
+              cantiere_id: cantiere.id,
+              cantiere_nome: cantiere.nome,
+            }
+          } else {
+            finalReply = `Non ho trovato nessun cantiere con "${rawContent}".\nRiprova con il nome esatto o scrivi *No* per annullare.`
+            interactionStep = 'waiting_cantiere'
+            tempData = pendingData
+          }
+
+          aiAnalysis = { category: 'ddt', summary: `Ricerca cantiere: ${rawContent}` }
+        }
+
+        // =====================================================
+        // CASO C: NESSUNO STATO ATTIVO → Flusso normale
+        // =====================================================
+        else {
+          // Download media se presente
           let mediaData = null
-
           if (mediaId) {
             console.log(`📸 Tipo: ${type} | Media ID: ${mediaId} — download in corso...`)
             mediaData = await downloadMedia(mediaId)
-
             if (!mediaData) {
               console.warn("⚠️ Download media fallito, proseguo con solo testo")
             }
           }
 
-          // 3. ANALISI GEMINI - Prima chiamata (intent detection)
-          let aiAnalysis = await processWithGemini(rawContent, mediaData)
+          // Chiamata Gemini
+          const geminiResult = await processWithGemini(rawContent, mediaData)
+          aiAnalysis = geminiResult
 
-          // DEBUG: Log completo della risposta Gemini per diagnostica
-          console.log("🔍 DEBUG AI FULL:", JSON.stringify(aiAnalysis))
-          console.log(`🧠 Intent: ${aiAnalysis.category} | Key: ${aiAnalysis.search_key || 'MANCANTE'} | ${aiAnalysis.summary}`)
+          console.log("🔍 DEBUG AI FULL:", JSON.stringify(geminiResult))
+          console.log(`🧠 Intent: ${geminiResult.category} | Key: ${geminiResult.search_key || 'MANCANTE'} | ${geminiResult.summary}`)
 
-          // =====================================================
-          // 4. RAG: Se Gemini ha rilevato una richiesta "budget",
-          //    cerchiamo i dati reali nel DB e rigeneriamo la risposta
-          // =====================================================
+          // -------------------------------------------------
+          // SOTTO-CASO C1: DDT rilevato da foto
+          // -------------------------------------------------
+          if (geminiResult.category === 'ddt' && geminiResult.extracted_data) {
+            const dati = geminiResult.extracted_data
+            console.log(`📄 DDT rilevato: ${dati.fornitore} | €${dati.importo} | ${dati.materiali}`)
 
-          // FALLBACK: Se Gemini dice "budget" ma non ha estratto search_key,
-          // proviamo a estrarre il nome del cantiere dal testo originale
-          if (aiAnalysis.category === 'budget' && !aiAnalysis.search_key) {
-            console.warn("⚠️ Gemini ha rilevato 'budget' ma senza search_key. Attivo fallback...")
+            // Cerchiamo il cantiere (dalla didascalia o dall'indirizzo sul DDT)
+            let cantiere = null
+            if (dati.cantiere_rilevato) {
+              cantiere = await getCantiereData(dati.cantiere_rilevato as string)
+            }
 
-            // Parole chiave da rimuovere per isolare il nome del cantiere
-            const budgetKeywords = /\b(quanto|ci manca|di budget|budget|su|del|della|sul|speso|spesa|costi|costo|come|siamo|messi|situazione|stato)\b/gi
-            const cleaned = rawContent.replace(budgetKeywords, '').replace(/[?!.,]/g, '').trim()
-
-            if (cleaned.length >= 3) {
-              aiAnalysis.search_key = cleaned
-              console.log(`🔧 Fallback search_key estratta dal testo: "${cleaned}"`)
+            if (cantiere) {
+              // Cantiere trovato → chiediamo conferma
+              finalReply = `📄 *DDT rilevato*\n\n` +
+                `• Fornitore: ${dati.fornitore || 'N/D'}\n` +
+                `• Importo: €${dati.importo || 0}\n` +
+                `• Materiali: ${dati.materiali || 'N/D'}\n` +
+                `• Data: ${dati.data || 'N/D'}\n` +
+                `• Cantiere: *${cantiere.nome}*\n\n` +
+                `Confermi la registrazione? Rispondi *Sì* o *No*.`
+              interactionStep = 'waiting_confirm'
+              tempData = {
+                fornitore: dati.fornitore,
+                importo: dati.importo,
+                materiali: dati.materiali,
+                data: dati.data,
+                numero_ddt: dati.numero_ddt,
+                cantiere_id: cantiere.id,
+                cantiere_nome: cantiere.nome,
+              }
             } else {
-              // Se non riusciamo a estrarre nulla, cerchiamo tutti
-              aiAnalysis.search_key = '__ALL__'
-              console.log("🔧 Fallback: nessun nome estraibile, uso __ALL__")
+              // Cantiere non trovato → chiediamo quale
+              finalReply = `📄 *DDT rilevato*\n\n` +
+                `• Fornitore: ${dati.fornitore || 'N/D'}\n` +
+                `• Importo: €${dati.importo || 0}\n` +
+                `• Materiali: ${dati.materiali || 'N/D'}\n` +
+                `• Data: ${dati.data || 'N/D'}\n\n` +
+                `A quale cantiere lo assegno? Scrivimi il nome.`
+              interactionStep = 'waiting_cantiere'
+              tempData = {
+                fornitore: dati.fornitore,
+                importo: dati.importo,
+                materiali: dati.materiali,
+                data: dati.data,
+                numero_ddt: dati.numero_ddt,
+              }
             }
           }
 
-          if (aiAnalysis.category === 'budget' && aiAnalysis.search_key) {
-            console.log(`🔍 RAG attivato! Cerco dati per: "${aiAnalysis.search_key}"`)
-
-            let dbContext: string | null = null
-
-            if (aiAnalysis.search_key === '__ALL__') {
-              // Panoramica di tutti i cantieri aperti
-              const cantieri = await getCantieriAttivi()
-              if (cantieri.length > 0) {
-                dbContext = formatCantieriListForAI(cantieri)
-                console.log(`📊 Trovati ${cantieri.length} cantieri aperti`)
-              }
-            } else {
-              // Cantiere specifico
-              const cantiere = await getCantiereData(aiAnalysis.search_key)
-              if (cantiere) {
-                dbContext = formatCantiereForAI(cantiere)
-                console.log(`📊 Dati trovati per: ${cantiere.nome}`)
-              }
+          // -------------------------------------------------
+          // SOTTO-CASO C2: Richiesta BUDGET (RAG) — logica esistente
+          // -------------------------------------------------
+          else if (geminiResult.category === 'budget') {
+            // Fallback search_key
+            if (!geminiResult.search_key) {
+              console.warn("⚠️ Gemini 'budget' senza search_key. Fallback...")
+              const budgetKeywords = /\b(quanto|ci manca|di budget|budget|su|del|della|sul|speso|spesa|costi|costo|come|siamo|messi|situazione|stato)\b/gi
+              const cleaned = rawContent.replace(budgetKeywords, '').replace(/[?!.,]/g, '').trim()
+              geminiResult.search_key = cleaned.length >= 3 ? cleaned : '__ALL__'
+              console.log(`🔧 Fallback search_key: "${geminiResult.search_key}"`)
             }
 
-            if (dbContext) {
-              // Seconda chiamata Gemini: sintetizza i dati reali in linguaggio naturale
-              console.log("🤖 Seconda chiamata Gemini con dati reali...")
-              const finalResponse = await synthesizeWithData(rawContent, dbContext)
+            if (geminiResult.search_key) {
+              console.log(`🔍 RAG attivato! Cerco dati per: "${geminiResult.search_key}"`)
+              let dbContext: string | null = null
 
-              // Sovrascriviamo la risposta con quella basata sui dati
-              aiAnalysis = {
-                ...aiAnalysis,
-                reply_to_user: finalResponse.reply_to_user,
-                summary: finalResponse.summary,
+              if (geminiResult.search_key === '__ALL__') {
+                const cantieri = await getCantieriAttivi()
+                if (cantieri.length > 0) {
+                  dbContext = formatCantieriListForAI(cantieri)
+                  console.log(`📊 Trovati ${cantieri.length} cantieri aperti`)
+                }
+              } else {
+                const cantiere = await getCantiereData(geminiResult.search_key)
+                if (cantiere) {
+                  dbContext = formatCantiereForAI(cantiere)
+                  console.log(`📊 Dati trovati per: ${cantiere.nome}`)
+                }
               }
-            } else {
-              // Cantiere non trovato nel DB
-              aiAnalysis.reply_to_user = aiAnalysis.search_key === '__ALL__'
-                ? "Non ho trovato cantieri aperti nel database. Verifica che i dati siano stati inseriti."
-                : `Non ho trovato nessun cantiere con il nome "${aiAnalysis.search_key}". Controlla l'ortografia o dimmi il nome esatto.`
 
-              console.warn(`⚠️ Nessun dato trovato per: "${aiAnalysis.search_key}"`)
+              if (dbContext) {
+                console.log("🤖 Seconda chiamata Gemini con dati reali...")
+                const finalResponse = await synthesizeWithData(rawContent, dbContext)
+                finalReply = finalResponse.reply_to_user
+                aiAnalysis = { ...geminiResult, reply_to_user: finalReply, summary: finalResponse.summary }
+              } else {
+                finalReply = geminiResult.search_key === '__ALL__'
+                  ? "Non ho trovato cantieri aperti nel database."
+                  : `Non ho trovato nessun cantiere con il nome "${geminiResult.search_key}".`
+              }
             }
           }
 
-          // 5. INVIO RISPOSTA WHATSAPP
-          if (aiAnalysis.reply_to_user) {
-            await sendWhatsAppMessage(sender, aiAnalysis.reply_to_user)
-          }
-
-          // 6. AGGIORNAMENTO FINALE DB
-          if (savedMsg) {
-            await supabaseAdmin
-              .from('chat_log')
-              .update({
-                status_ai: 'completed',
-                ai_response: aiAnalysis,
-              })
-              .eq('id', savedMsg.id)
-
-            console.log("✅ Ciclo completato: Messaggio → DB → AI → [RAG] → WhatsApp → DB")
+          // -------------------------------------------------
+          // SOTTO-CASO C3: Qualsiasi altro messaggio
+          // -------------------------------------------------
+          else {
+            finalReply = geminiResult.reply_to_user || ''
           }
         }
+
+        // =====================================================
+        // STEP FINALE: Invio risposta + salvataggio DB
+        // =====================================================
+        if (finalReply) {
+          await sendWhatsAppMessage(sender, finalReply)
+        }
+
+        // Salviamo TUTTO nel chat_log (messaggio + stato + dati temporanei)
+        await supabaseAdmin
+          .from('chat_log')
+          .insert({
+            raw_text: rawContent,
+            sender_number: sender,
+            media_url: mediaId,
+            status_ai: 'completed',
+            ai_response: aiAnalysis,
+            interaction_step: interactionStep,
+            temp_data: Object.keys(tempData).length > 0 ? tempData : null,
+          })
+
+        console.log(`✅ Ciclo completato | Step: ${interactionStep} | Risposta: "${finalReply.substring(0, 50)}..."`)
       }
     }
 
-    // Rispondiamo SEMPRE 200 a Meta per evitare retry
     return new NextResponse('Ricevuto', { status: 200 })
   } catch (error) {
     console.error('🔥 Errore POST:', error)
