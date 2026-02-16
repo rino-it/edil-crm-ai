@@ -210,5 +210,3 @@ async function callGemini(
 function fallbackError(msg: string): GeminiResponse {
   return { category: "errore", summary: "Errore AI", reply_to_user: msg };
 }
-
-```
