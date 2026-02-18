@@ -42,7 +42,8 @@ export interface MovimentoInput {
   importo: number;
   data_movimento: string;
   fornitore?: string;
-  file_url?: string | null; // <--- AGGIUNTA: Campo per l'URL della foto
+  file_url?: string | null; 
+  numero_documento?: string | null; // <--- MODIFICA 1: Campo aggiunto
 }
 
 // ============================================================
@@ -168,7 +169,8 @@ export async function inserisciMovimento(
       importo: movimento.importo,
       data_movimento: movimento.data_movimento,
       fornitore: movimento.fornitore || null,
-      file_url: movimento.file_url || null, // <--- AGGIUNTA: Salva l'URL nel DB
+      file_url: movimento.file_url || null, 
+      numero_documento: movimento.numero_documento || null, // <--- MODIFICA 2: Passaggio al DB
     });
 
     if (error) {

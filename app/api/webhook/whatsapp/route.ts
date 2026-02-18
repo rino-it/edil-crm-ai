@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { NextResponse, NextRequest } from 'next/server'
 import { processWithGemini, synthesizeWithData, detectConfirmation } from '@/utils/ai/gemini'
 import { sendWhatsAppMessage, downloadMedia } from '@/utils/whatsapp'
-import { uploadFileToSupabase } from '@/utils/supabase/upload' // <--- 1. IMPORT NUOVO
+import { uploadFileToSupabase } from '@/utils/supabase/upload' 
 import {
   getCantiereData,
   getCantieriAttivi,
@@ -98,19 +98,17 @@ export async function POST(request: NextRequest) {
         // GESTIONE MEDIA: Download + Upload su Supabase
         // =====================================================
         let mediaData = null
-        let uploadedFileUrl: string | null = null // Variabile per l'URL
+        let uploadedFileUrl: string | null = null 
 
         if (mediaId) {
           console.log(`📸 Tipo: ${type} | Media ID: ${mediaId} — download in corso...`)
           mediaData = await downloadMedia(mediaId)
           
-          // <--- 2. LOGICA DI UPLOAD INSERITA QUI (Usa mediaData.buffer nativo)
           if (mediaData) {
              const extension = mediaData.mimeType.split('/')[1] || 'jpg';
              const fileName = `whatsapp_${mediaId}.${extension}`;
              
              // Carichiamo su Supabase (bucket cantiere-docs)
-             // TypeScript ora è felice perché .buffer è nell'interfaccia
              uploadedFileUrl = await uploadFileToSupabase(
                 mediaData.buffer, 
                 fileName,
@@ -150,7 +148,8 @@ export async function POST(request: NextRequest) {
               importo: (pendingData.importo as number) || 0,
               data_movimento: (pendingData.data as string) || new Date().toISOString().split('T')[0],
               fornitore: pendingData.fornitore as string,
-              file_url: (pendingData.file_url as string) || null // <--- 3. PASSIAMO L'URL AL DB
+              file_url: (pendingData.file_url as string) || null,
+              numero_documento: (pendingData.numero_ddt as string) || null // <--- MODIFICA AGGIUNTA QUI
             })
 
             if (result.success) {
@@ -270,7 +269,8 @@ export async function POST(request: NextRequest) {
                   ...pendingData,
                   cantiere_id: cantiere.id,
                   cantiere_nome: cantiere.nome,
-                  file_url: pendingData.file_url // MANTENIAMO L'URL SE C'ERA
+                  file_url: pendingData.file_url,
+                  numero_ddt: pendingData.numero_ddt // <--- MODIFICA: Preserviamo il numero DDT
                 }
               }
             } else {
@@ -287,9 +287,6 @@ export async function POST(request: NextRequest) {
         // CASO C: NESSUNO STATO ATTIVO → Flusso normale
         // =====================================================
         else {
-          // ... (Download media già fatto sopra) ...
-          // Chiamata Gemini (già fatta sopra)
-
           console.log("🔍 DEBUG AI FULL:", JSON.stringify(geminiResult))
           console.log(`🧠 Intent: ${geminiResult.category} | Key: ${geminiResult.search_key || 'MANCANTE'} | ${geminiResult.summary}`)
 
@@ -298,7 +295,7 @@ export async function POST(request: NextRequest) {
           // -------------------------------------------------
           if (geminiResult.category === 'ddt' && geminiResult.extracted_data) {
             const dati = geminiResult.extracted_data
-            console.log(`📄 DDT rilevato: ${dati.fornitore} | €${dati.importo} | ${dati.materiali}`)
+            console.log(`📄 DDT rilevato: ${dati.fornitore} | €${dati.importo} | ${dati.materiali} | Doc: ${dati.numero_ddt}`)
 
             let cantiere = null
             if (dati.cantiere_rilevato) {
@@ -320,10 +317,10 @@ export async function POST(request: NextRequest) {
                 importo: dati.importo,
                 materiali: dati.materiali,
                 data: dati.data,
-                numero_ddt: dati.numero_ddt,
+                numero_ddt: dati.numero_ddt, // <--- Salviamo il numero estratto da Gemini
                 cantiere_id: cantiere.id,
                 cantiere_nome: cantiere.nome,
-                file_url: uploadedFileUrl // <--- 4. SALVIAMO URL NEI DATI TEMPORANEI
+                file_url: uploadedFileUrl
               }
             } else {
               finalReply = `📄 *DDT rilevato*\n\n` +
@@ -339,12 +336,13 @@ export async function POST(request: NextRequest) {
                 importo: dati.importo,
                 materiali: dati.materiali,
                 data: dati.data,
-                numero_ddt: dati.numero_ddt,
-                file_url: uploadedFileUrl // <--- 4. SALVIAMO URL ANCHE QUI
+                numero_ddt: dati.numero_ddt, // <--- Salviamo il numero anche qui
+                file_url: uploadedFileUrl
               }
             }
           }
 
+          // ... (resto del codice Presenze e Budget invariato)
           // -------------------------------------------------
           // SOTTO-CASO C4: PRESENZE / RAPPORTINO
           // -------------------------------------------------
@@ -472,7 +470,6 @@ export async function POST(request: NextRequest) {
           await sendWhatsAppMessage(sender, finalReply)
         }
 
-        // Salviamo TUTTO nel chat_log (messaggio + stato + dati temporanei)
         await supabaseAdmin
           .from('chat_log')
           .insert({
