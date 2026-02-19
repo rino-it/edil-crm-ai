@@ -4,8 +4,46 @@
 // Usiamo gemini-2.5-flash confermato attivo dalla diagnostica.
 //
 // Funzioni:
-//   processWithGemini()  - Analisi principale (testo/foto)
-//   synthesizeWithData() - Seconda chiamata con dati reali (RAG)
+//   processWithGemini()       - Analisi principale (testo/foto)
+//   synthesizeWithData()      - Seconda chiamata con dati reali (RAG)
+//   parseDocumentoPersonale() - Parser documenti HR (contratti, visite, corsi)
+// ============================================================
+
+// ============================================================
+// INTERFACCE: Documenti Personale con Confidence Score
+// ============================================================
+
+export interface ConfidenceField<T = string> {
+  value: T | null;
+  confidence: number; // 0.0 – 1.0
+  raw_text?: string;  // testo grezzo estratto dal documento
+}
+
+export interface DatiEstrattiContratto {
+  nome_dipendente:          ConfidenceField<string>;
+  livello_ccnl:             ConfidenceField<string>;  // es. "3", "4"
+  paga_base_oraria:         ConfidenceField<number>;
+  ore_settimanali:          ConfidenceField<number>;
+  data_assunzione:          ConfidenceField<string>;  // YYYY-MM-DD
+  data_scadenza_contratto:  ConfidenceField<string>;  // YYYY-MM-DD o null
+  tipo_contratto:           ConfidenceField<string>;  // "indeterminato" | "determinato" | "apprendistato"
+  costo_orario_reale_stimato: number | null;          // calcolato con RAG su parametri_globali
+}
+
+export interface DatiEstrattiDocumentoSanitario {
+  nome_dipendente:   ConfidenceField<string>;
+  tipo_documento:    ConfidenceField<string>;  // "visita_medica" | "corso_sicurezza" | "altro"
+  data_emissione:    ConfidenceField<string>;  // YYYY-MM-DD
+  data_scadenza:     ConfidenceField<string>;  // YYYY-MM-DD
+  esito:             ConfidenceField<string>;  // "idoneo" | "idoneo_con_limitazioni" | "non_idoneo"
+  ente_emittente:    ConfidenceField<string>;
+  note:              ConfidenceField<string>;
+}
+
+export type DatiEstrattiDocumento = DatiEstrattiContratto | DatiEstrattiDocumentoSanitario;
+
+// ============================================================
+// INTERFACCE: Risposta Gemini principale
 // ============================================================
 
 export interface GeminiResponse {
@@ -209,4 +247,129 @@ async function callGemini(
 
 function fallbackError(msg: string): GeminiResponse {
   return { category: "errore", summary: "Errore AI", reply_to_user: msg };
+}
+
+// ============================================================
+// PARSER DOCUMENTI PERSONALE
+// Analizza contratti, visite mediche e corsi di sicurezza.
+// Usa RAG: incrocia livello CCNL estratto con parametri_globali
+// per calcolare costo_orario_reale_stimato.
+// ============================================================
+
+export async function parseDocumentoPersonale(
+  media: MediaInput,
+  categoria: "contratto" | "visita_medica" | "corso_sicurezza" | "altro",
+  parametriGlobali?: {
+    aliquote_ccnl?: {
+      inps: number;
+      inail: number;
+      edilcassa: number;
+      tfr: number;
+      ferie_permessi: number;
+      livelli: Record<string, { paga_base: number; label: string }>;
+    };
+  } | null
+): Promise<DatiEstrattiDocumento> {
+  const apiKey = process.env.GOOGLE_API_KEY;
+  if (!apiKey) throw new Error("GOOGLE_API_KEY mancante");
+
+  const isContratto = categoria === "contratto";
+
+  // --- Costruisci contesto RAG per i contratti ---
+  let ragContext = "";
+  if (isContratto && parametriGlobali?.aliquote_ccnl) {
+    const a = parametriGlobali.aliquote_ccnl;
+    const livelliStr = Object.entries(a.livelli)
+      .map(([k, v]) => `  Livello ${k}: paga base €${v.paga_base}/h (${v.label})`)
+      .join("\n");
+    ragContext = `
+TABELLA CCNL EDILIZIA (da Knowledge Base):
+${livelliStr}
+Aliquote contributive:
+  INPS: ${(a.inps * 100).toFixed(2)}%
+  INAIL: ${(a.inail * 100).toFixed(2)}%
+  Edilcassa: ${(a.edilcassa * 100).toFixed(2)}%
+  TFR: ${(a.tfr * 100).toFixed(2)}%
+  Ferie/Permessi: ${(a.ferie_permessi * 100).toFixed(2)}%
+
+FORMULA costo_orario_reale = paga_base × (1 + INPS + INAIL + Edilcassa + TFR + Ferie)
+`;
+  }
+
+  const prompt = isContratto
+    ? `Sei un esperto di contratti di lavoro edile italiano. Analizza questo documento e estrai i dati con un punteggio di confidenza (0.0-1.0).
+
+${ragContext}
+
+ISTRUZIONI:
+1. Estrai tutti i campi richiesti dal documento
+2. Per ogni campo indica: value (valore estratto o null), confidence (0.0-1.0), raw_text (testo grezzo trovato)
+3. Se trovi il livello CCNL, usa la tabella sopra per calcolare costo_orario_reale_stimato
+4. Se non trovi un campo, metti value: null e confidence: 0.0
+
+Rispondi SOLO con JSON valido (no markdown, no backtick):
+{
+  "nome_dipendente":         {"value": "...", "confidence": 0.95, "raw_text": "..."},
+  "livello_ccnl":            {"value": "3", "confidence": 0.90, "raw_text": "..."},
+  "paga_base_oraria":        {"value": 11.20, "confidence": 0.85, "raw_text": "..."},
+  "ore_settimanali":         {"value": 40, "confidence": 0.95, "raw_text": "..."},
+  "data_assunzione":         {"value": "2024-01-15", "confidence": 0.90, "raw_text": "..."},
+  "data_scadenza_contratto": {"value": null, "confidence": 0.0, "raw_text": ""},
+  "tipo_contratto":          {"value": "indeterminato", "confidence": 0.95, "raw_text": "..."},
+  "costo_orario_reale_stimato": 16.45
+}`
+    : `Sei un esperto di documenti sanitari e sicurezza sul lavoro. Analizza questo documento e estrai i dati con un punteggio di confidenza (0.0-1.0).
+
+ISTRUZIONI:
+1. Estrai tutti i campi richiesti dal documento
+2. Per ogni campo indica: value (valore estratto o null), confidence (0.0-1.0), raw_text (testo grezzo trovato)
+3. tipo_documento può essere: "visita_medica", "corso_sicurezza", "altro"
+4. esito può essere: "idoneo", "idoneo_con_limitazioni", "non_idoneo", null
+
+Rispondi SOLO con JSON valido (no markdown, no backtick):
+{
+  "nome_dipendente":  {"value": "...", "confidence": 0.95, "raw_text": "..."},
+  "tipo_documento":   {"value": "visita_medica", "confidence": 0.90, "raw_text": "..."},
+  "data_emissione":   {"value": "2024-03-10", "confidence": 0.95, "raw_text": "..."},
+  "data_scadenza":    {"value": "2026-03-10", "confidence": 0.90, "raw_text": "..."},
+  "esito":            {"value": "idoneo", "confidence": 0.95, "raw_text": "..."},
+  "ente_emittente":   {"value": "...", "confidence": 0.80, "raw_text": "..."},
+  "note":             {"value": null, "confidence": 0.0, "raw_text": ""}
+}`;
+
+  const parts: Array<Record<string, unknown>> = [
+    { text: prompt },
+    {
+      inline_data: {
+        mime_type: media.mimeType,
+        data: media.base64,
+      },
+    },
+  ];
+
+  const modelToUse = "gemini-2.5-flash";
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${apiKey}`;
+
+  console.log(`🤖 parseDocumentoPersonale: categoria=${categoria}, modello=${modelToUse}`);
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contents: [{ parts }] }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    console.error("🔥 Errore Gemini parseDocumento:", err);
+    throw new Error(`Errore API Gemini: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!aiText) throw new Error("Risposta vuota da Gemini");
+
+  const cleanJson = aiText.replace(/```json\s*|```\s*/g, "").trim();
+  console.log("✅ parseDocumentoPersonale completato");
+
+  return JSON.parse(cleanJson) as DatiEstrattiDocumento;
 }

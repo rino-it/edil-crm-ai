@@ -384,3 +384,278 @@ export function formatCantieriListForAI(cantieri: CantiereData[]): string {
 
   return `${header}\n${rows}`;
 }
+
+// ============================================================
+// PARAMETRI GLOBALI: Legge Knowledge Base (aliquote CCNL, ecc.)
+// ============================================================
+
+export interface ParametriGlobali {
+  id: number;
+  aliquote_ccnl: {
+    inps: number;
+    inail: number;
+    edilcassa: number;
+    tfr: number;
+    ferie_permessi: number;
+    livelli: Record<string, { paga_base: number; label: string }>;
+  } | null;
+  indennita_trasferta: number;
+  soglia_km_trasferta: number;
+  moltiplicatore_straordinario: number;
+  soglia_ore_straordinario: number;
+}
+
+export async function getParametriGlobali(): Promise<ParametriGlobali | null> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("parametri_globali")
+    .select("*")
+    .limit(1)
+    .single();
+
+  if (error || !data) {
+    console.warn("⚠️ Parametri globali non trovati");
+    return null;
+  }
+  return data as ParametriGlobali;
+}
+
+// ============================================================
+// COSTO ORARIO REALE: Formula completa con aliquote CCNL
+// costo_reale = paga_base × (1 + INPS + INAIL + Edilcassa + TFR + Ferie)
+// ============================================================
+
+export function calcolaCostoOrario(
+  pagaBase: number,
+  aliquote: {
+    inps: number;
+    inail: number;
+    edilcassa: number;
+    tfr: number;
+    ferie_permessi: number;
+  }
+): number {
+  const moltiplicatore =
+    1 +
+    aliquote.inps +
+    aliquote.inail +
+    aliquote.edilcassa +
+    aliquote.tfr +
+    aliquote.ferie_permessi;
+  return Math.round(pagaBase * moltiplicatore * 100) / 100;
+}
+
+// ============================================================
+// DISTANZA KM: Formula Haversine tra due coordinate GPS
+// ============================================================
+
+export function calcolaDistanzaKm(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number
+): number {
+  const R = 6371; // raggio Terra in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * 10) / 10; // arrotonda a 1 decimale
+}
+
+// ============================================================
+// DOCUMENTI PERSONALE: Interfacce
+// ============================================================
+
+export interface DocumentoPersonale {
+  id: string;
+  personale_id: string;
+  nome_file: string;
+  url_file: string;
+  categoria: string;
+  categoria_documento?: string;
+  data_scadenza: string | null;
+  scadenza_notificata: boolean;
+  dati_estratti: Record<string, unknown> | null;
+  dati_validati: Record<string, unknown> | null;
+  stato: "bozza" | "validato" | "rifiutato";
+  created_at: string;
+}
+
+// ============================================================
+// DOCUMENTI PERSONALE: Salva bozza dopo analisi AI
+// ============================================================
+
+export async function salvaDocumentoBozza(params: {
+  personale_id: string;
+  nome_file: string;
+  url_file: string;
+  categoria: string;
+  dati_estratti: Record<string, unknown>;
+  data_scadenza?: string | null;
+}): Promise<{ success: boolean; id?: string; error?: string }> {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from("personale_documenti")
+    .insert({
+      personale_id: params.personale_id,
+      nome_file: params.nome_file,
+      url_file: params.url_file,
+      categoria: params.categoria,
+      categoria_documento: params.categoria,
+      dati_estratti: params.dati_estratti,
+      dati_validati: null,
+      stato: "bozza",
+      data_scadenza: params.data_scadenza || null,
+      scadenza_notificata: false,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    console.error("❌ Errore salvaDocumentoBozza:", error);
+    return { success: false, error: error?.message };
+  }
+
+  console.log(`✅ Documento bozza salvato: ${data.id}`);
+  return { success: true, id: data.id };
+}
+
+// ============================================================
+// DOCUMENTI PERSONALE: Valida e conferma (supervisione umana)
+// Aggiorna costo_config su personale se è un contratto
+// ============================================================
+
+export async function validaEConfermaDocumento(params: {
+  documento_id: string;
+  personale_id: string;
+  dati_validati: Record<string, unknown>;
+  data_scadenza?: string | null;
+  costo_orario_reale?: number | null;
+}): Promise<{ success: boolean; error?: string }> {
+  const supabase = getSupabaseAdmin();
+
+  // 1. Aggiorna il documento come validato
+  const { error: docError } = await supabase
+    .from("personale_documenti")
+    .update({
+      dati_validati: params.dati_validati,
+      stato: "validato",
+      data_scadenza: params.data_scadenza || null,
+    })
+    .eq("id", params.documento_id);
+
+  if (docError) {
+    console.error("❌ Errore validaDocumento:", docError);
+    return { success: false, error: docError.message };
+  }
+
+  // 2. Se c'è un costo orario reale calcolato, aggiorna personale
+  if (params.costo_orario_reale && params.costo_orario_reale > 0) {
+    const { error: personaleError } = await supabase
+      .from("personale")
+      .update({
+        costo_orario: params.costo_orario_reale,
+        costo_config: params.dati_validati,
+      })
+      .eq("id", params.personale_id);
+
+    if (personaleError) {
+      console.warn("⚠️ Documento validato ma errore aggiornamento costo personale:", personaleError);
+    } else {
+      console.log(`✅ Costo orario aggiornato: €${params.costo_orario_reale}/h per personale ${params.personale_id}`);
+    }
+  }
+
+  return { success: true };
+}
+
+// ============================================================
+// DOCUMENTI PERSONALE: Lista documenti per persona
+// ============================================================
+
+export async function getDocumentiPersonale(
+  personale_id: string
+): Promise<DocumentoPersonale[]> {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from("personale_documenti")
+    .select("*")
+    .eq("personale_id", personale_id)
+    .order("created_at", { ascending: false });
+
+  if (error || !data) {
+    console.warn(`⚠️ Nessun documento per personale ${personale_id}`);
+    return [];
+  }
+
+  return data as DocumentoPersonale[];
+}
+
+// ============================================================
+// DOCUMENTI PERSONALE: Scadenziario (prossimi 30 giorni)
+// ============================================================
+
+export interface DocumentoInScadenza {
+  id: string;
+  personale_id: string;
+  nome_personale: string;
+  nome_file: string;
+  categoria: string;
+  data_scadenza: string;
+  giorni_alla_scadenza: number;
+}
+
+export async function getDocumentiInScadenza(
+  giorniAvviso = 30
+): Promise<DocumentoInScadenza[]> {
+  const supabase = getSupabaseAdmin();
+
+  const oggi = new Date();
+  const limite = new Date();
+  limite.setDate(oggi.getDate() + giorniAvviso);
+
+  const { data, error } = await supabase
+    .from("personale_documenti")
+    .select(`
+      id,
+      personale_id,
+      nome_file,
+      categoria,
+      data_scadenza,
+      personale!inner(nome)
+    `)
+    .eq("stato", "validato")
+    .not("data_scadenza", "is", null)
+    .lte("data_scadenza", limite.toISOString().split("T")[0])
+    .gte("data_scadenza", oggi.toISOString().split("T")[0])
+    .order("data_scadenza", { ascending: true });
+
+  if (error || !data) {
+    console.warn("⚠️ Errore getDocumentiInScadenza:", error);
+    return [];
+  }
+
+  return data.map((d: Record<string, unknown>) => {
+    const scadenza = new Date(d.data_scadenza as string);
+    const diffMs = scadenza.getTime() - oggi.getTime();
+    const giorni = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    const personaleRecord = d.personale as { nome: string } | null;
+    return {
+      id: d.id as string,
+      personale_id: d.personale_id as string,
+      nome_personale: personaleRecord?.nome ?? "N/D",
+      nome_file: d.nome_file as string,
+      categoria: d.categoria as string,
+      data_scadenza: d.data_scadenza as string,
+      giorni_alla_scadenza: giorni,
+    };
+  });
+}

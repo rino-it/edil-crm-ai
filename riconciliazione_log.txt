@@ -68,3 +68,17 @@ Traceback (most recent call last):
 UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f680' in position 0: character maps to <undefined>
 [19/02/2026 15:21:33.52] Fine importazione XML 
 ---------------------------------------- 
+[19/02/2026 16:21:26.83] Avvio importazione XML 
+Traceback (most recent call last):
+  File "C:\Users\Ufficio\Desktop\PROGETTO X\Sviluppo\edil-crm-ai\riconciliazione_xml.py", line 188, in <module>
+    run()
+    ~~~^^
+  File "C:\Users\Ufficio\Desktop\PROGETTO X\Sviluppo\edil-crm-ai\riconciliazione_xml.py", line 162, in run
+    print(f"\U0001f680 AVVIO IMPORTAZIONE DA: {CARTELLA_ARCHIVIO}")
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Ufficio\AppData\Local\Programs\Python\Python313\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f680' in position 0: character maps to <undefined>
+[19/02/2026 16:21:37.22] Fine importazione XML 
+---------------------------------------- 

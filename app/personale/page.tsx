@@ -6,16 +6,47 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Users, Euro, Phone, Trash2 } from "lucide-react"
+import { Users, Euro, Phone, Trash2, FileText, AlertTriangle } from "lucide-react"
+import Link from "next/link"
 
 export default async function PersonalePage() {
   const supabase = await createClient()
 
-  // Fetch dei dati ordinati per nome
+  // Fetch personale ordinato per nome
   const { data: personale } = await supabase
     .from('personale')
     .select('*')
     .order('nome', { ascending: true })
+
+  // Fetch documenti in scadenza (entro 30 giorni) per badge
+  const oggi = new Date()
+  const limite = new Date()
+  limite.setDate(oggi.getDate() + 30)
+
+  const { data: documentiScadenza } = await supabase
+    .from('personale_documenti')
+    .select('personale_id, data_scadenza, stato')
+    .eq('stato', 'validato')
+    .not('data_scadenza', 'is', null)
+    .lte('data_scadenza', limite.toISOString().split('T')[0])
+    .gte('data_scadenza', oggi.toISOString().split('T')[0])
+
+  // Mappa: personale_id → numero documenti in scadenza
+  const scadenzePerPersona: Record<string, number> = {}
+  for (const doc of documentiScadenza ?? []) {
+    scadenzePerPersona[doc.personale_id] = (scadenzePerPersona[doc.personale_id] ?? 0) + 1
+  }
+
+  // Fetch bozze da validare per badge
+  const { data: bozze } = await supabase
+    .from('personale_documenti')
+    .select('personale_id, stato')
+    .eq('stato', 'bozza')
+
+  const bozzePerPersona: Record<string, number> = {}
+  for (const doc of bozze ?? []) {
+    bozzePerPersona[doc.personale_id] = (bozzePerPersona[doc.personale_id] ?? 0) + 1
+  }
 
   return (
     <div className="min-h-screen bg-zinc-50 p-8">
@@ -54,41 +85,73 @@ export default async function PersonalePage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {personale.map((p) => (
-                      <TableRow key={p.id}>
-                        <TableCell className="font-medium">
-                          <div className="flex flex-col">
-                            <span>{p.nome}</span>
-                            <span className="text-xs text-zinc-400 flex items-center gap-1">
-                              <Phone className="h-3 w-3" /> {p.telefono || 'N/D'}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-xs font-normal">
-                            {p.ruolo || 'Nessuno'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-semibold text-zinc-700">
-                          € {p.costo_orario?.toLocaleString('it-IT', { minimumFractionDigits: 2 })} / h
-                        </TableCell>
-                        <TableCell>
-                          {p.attivo ? (
-                            <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full border border-green-200">Attivo</span>
-                          ) : (
-                            <span className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded-full border border-red-200">Inattivo</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <form action={deletePersona}>
-                            <input type="hidden" name="id" value={p.id} />
-                            <Button variant="ghost" size="sm" type="submit" className="text-red-500 hover:text-red-700 hover:bg-red-50">
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </form>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {personale.map((p) => {
+                      const nScadenze = scadenzePerPersona[p.id] ?? 0
+                      const nBozze = bozzePerPersona[p.id] ?? 0
+                      return (
+                        <TableRow key={p.id}>
+                          <TableCell className="font-medium">
+                            <div className="flex flex-col gap-1">
+                              <span>{p.nome}</span>
+                              <span className="text-xs text-zinc-400 flex items-center gap-1">
+                                <Phone className="h-3 w-3" /> {p.telefono || 'N/D'}
+                              </span>
+                              {/* Badge scadenza documenti */}
+                              {nScadenze > 0 && (
+                                <span className="inline-flex items-center gap-1 text-xs text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full w-fit">
+                                  <AlertTriangle className="h-3 w-3" />
+                                  {nScadenze} doc. in scadenza
+                                </span>
+                              )}
+                              {/* Badge bozze da validare */}
+                              {nBozze > 0 && (
+                                <span className="inline-flex items-center gap-1 text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 px-1.5 py-0.5 rounded-full w-fit">
+                                  <FileText className="h-3 w-3" />
+                                  {nBozze} da validare
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs font-normal">
+                              {p.ruolo || 'Nessuno'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-semibold text-zinc-700">
+                            € {p.costo_orario?.toLocaleString('it-IT', { minimumFractionDigits: 2 })} / h
+                          </TableCell>
+                          <TableCell>
+                            {p.attivo ? (
+                              <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full border border-green-200">Attivo</span>
+                            ) : (
+                              <span className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded-full border border-red-200">Inattivo</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              {/* Link documenti */}
+                              <Link href={`/personale/${p.id}/documenti`}>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className={`text-blue-600 hover:text-blue-800 hover:bg-blue-50 ${(nScadenze > 0 || nBozze > 0) ? 'ring-1 ring-yellow-400' : ''}`}
+                                  title="Gestisci documenti"
+                                >
+                                  <FileText className="h-4 w-4" />
+                                </Button>
+                              </Link>
+                              {/* Elimina */}
+                              <form action={deletePersona}>
+                                <input type="hidden" name="id" value={p.id} />
+                                <Button variant="ghost" size="sm" type="submit" className="text-red-500 hover:text-red-700 hover:bg-red-50">
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </form>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
                   </TableBody>
                 </Table>
               )}
