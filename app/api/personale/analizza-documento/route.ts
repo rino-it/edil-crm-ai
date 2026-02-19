@@ -74,10 +74,8 @@ export async function POST(request: NextRequest) {
     let dataScadenza: string | null = null;
 
     // Estrai data_scadenza dai dati estratti
-    const datiRaw = risultatoAI.dati_estratti as Record<string, { valore: string | null }>;
-    if (categoria === "contratto") {
-      dataScadenza = datiRaw?.data_scadenza?.valore || null;
-    } else {
+    const datiRaw = risultatoAI.dati_estratti as unknown as Record<string, { valore: string | null }>;
+    if (categoria === "contratto" || categoria === "visita_medica" || categoria === "corso_sicurezza") {
       dataScadenza = datiRaw?.data_scadenza?.valore || null;
     }
 
