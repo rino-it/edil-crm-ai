@@ -3,7 +3,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 
-export async function addPersona(formData: FormData) {
+export async function addPersona(formData: FormData): Promise<void> {
   const supabase = await createClient()
 
   const data = {
@@ -18,14 +18,12 @@ export async function addPersona(formData: FormData) {
 
   if (error) {
     console.error("Errore aggiunta persona:", error)
-    return { error: error.message }
+  } else {
+    revalidatePath('/personale')
   }
-
-  revalidatePath('/personale')
-  return { success: true }
 }
 
-export async function editPersona(formData: FormData) {
+export async function editPersona(formData: FormData): Promise<void> {
   const supabase = await createClient()
   const id = formData.get('id') as string
 
@@ -41,14 +39,12 @@ export async function editPersona(formData: FormData) {
 
   if (error) {
     console.error("Errore modifica persona:", error)
-    return { error: error.message }
+  } else {
+    revalidatePath('/personale')
   }
-
-  revalidatePath('/personale')
-  return { success: true }
 }
 
-export async function deletePersona(formData: FormData) {
+export async function deletePersona(formData: FormData): Promise<void> {
   const supabase = await createClient()
   const id = formData.get('id') as string
 
@@ -56,9 +52,7 @@ export async function deletePersona(formData: FormData) {
 
   if (error) {
     console.error("Errore eliminazione persona:", error)
-    return { error: error.message }
+  } else {
+    revalidatePath('/personale')
   }
-
-  revalidatePath('/personale')
-  return { success: true }
 }
