@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/scadenze",
+      "schedule": "0 8 * * *"
+    }
+  ]
+}

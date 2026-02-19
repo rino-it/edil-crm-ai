@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { NextResponse, NextRequest } from 'next/server'
 import { processWithGemini, synthesizeWithData, detectConfirmation } from '@/utils/ai/gemini'
 import { sendWhatsAppMessage, downloadMedia } from '@/utils/whatsapp'
-import { uploadFileToSupabase } from '@/utils/supabase/upload' 
+import { uploadFileToSupabase } from '@/utils/supabase/upload'
 import {
   getCantiereData,
   getCantieriAttivi,
@@ -11,9 +11,137 @@ import {
   inserisciMovimento,
   risolviPersonale,
   inserisciPresenze,
+  type PersonaRisolta,
+  type PresenzaInput,
 } from '@/utils/data-fetcher'
 
 export const dynamic = 'force-dynamic'
+
+// ============================================================
+// PARAMETRI GLOBALI — Fallback hardcoded se tabella non esiste
+// ============================================================
+interface ParametriGlobali {
+  moltiplicatore_straordinario: number  // es. 1.25 = +25%
+  soglia_ore_straordinario: number      // es. 8h/giorno
+  soglia_km_trasferta: number           // es. 30 km
+  indennita_trasferta: number           // es. €25/giorno
+}
+
+const PARAMETRI_FALLBACK: ParametriGlobali = {
+  moltiplicatore_straordinario: 1.25,
+  soglia_ore_straordinario: 8,
+  soglia_km_trasferta: 30,
+  indennita_trasferta: 25.00,
+}
+
+async function getParametriGlobali(): Promise<ParametriGlobali> {
+  try {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    )
+    const { data, error } = await supabase
+      .from('parametri_globali')
+      .select('moltiplicatore_straordinario, soglia_ore_straordinario, soglia_km_trasferta, indennita_trasferta')
+      .eq('id', 1)
+      .single()
+
+    if (error || !data) {
+      console.warn('⚠️ parametri_globali non trovati, uso fallback hardcoded')
+      return PARAMETRI_FALLBACK
+    }
+
+    return {
+      moltiplicatore_straordinario: data.moltiplicatore_straordinario ?? PARAMETRI_FALLBACK.moltiplicatore_straordinario,
+      soglia_ore_straordinario:     data.soglia_ore_straordinario     ?? PARAMETRI_FALLBACK.soglia_ore_straordinario,
+      soglia_km_trasferta:          data.soglia_km_trasferta          ?? PARAMETRI_FALLBACK.soglia_km_trasferta,
+      indennita_trasferta:          data.indennita_trasferta          ?? PARAMETRI_FALLBACK.indennita_trasferta,
+    }
+  } catch {
+    console.warn('⚠️ Errore lettura parametri_globali, uso fallback hardcoded')
+    return PARAMETRI_FALLBACK
+  }
+}
+
+// ============================================================
+// CALCOLO COSTO REALE — Straordinari + Trasferta
+//
+// Formule approvate:
+//   ore_ordinarie   = MIN(ore, soglia_ore_straordinario)
+//   ore_straord     = MAX(ore - soglia_ore_straordinario, 0)
+//   costo_manodopera = (ore_ordinarie × costo_orario)
+//                    + (ore_straord × costo_orario × moltiplicatore_straordinario)
+//   trasferta        = km_da_sede > soglia_km_trasferta ? indennita_trasferta : 0
+//   costo_calcolato  = costo_manodopera + trasferta
+// ============================================================
+interface CostoRealeResult {
+  costo_calcolato: number
+  ore_ordinarie: number
+  ore_straordinarie: number
+  trasferta_applicata: boolean
+  dettaglio: string  // stringa leggibile per il messaggio WhatsApp
+}
+
+function calcolaPresenzeConCostoReale(
+  trovati: PersonaRisolta[],
+  ore: number,
+  kmDaSede: number,
+  params: ParametriGlobali,
+  descrizione: string | null
+): PresenzaInput[] & { _meta: CostoRealeResult[] } {
+  const metas: CostoRealeResult[] = []
+
+  const rows = trovati.map((t) => {
+    const costoOrario = t.personale.costo_orario
+
+    // --- Scorporo straordinari ---
+    const oreOrdinarie    = Math.min(ore, params.soglia_ore_straordinario)
+    const oreStraordinarie = Math.max(ore - params.soglia_ore_straordinario, 0)
+
+    const costoOrdinario      = oreOrdinarie * costoOrario
+    const costoStraordinario  = oreStraordinarie * costoOrario * params.moltiplicatore_straordinario
+    const costoManodopera     = costoOrdinario + costoStraordinario
+
+    // --- Trigger trasferta ---
+    const trasfertaApplicata = kmDaSede > params.soglia_km_trasferta
+    const bonusTrasferta     = trasfertaApplicata ? params.indennita_trasferta : 0
+
+    // --- Totale ---
+    const costoCalcolato = costoManodopera + bonusTrasferta
+
+    // --- Dettaglio leggibile ---
+    let dettaglio = `${t.personale.nome}: ${oreOrdinarie}h ord. × €${costoOrario}/h`
+    if (oreStraordinarie > 0) {
+      dettaglio += ` + ${oreStraordinarie}h str. × €${(costoOrario * params.moltiplicatore_straordinario).toFixed(2)}/h`
+    }
+    if (trasfertaApplicata) {
+      dettaglio += ` + trasferta €${params.indennita_trasferta}`
+    }
+    dettaglio += ` = €${costoCalcolato.toFixed(2)}`
+
+    metas.push({
+      costo_calcolato: costoCalcolato,
+      ore_ordinarie: oreOrdinarie,
+      ore_straordinarie: oreStraordinarie,
+      trasferta_applicata: trasfertaApplicata,
+      dettaglio,
+    })
+
+    return {
+      cantiere_id:     '',  // verrà sovrascritto dal chiamante
+      personale_id:    t.personale.id,
+      ore,
+      descrizione:     descrizione || undefined,
+      costo_calcolato: costoCalcolato,
+    } satisfies PresenzaInput
+  })
+
+  // Attacchiamo i metadati all'array (non finiscono nel DB)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ;(rows as any)._meta = metas
+  return rows as PresenzaInput[] & { _meta: CostoRealeResult[] }
+}
 
 // ============================================================
 // GET - Verifica webhook Meta
@@ -235,16 +363,21 @@ export async function POST(request: NextRequest) {
                   finalReply = `Ho trovato il cantiere *${cantiere.nome}*, ma non riconosco nessuno dei nomi indicati: ${nonTrovati.join(', ')}.\n\nVerifica che siano registrati nel sistema.`
                   interactionStep = 'idle'
                 } else {
-                  const presenzeRows = trovati.map(t => ({
-                    cantiere_id: cantiere.id,
-                    personale_id: t.personale.id,
+                  // --- FASE 4: Calcolo costo reale con straordinari e trasferta ---
+                  const params = await getParametriGlobali()
+                  const kmDaSede = (cantiere as unknown as { km_da_sede?: number }).km_da_sede ?? 0
+                  const calcolati = calcolaPresenzeConCostoReale(
+                    trovati,
                     ore,
-                    descrizione: (pendingData.descrizione_lavoro as string) || null,
-                    costo_calcolato: ore * t.personale.costo_orario,
-                  }))
+                    kmDaSede,
+                    params,
+                    (pendingData.descrizione_lavoro as string) || null
+                  )
+                  const presenzeRows = calcolati.map(r => ({ ...r, cantiere_id: cantiere.id }))
+                  const metas = calcolati._meta
 
                   const costoTotale = presenzeRows.reduce((acc, p) => acc + p.costo_calcolato, 0)
-                  const listaNomi = trovati.map(t => `${t.personale.nome} (${ore}h × €${t.personale.costo_orario}/h)`).join('\n• ')
+                  const listaNomi = metas.map(m => m.dettaglio).join('\n• ')
 
                   let msg = `👷 *Rapportino*\n\n• ${listaNomi}\n\n📍 Cantiere: *${cantiere.nome}*\n💰 Costo totale: €${costoTotale.toFixed(2)}`
                   if (nonTrovati.length > 0) {
@@ -366,16 +499,21 @@ export async function POST(request: NextRequest) {
                 finalReply = `Non riconosco nessuno dei nomi indicati: ${nonTrovati.join(', ')}.\n\nAssicurati che siano registrati nel sistema.`
                 interactionStep = 'idle'
               } else {
-                const presenzeRows = trovati.map(t => ({
-                  cantiere_id: cantiere!.id,
-                  personale_id: t.personale.id,
+                // --- FASE 4: Calcolo costo reale con straordinari e trasferta ---
+                const params = await getParametriGlobali()
+                const kmDaSede = (cantiere as unknown as { km_da_sede?: number }).km_da_sede ?? 0
+                const calcolati = calcolaPresenzeConCostoReale(
+                  trovati,
                   ore,
-                  descrizione: (dati.descrizione_lavoro as string) || null,
-                  costo_calcolato: ore * t.personale.costo_orario,
-                }))
+                  kmDaSede,
+                  params,
+                  (dati.descrizione_lavoro as string) || null
+                )
+                const presenzeRows = calcolati.map(r => ({ ...r, cantiere_id: cantiere!.id }))
+                const metas = calcolati._meta
 
                 const costoTotale = presenzeRows.reduce((acc, p) => acc + p.costo_calcolato, 0)
-                const listaNomi = trovati.map(t => `${t.personale.nome} (${ore}h × €${t.personale.costo_orario}/h)`).join('\n• ')
+                const listaNomi = metas.map(m => m.dettaglio).join('\n• ')
 
                 let msg = `👷 *Rapportino*\n\n• ${listaNomi}\n\n📍 Cantiere: *${cantiere.nome}*`
                 if (dati.descrizione_lavoro) {
