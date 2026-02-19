@@ -659,3 +659,60 @@ export async function getDocumentiInScadenza(
     };
   });
 }
+// ============================================================
+// PREVENTIVAZIONE INTELLIGENCE: Lettura DB per RAG
+// ============================================================
+
+export async function getPrezziarioForRAG(descrizione: string): Promise<string> {
+  const supabase = getSupabaseAdmin();
+  
+  // Estraiamo la parola più lunga come chiave di ricerca per il fallback
+  const parole = descrizione.split(/[\s,.'-]+/).filter(w => w.length > 3);
+  const fallbackWord = parole.length > 0 ? parole[0] : descrizione.trim();
+
+  // Cerchiamo le voci che contengono in parte la descrizione
+  const { data, error } = await supabase
+    .from("prezziario_ufficiale_2025")
+    .select("id, codice_tariffa, descrizione, unita_misura, prezzo_unitario")
+    .ilike("descrizione", `%${fallbackWord}%`)
+    .limit(10);
+
+  if (error || !data || data.length === 0) {
+    console.warn(`⚠️ Nessuna voce prezziario trovata per: "${fallbackWord}"`);
+    return "";
+  }
+
+  // Formattazione per Gemini
+  return data
+    .map(
+      (i) =>
+        `[ID: ${i.id}] ${i.codice_tariffa} - ${i.descrizione} | UM: ${i.unita_misura} | Prezzo Ufficiale: €${i.prezzo_unitario}`
+    )
+    .join("\n");
+}
+
+export async function getStoricoForRAG(descrizione: string): Promise<string> {
+  const supabase = getSupabaseAdmin();
+  
+  const parole = descrizione.split(/[\s,.'-]+/).filter(w => w.length > 3);
+  const fallbackWord = parole.length > 0 ? parole[0] : descrizione.trim();
+
+  const { data, error } = await supabase
+    .from("storico_costi_lavorazioni")
+    .select("descrizione_lavorazione, unita_misura, costo_reale_unitario, data_rilevazione")
+    .ilike("descrizione_lavorazione", `%${fallbackWord}%`)
+    .order("data_rilevazione", { ascending: false })
+    .limit(5);
+
+  if (error || !data || data.length === 0) {
+    return "";
+  }
+
+  // Formattazione per Gemini
+  return data
+    .map(
+      (i) =>
+        `- Data: ${i.data_rilevazione} | Lavorazione: ${i.descrizione_lavorazione} | Costo Reale: €${i.costo_reale_unitario} / ${i.unita_misura}`
+    )
+    .join("\n");
+}

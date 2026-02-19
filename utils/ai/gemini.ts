@@ -7,6 +7,7 @@
 //   processWithGemini()       - Analisi principale (testo/foto)
 //   synthesizeWithData()      - Seconda chiamata con dati reali (RAG)
 //   parseDocumentoPersonale() - Parser documenti HR (contratti, visite, corsi)
+//   matchSemanticoPrezziario()- RAG per Preventivazione Intelligence
 // ============================================================
 
 // ============================================================
@@ -372,4 +373,88 @@ Rispondi SOLO con JSON valido (no markdown, no backtick):
   console.log("✅ parseDocumentoPersonale completato");
 
   return JSON.parse(cleanJson) as DatiEstrattiDocumento;
+}
+
+// ============================================================
+// PREVENTIVAZIONE INTELLIGENCE: RAG Semantic Matching
+// Modulo per la stima dei costi tramite prezziario e storico
+// ============================================================
+
+export interface PreventivoMatchResult {
+  ai_prezzo_stimato: number | null;
+  ai_prezzo_min: number | null;
+  ai_prezzo_max: number | null;
+  ai_confidence_score: number; // 0.0 - 1.0
+  ai_match_id: string | null;  // UUID della voce dal prezziario ufficiale
+  ragionamento: string;        // Spiegazione per la Human Validation
+}
+
+export async function matchSemanticoPrezziario(
+  descrizioneLavorazione: string,
+  unitaMisura: string | null,
+  ragContextPrezziario: string, // Voci dal DB passate come stringa
+  ragContextStorico: string     // Costi passati dal DB passati come stringa
+): Promise<PreventivoMatchResult> {
+  const apiKey = process.env.GOOGLE_API_KEY;
+  if (!apiKey) throw new Error("GOOGLE_API_KEY mancante");
+
+  const prompt = `Sei un ingegnere edile italiano esperto in computi metrici e preventivazione.
+Il tuo compito è analizzare la descrizione di una singola lavorazione da preventivare e confrontarla semanticamente con il prezziario ufficiale 2025 ed eventualmente con lo storico aziendale.
+
+LAVORAZIONE DA PREVENTIVARE:
+- Descrizione: "${descrizioneLavorazione}"
+- Unità di Misura: ${unitaMisura || "Non specificata"}
+
+KNOWLEDGE BASE (Prezziario Ufficiale 2025):
+${ragContextPrezziario || "Nessuna voce fornita."}
+
+KNOWLEDGE BASE (Storico Costi Aziendali):
+${ragContextStorico || "Nessun dato storico fornito."}
+
+ISTRUZIONI:
+1. Trova la voce del prezziario più simile alla lavorazione richiesta (seleziona l'ID esatto).
+2. Usa il prezzo ufficiale e modificalo in base allo storico aziendale per stimare il costo reale.
+3. Definisci: "ai_prezzo_stimato" (il più probabile), "ai_prezzo_min" e "ai_prezzo_max".
+4. Definisci il "ai_confidence_score" (0.0 a 1.0):
+   - 0.95: Match esatto di descrizione e unità di misura.
+   - 0.60-0.80: Match parziale (es. cambia lo spessore o il materiale è simile ma non identico).
+   - < 0.50: Match debole, suggerito solo per associazione logica.
+   - 0.0: Nessun match possibile (restituisci null per i prezzi).
+
+Rispondi SOLO con un JSON valido (no markdown, no backtick), con questa esatta struttura:
+{
+  "ai_prezzo_stimato": 150.50,
+  "ai_prezzo_min": 140.00,
+  "ai_prezzo_max": 165.00,
+  "ai_confidence_score": 0.85,
+  "ai_match_id": "uuid-della-voce-selezionata",
+  "ragionamento": "Breve motivazione della stima e delle differenze rispetto al prezziario ufficiale..."
+}`;
+
+  const parts: Array<Record<string, unknown>> = [{ text: prompt }];
+  const modelToUse = "gemini-2.5-flash";
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${apiKey}`;
+
+  console.log(`🤖 matchSemanticoPrezziario: Avvio RAG per lavorazione...`);
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contents: [{ parts }] }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    console.error("🔥 Errore Gemini matchSemantico:", err);
+    throw new Error(`Errore API Gemini: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!aiText) throw new Error("Risposta vuota da Gemini");
+
+  const cleanJson = aiText.replace(/```json\s*|```\s*/g, "").trim();
+  console.log("✅ matchSemanticoPrezziario completato");
+
+  return JSON.parse(cleanJson) as PreventivoMatchResult;
 }

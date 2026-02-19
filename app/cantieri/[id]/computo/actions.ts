@@ -16,7 +16,7 @@ export async function uploadComputo(formData: FormData) {
 
   const text = await file.text()
   const rows = text.split('\n')
-  const dataToInsert = []
+  const dataToInsert: any[] = []
 
   // Variabili per la mappatura colonne
   let colDesc = -1
@@ -24,77 +24,61 @@ export async function uploadComputo(formData: FormData) {
   let colUnit = -1
   let colPrice = -1
   let colTotal = -1
-  let detectedUnitName = 'corpo' // Default se non troviamo colonne specifiche
+  let detectedUnitName = 'corpo'
   let headerFound = false
 
-  // Parole chiave per il riconoscimento colonne
   const keywords = {
-    desc: ['descrizione', 'lavorazione', 'tipo', 'oggetto', 'ditta'], // 'ditta' spesso contiene info utili se manca la descrizione
+    desc: ['descrizione', 'lavorazione', 'tipo', 'oggetto', 'ditta'],
     qty: ['q.ta', 'q.tà', 'quantita', 'quantità', 'nr.', 'num'],
     unit: ['u.m.', 'um', 'unita', 'unità'],
-    price: ['prezzo', 'unitario', '€/'], // Cerca parziali come €/mc
+    price: ['prezzo', 'unitario', '€/'],
     total: ['importo', 'totale', 'lavori previsti', 'imponibile']
   }
 
-  // Unità di misura che spesso appaiono COME intestazione colonna (es. "mq", "mc")
   const unitHeaders = ['mq', 'mc', 'kg', 'ml', 'pz', 'cad', 'nr', 'ore']
 
-  // 1. Trova l'intestazione e mappa le colonne
+  // 1. Lettura e Mappatura CSV
   for (let i = 0; i < rows.length; i++) {
     const rowRaw = rows[i].trim()
     if (!rowRaw) continue
 
-    // Supporto per CSV separati da virgola o punto e virgola, gestendo i testi tra virgolette
     const cols = rowRaw.split(/[,;](?=(?:(?:[^"]*"){2})*[^"]*$)/).map(c => c.replace(/^"|"$/g, '').trim().toLowerCase())
 
-    // Cerchiamo di capire se questa riga è l'header
     if (!headerFound) {
-      // Strategia: Se troviamo almeno una colonna "Prezzo" o "Totale" e una "Descrizione", è l'header
       colDesc = cols.findIndex(c => keywords.desc.some(k => c.includes(k)))
       colTotal = cols.findIndex(c => keywords.total.some(k => c.includes(k)))
       
-      // Se troviamo l'header, cerchiamo le altre colonne specifiche
       if (colDesc !== -1 && (colTotal !== -1 || cols.length > 2)) {
         headerFound = true
-        
-        // Mappatura Standard
         colPrice = cols.findIndex(c => keywords.price.some(k => c.includes(k)))
         colQty = cols.findIndex(c => keywords.qty.some(k => c.includes(k)))
         colUnit = cols.findIndex(c => keywords.unit.some(k => c.includes(k)))
 
-        // Mappatura "Speciale": Se una colonna si chiama "mc" o "mq", quella è la Qty e l'unità è il nome stesso
         if (colQty === -1) {
           const unitIdx = cols.findIndex(c => unitHeaders.includes(c))
           if (unitIdx !== -1) {
             colQty = unitIdx
-            detectedUnitName = cols[unitIdx] // Es. 'mc'
+            detectedUnitName = cols[unitIdx]
           }
         }
-
-        console.log(`Header Trovato (Riga ${i}): Desc=${colDesc}, Qty=${colQty} (${detectedUnitName}), Price=${colPrice}, Total=${colTotal}`)
-        continue // Passa alla riga dati successiva
+        continue
       }
     }
 
-    // 2. Importazione Dati
     if (headerFound) {
       const rowCols = rowRaw.split(/[,;](?=(?:(?:[^"]*"){2})*[^"]*$)/).map(c => c.replace(/^"|"$/g, '').trim())
       
-      // Salta righe vuote o sballate
       if (rowCols.length <= colDesc) continue 
 
       const descrizione = rowCols[colDesc]
       if (!descrizione || descrizione.toLowerCase().includes('totale')) continue
 
-      // Funzione helper per pulire i numeri (gestisce 1.000,00 e 1,000.00)
       const parseNum = (str: string) => {
         if (!str) return 0
         let clean = str.replace(/€/g, '').trim()
-        // Se contiene , e . assumiamo che l'ultimo sia il decimale. 
-        // Se contiene solo , e sembra un decimale (es 10,50), sostituiamo.
         if (clean.indexOf(',') > -1 && clean.indexOf('.') > -1) {
-          if (clean.indexOf(',') < clean.indexOf('.')) clean = clean.replace(/,/g, '') // 1,000.00 -> 1000.00
-          else clean = clean.replace(/\./g, '').replace(',', '.') // 1.000,00 -> 1000.00
+          if (clean.indexOf(',') < clean.indexOf('.')) clean = clean.replace(/,/g, '') 
+          else clean = clean.replace(/\./g, '').replace(',', '.') 
         } else if (clean.indexOf(',') > -1) {
           clean = clean.replace(',', '.')
         }
@@ -105,48 +89,97 @@ export async function uploadComputo(formData: FormData) {
       let price = (colPrice !== -1) ? parseNum(rowCols[colPrice]) : 0
       let total = (colTotal !== -1) ? parseNum(rowCols[colTotal]) : 0
 
-      // Logica di fallback se mancano dati
       if (price === 0 && total !== 0 && qta !== 0) {
-        price = total / qta // Ricava il prezzo unitario
+        price = total / qta 
       } else if (total === 0 && price !== 0 && qta !== 0) {
-        total = price * qta // Ricava il totale
+        total = price * qta 
       } else if (price === 0 && total !== 0) {
-        price = total // Caso "a corpo"
+        price = total 
         qta = 1
       }
 
-      // Determina unità di misura
       let unit = detectedUnitName
       if (colUnit !== -1 && rowCols[colUnit]) {
         unit = rowCols[colUnit]
       }
-      // Se abbiamo trovato una colonna prezzo tipo "€/mc", estraiamo "mc"
-      if (unit === 'corpo' && colPrice !== -1) {
-        const headerPrice = rows[i].trim().split(/[,;]/)[colPrice]?.toLowerCase() || '' // Recupera header originale se possibile, qui approssimiamo
-        if (headerPrice.includes('/')) unit = headerPrice.split('/')[1].replace(/[^a-z]/g, '')
-      }
 
-      if (total > 0 || price > 0) { // Importa solo righe con valore
+      // IMPORTANTE: Ora importiamo anche le righe con prezzo 0 (per farle stimare all'AI)
+      if (descrizione.length > 3) { 
         dataToInsert.push({
           cantiere_id: cantiereId,
-          codice: rowCols[0] || '', // Spesso la prima colonna è un ID o N.
+          codice: rowCols[0] || '', 
           descrizione: descrizione,
           unita_misura: unit,
           quantita: qta,
-          prezzo_unitario: price
+          prezzo_unitario: price,
+          
+          // Campi AI di default
+          ai_prezzo_stimato: null,
+          ai_prezzo_min: null,
+          ai_prezzo_max: null,
+          ai_confidence_score: null,
+          ai_match_id: null,
+          stato_validazione: price > 0 ? 'confermato' : 'da_validare' 
         })
       }
     }
   }
 
-  // 3. Salvataggio
   if (dataToInsert.length === 0) {
     return redirect(`/cantieri/${cantiereId}/computo?error=Nessuna riga importata. Verifica il formato CSV.`)
   }
 
-  // Pulizia vecchi dati (opzionale: rimuovi se vuoi APPENDERE invece di SOVRASCRIVERE)
-  // await supabase.from('computo_voci').delete().eq('cantiere_id', cantiereId)
+  // ============================================================
+  // 2. INTEGRAZIONE AI: Stima dei prezzi mancanti (RAG)
+  // ============================================================
+  const appUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+  
+  const vociDaStimare = dataToInsert.filter(v => v.prezzo_unitario === 0);
+  console.log(`🧠 Trovate ${vociDaStimare.length} voci senza prezzo da sottoporre all'AI.`);
 
+  // Eseguiamo le chiamate API in parallelo (max 5 alla volta per non saturare)
+  const chunkSize = 5;
+  for (let i = 0; i < vociDaStimare.length; i += chunkSize) {
+    const chunk = vociDaStimare.slice(i, i + chunkSize);
+    
+    await Promise.all(chunk.map(async (voce) => {
+      try {
+        const response = await fetch(`${appUrl}/api/preventivo/match`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            descrizione: voce.descrizione,
+            unita_misura: voce.unita_misura
+          })
+        });
+
+        if (response.ok) {
+          const resJson = await response.json();
+          if (resJson.success && resJson.data) {
+            const aiData = resJson.data;
+            // Aggiorna la voce nell'array originale dataToInsert
+            voce.ai_prezzo_stimato = aiData.ai_prezzo_stimato;
+            voce.ai_prezzo_min = aiData.ai_prezzo_min;
+            voce.ai_prezzo_max = aiData.ai_prezzo_max;
+            voce.ai_confidence_score = aiData.ai_confidence_score;
+            voce.ai_match_id = aiData.ai_match_id;
+            
+            // Se l'AI ha trovato un prezzo con buona confidenza, prepariamo il dato, ma resta 'da_validare'
+            if (aiData.ai_prezzo_stimato) {
+               // Non forziamo il prezzo unitario qui per lasciare il controllo all'utente nella UI
+               console.log(`✅ Stima AI per "${voce.descrizione.substring(0,20)}...": €${aiData.ai_prezzo_stimato}`);
+            }
+          }
+        }
+      } catch (err) {
+        console.error(`🔥 Errore chiamata AI per riga: ${voce.descrizione}`, err);
+      }
+    }));
+  }
+
+  // ============================================================
+  // 3. Salvataggio su DB
+  // ============================================================
   const { error } = await supabase.from('computo_voci').insert(dataToInsert)
 
   if (error) {
@@ -154,12 +187,9 @@ export async function uploadComputo(formData: FormData) {
     return redirect(`/cantieri/${cantiereId}/computo?error=${encodeURIComponent(error.message)}`)
   }
 
-  // Aggiorna budget totale cantiere
-  const newTotal = dataToInsert.reduce((acc, r) => acc + (r.quantita * r.prezzo_unitario), 0)
-  // Nota: questo aggiorna il budget aggiungendo ai valori esistenti se non abbiamo cancellato prima.
-  // Per sicurezza, ricalcoliamo il totale DAL DB
+  // Ricalcola il totale dal DB
   const { data: allVoci } = await supabase.from('computo_voci').select('quantita, prezzo_unitario').eq('cantiere_id', cantiereId)
-  const realTotal = allVoci?.reduce((acc, r) => acc + (r.quantita * r.prezzo_unitario), 0) || newTotal
+  const realTotal = allVoci?.reduce((acc, r) => acc + (r.quantita * r.prezzo_unitario), 0) || 0
 
   await supabase.from('cantieri').update({ budget: realTotal }).eq('id', cantiereId)
 
