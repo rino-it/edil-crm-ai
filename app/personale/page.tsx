@@ -1,12 +1,12 @@
 import { createClient } from '@/utils/supabase/server'
-import { addPersona, editPersona, deletePersona } from './actions'
+import { addPersona, deletePersona } from './actions'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Users, Euro, Phone, Settings, Trash2, Edit } from "lucide-react"
+import { Users, Euro, Phone, Trash2 } from "lucide-react"
 
 export default async function PersonalePage() {
   const supabase = await createClient()
@@ -131,7 +131,7 @@ export default async function PersonalePage() {
 
                 <div className="flex items-center gap-2 pt-2">
                   <input type="checkbox" id="attivo" name="attivo" defaultChecked className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-600" />
-                  <Label htmlFor="attivo" className="font-normal cursor-pointer">Lavoratore attivo (Visibile all'AI)</Label>
+                  <Label htmlFor="attivo" className="font-normal cursor-pointer">Lavoratore attivo</Label>
                 </div>
 
                 <Button type="submit" className="w-full mt-4">Salva Anagrafica</Button>
