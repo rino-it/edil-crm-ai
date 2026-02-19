@@ -74,7 +74,8 @@ export async function POST(request: NextRequest) {
     let dataScadenza: string | null = null;
 
     // Estrai data_scadenza dai dati estratti
-    const datiRaw = risultatoAI.dati_estratti as unknown as Record<string, { valore: string | null }>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const datiRaw = risultatoAI.dati_estratti as unknown as Record<string, any>;
     if (categoria === "contratto" || categoria === "visita_medica" || categoria === "corso_sicurezza") {
       dataScadenza = datiRaw?.data_scadenza?.valore || null;
     }
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
       personale_id: personaleId,
       url_file: urlFile,
       categoria_documento: categoria,
-      dati_estratti: risultatoAI.dati_estratti as Record<string, unknown>,
+      dati_estratti: risultatoAI.dati_estratti as unknown as Record<string, unknown>,
       data_scadenza: dataScadenza,
     });
 
