@@ -11,7 +11,8 @@ export async function addPersona(formData: FormData): Promise<void> {
     ruolo: formData.get('ruolo') as string,
     telefono: formData.get('telefono') as string,
     costo_orario: parseFloat((formData.get('costo_orario') as string) || '0'),
-    attivo: formData.get('attivo') === 'on'
+    attivo: formData.get('attivo') === 'on',
+    indirizzo_partenza: (formData.get('indirizzo_partenza') as string) || null,
   }
 
   const { error } = await supabase.from('personale').insert([data])

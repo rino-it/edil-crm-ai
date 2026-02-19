@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Users, Plus, FileSpreadsheet } from "lucide-react"
 
 export default async function CantieriPage() {
   const supabase = await createClient()
@@ -21,7 +22,32 @@ export default async function CantieriPage() {
   return (
     <div className="min-h-screen bg-zinc-50 p-8">
       <div className="max-w-6xl mx-auto space-y-8">
-        
+
+        {/* Quick Actions */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <Link href="/cantieri/nuovo" className="flex items-center gap-3 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+            <Plus className="h-5 w-5 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-semibold">Nuovo Cantiere</p>
+              <p className="text-xs text-blue-200">Crea un nuovo progetto</p>
+            </div>
+          </Link>
+          <Link href="/personale" className="flex items-center gap-3 px-4 py-3 bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-zinc-300 rounded-lg transition-colors">
+            <Users className="h-5 w-5 text-zinc-500 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-zinc-800">Gestione Personale</p>
+              <p className="text-xs text-zinc-500">Anagrafica e documenti</p>
+            </div>
+          </Link>
+          <Link href="/preventivi" className="flex items-center gap-3 px-4 py-3 bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-zinc-300 rounded-lg transition-colors">
+            <FileSpreadsheet className="h-5 w-5 text-zinc-500 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-zinc-800">Preventivazione</p>
+              <p className="text-xs text-zinc-500">Crea e gestisci preventivi</p>
+            </div>
+          </Link>
+        </div>
+
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-zinc-900">Cantieri</h1>

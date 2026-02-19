@@ -11,6 +11,11 @@ import {
   inserisciMovimento,
   risolviPersonale,
   inserisciPresenze,
+  getParametriGlobali,
+  calcolaCostoOrario,
+  calcolaDistanzaKm,
+  PersonaRisolta,
+  CantiereData,
 } from '@/utils/data-fetcher'
 
 export const dynamic = 'force-dynamic'

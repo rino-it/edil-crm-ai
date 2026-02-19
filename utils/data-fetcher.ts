@@ -23,16 +23,19 @@ function getSupabaseAdmin() {
 export interface CantiereData {
   id: string;
   nome: string;
-  budget_costi: number;       // budget previsto per le spese
-  valore_vendita: number;     // valore appalto (quanto paga il cliente)
+  budget_costi: number;
+  valore_vendita: number;
   speso_materiali: number;
   speso_manodopera: number;
   speso_totale: number;
-  residuo_budget: number;     // budget_costi - speso_totale
-  margine: number;            // valore_vendita - speso_totale
-  percentuale_costi: number;  // % speso su budget_costi
-  percentuale_margine: number; // % margine su valore_vendita
+  residuo_budget: number;
+  margine: number;
+  percentuale_costi: number;
+  percentuale_margine: number;
   stato: string;
+  lat_cantiere: number | null;
+  lng_cantiere: number | null;
+  indirizzo: string | null;
 }
 
 export interface MovimentoInput {
@@ -100,6 +103,9 @@ export async function getCantiereData(
       percentuale_costi,
       percentuale_margine,
       stato: data.stato,
+      lat_cantiere: data.lat_cantiere || null,
+      lng_cantiere: data.lng_cantiere || null,
+      indirizzo: data.indirizzo || null,
     };
   } catch (error) {
     console.error("🔥 Errore query cantiere:", error);
@@ -145,6 +151,9 @@ export async function getCantieriAttivi(): Promise<CantiereData[]> {
           ? Math.round((c.margine_reale / c.valore_vendita) * 100)
           : 0,
       stato: c.stato,
+      lat_cantiere: c.lat_cantiere || null,
+      lng_cantiere: c.lng_cantiere || null,
+      indirizzo: c.indirizzo || null,
     }));
   } catch (error) {
     console.error("🔥 Errore query cantieri aperti:", error);
@@ -198,6 +207,10 @@ export interface PersonaleData {
   telefono: string | null;
   costo_orario: number;
   ruolo: string;
+  costo_config: Record<string, unknown> | null;
+  lat_partenza: number | null;
+  lng_partenza: number | null;
+  indirizzo_partenza: string | null;
 }
 
 export async function getPersonaleByNome(
@@ -226,6 +239,10 @@ export async function getPersonaleByNome(
     telefono: data.telefono,
     costo_orario: data.costo_orario || 0,
     ruolo: data.ruolo,
+    costo_config: data.costo_config || null,
+    lat_partenza: data.lat_partenza || null,
+    lng_partenza: data.lng_partenza || null,
+    indirizzo_partenza: data.indirizzo_partenza || null,
   };
 }
 
@@ -259,6 +276,10 @@ export async function getPersonaleByTelefono(
     telefono: data.telefono,
     costo_orario: data.costo_orario || 0,
     ruolo: data.ruolo,
+    costo_config: data.costo_config || null,
+    lat_partenza: data.lat_partenza || null,
+    lng_partenza: data.lng_partenza || null,
+    indirizzo_partenza: data.indirizzo_partenza || null,
   };
 }
 
@@ -366,6 +387,266 @@ export function formatCantiereForAI(cantiere: CantiereData): string {
 
   text += `\n- Stato: ${cantiere.stato}`;
   return text;
+}
+
+// ============================================================
+// PARAMETRI GLOBALI: Legge Knowledge Base aziendale
+// ============================================================
+
+export async function getParametriGlobali(): Promise<Record<string, unknown>> {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from("parametri_globali")
+    .select("chiave, valore");
+
+  if (error || !data) {
+    console.warn("⚠️ Impossibile leggere parametri_globali:", error?.message);
+    return {};
+  }
+
+  return Object.fromEntries(data.map((r) => [r.chiave, r.valore]));
+}
+
+// ============================================================
+// PERSONALE DOCUMENTI: Salva documento con dati estratti AI
+// ============================================================
+
+export interface DocumentoPersonaleInput {
+  personale_id: string;
+  url_file: string | null;
+  categoria_documento: "contratto" | "visita_medica" | "corso_sicurezza";
+  dati_estratti: Record<string, unknown>;
+  data_scadenza?: string | null;
+  data_documento?: string | null;
+}
+
+export async function salvaDocumentoBozza(
+  doc: DocumentoPersonaleInput
+): Promise<{ success: boolean; id?: string; error?: string }> {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from("personale_documenti")
+    .insert({
+      personale_id: doc.personale_id,
+      url_file: doc.url_file || null,
+      categoria_documento: doc.categoria_documento,
+      dati_estratti: doc.dati_estratti,
+      data_scadenza: doc.data_scadenza || null,
+      data_documento: doc.data_documento || null,
+      stato: "bozza",
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("❌ Errore salvataggio documento bozza:", error);
+    return { success: false, error: error.message };
+  }
+
+  return { success: true, id: data.id };
+}
+
+export interface ValidazioneDocumentoInput {
+  documento_id: string;
+  dati_validati: Record<string, unknown>;
+  data_scadenza?: string | null;
+  aggiorna_costo_config?: boolean; // true = aggiorna anche personale.costo_config
+  personale_id?: string;
+  costo_config?: Record<string, unknown>;
+}
+
+export async function validaEConfermaDocumento(
+  input: ValidazioneDocumentoInput
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = getSupabaseAdmin();
+
+  // 1. Aggiorna documento come validato
+  const { error: docError } = await supabase
+    .from("personale_documenti")
+    .update({
+      dati_validati: input.dati_validati,
+      data_scadenza: input.data_scadenza || null,
+      stato: "validato",
+    })
+    .eq("id", input.documento_id);
+
+  if (docError) {
+    console.error("❌ Errore validazione documento:", docError);
+    return { success: false, error: docError.message };
+  }
+
+  // 2. Opzionale: aggiorna costo_config del personale
+  if (input.aggiorna_costo_config && input.personale_id && input.costo_config) {
+    const { error: personaleError } = await supabase
+      .from("personale")
+      .update({ costo_config: input.costo_config })
+      .eq("id", input.personale_id);
+
+    if (personaleError) {
+      console.warn("⚠️ Documento validato ma costo_config non aggiornato:", personaleError.message);
+    }
+  }
+
+  return { success: true };
+}
+
+export async function getDocumentiPersonale(personale_id: string) {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from("personale_documenti")
+    .select("*")
+    .eq("personale_id", personale_id)
+    .order("created_at", { ascending: false });
+
+  if (error) return [];
+  return data || [];
+}
+
+// ============================================================
+// SCADENZIARIO: Documenti in scadenza nei prossimi N giorni
+// ============================================================
+
+export interface DocumentoInScadenza {
+  id: string;
+  personale_id: string;
+  personale_nome: string;
+  personale_telefono: string | null;
+  categoria_documento: string;
+  data_scadenza: string;
+  giorni_alla_scadenza: number;
+  url_file: string | null;
+}
+
+export async function getDocumentiInScadenza(
+  giorni: number = 30
+): Promise<DocumentoInScadenza[]> {
+  const supabase = getSupabaseAdmin();
+
+  const oggi = new Date();
+  const limite = new Date();
+  limite.setDate(oggi.getDate() + giorni);
+
+  const { data, error } = await supabase
+    .from("personale_documenti")
+    .select(`
+      id,
+      personale_id,
+      categoria_documento,
+      data_scadenza,
+      url_file,
+      personale!inner(nome, telefono)
+    `)
+    .not("data_scadenza", "is", null)
+    .lte("data_scadenza", limite.toISOString().split("T")[0])
+    .gte("data_scadenza", oggi.toISOString().split("T")[0])
+    .eq("stato", "validato")
+    .order("data_scadenza", { ascending: true });
+
+  if (error || !data) return [];
+
+  return data.map((d) => {
+    const scadenza = new Date(d.data_scadenza);
+    const diffMs = scadenza.getTime() - oggi.getTime();
+    const giorniRimasti = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+    const p = d.personale as unknown as { nome: string; telefono: string | null };
+
+    return {
+      id: d.id,
+      personale_id: d.personale_id,
+      personale_nome: p.nome,
+      personale_telefono: p.telefono,
+      categoria_documento: d.categoria_documento,
+      data_scadenza: d.data_scadenza,
+      giorni_alla_scadenza: giorniRimasti,
+      url_file: d.url_file,
+    };
+  });
+}
+
+// ============================================================
+// CALCOLO COSTO REALE ORARIO (Motore Backend)
+// Formula: Paga Oraria * (1 + INPS + INAIL + Edilcassa + TFR + Ferie)
+// ============================================================
+
+export interface CostoOrarioCalcolato {
+  costo_base_orario: number;
+  costo_reale_orario: number;     // Con tutti i contributi
+  costo_straordinario_orario: number;
+  trasferta_giornaliera: number;
+  dettaglio: {
+    paga_base: number;
+    contributi_inps: number;
+    contributi_inail: number;
+    contributi_edilcassa: number;
+    tfr: number;
+    ferie_permessi: number;
+  };
+}
+
+export function calcolaCostoOrario(
+  costoConfig: Record<string, unknown>,
+  parametriGlobali: Record<string, unknown>
+): CostoOrarioCalcolato {
+  // Legge da costo_config personale o usa defaults
+  const pagaBase = (costoConfig.paga_base as number) || 0;
+  const pagaTipo = (costoConfig.paga_base_tipo as string) || "oraria";
+  const pagaOraria = pagaTipo === "mensile" ? pagaBase / 173 : pagaBase;
+
+  const inps = (costoConfig.aliquota_inps as number) || 0.2315;
+  const inail = (costoConfig.aliquota_inail as number) || 0.030;
+  const edilcassa = (costoConfig.aliquota_edilcassa as number) || 0.020;
+  const tfr = (costoConfig.tfr as number) || 0.0741;
+  const ferie = (costoConfig.incidenza_ferie as number) || 0.1082;
+  const maggiorazioneStr = (costoConfig.maggiorazione_straordinari as number) ||
+    (parametriGlobali.maggiorazione_straordinari as number) || 1.25;
+
+  const trasfertaGiornaliera = (costoConfig.trasferta_giornaliera as number) ||
+    parseFloat(String(parametriGlobali.trasferta_indennita_giornaliera || "50"));
+
+  const contributiPct = inps + inail + edilcassa + tfr + ferie;
+  const costoReale = pagaOraria * (1 + contributiPct);
+  const costoStraordinario = costoReale * maggiorazioneStr;
+
+  return {
+    costo_base_orario: Math.round(pagaOraria * 100) / 100,
+    costo_reale_orario: Math.round(costoReale * 100) / 100,
+    costo_straordinario_orario: Math.round(costoStraordinario * 100) / 100,
+    trasferta_giornaliera: trasfertaGiornaliera,
+    dettaglio: {
+      paga_base: Math.round(pagaOraria * 100) / 100,
+      contributi_inps: Math.round(pagaOraria * inps * 100) / 100,
+      contributi_inail: Math.round(pagaOraria * inail * 100) / 100,
+      contributi_edilcassa: Math.round(pagaOraria * edilcassa * 100) / 100,
+      tfr: Math.round(pagaOraria * tfr * 100) / 100,
+      ferie_permessi: Math.round(pagaOraria * ferie * 100) / 100,
+    },
+  };
+}
+
+// ============================================================
+// CALCOLO DISTANZA (Haversine formula - Opzione B)
+// Distanza in km tra due coordinate GPS
+// ============================================================
+
+export function calcolaDistanzaKm(
+  lat1: number, lng1: number,
+  lat2: number, lng2: number
+): number {
+  const R = 6371; // Raggio Terra in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * 10) / 10;
 }
 
 export function formatCantieriListForAI(cantieri: CantiereData[]): string {
