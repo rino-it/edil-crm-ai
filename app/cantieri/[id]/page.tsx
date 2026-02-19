@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ArrowLeft, Wallet, TrendingDown, Hammer, FileText, Clock, ShoppingCart, ListChecks, User, HardHat } from "lucide-react"
+import { ArrowLeft, Wallet, TrendingDown, Hammer, FileText, Clock, ShoppingCart, ListChecks, User, HardHat, AlertTriangle, CheckCircle2, Info } from "lucide-react"
 
 export default async function CantierePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -31,7 +31,6 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
     .order('data_movimento', { ascending: false })
 
   // 3. Fetch Presenze (Manodopera) - JOIN con tabella Personale per avere i nomi
-  // Questa è la parte che mancava per vedere le righe singole
   const { data: presenze } = await supabase
     .from('presenze')
     .select('*, personale(nome, ruolo)')
@@ -41,7 +40,6 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
   // 4. CALCOLI UNIFICATI
   const totaleMateriali = movimenti?.reduce((acc, mov) => acc + (mov.importo || 0), 0) || 0
 
-  // Somma costo manodopera
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const totaleManodopera = presenze?.reduce((acc, p: any) => acc + (p.costo_calcolato || 0), 0) || 0
 
@@ -170,7 +168,7 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
           </Card>
         </div>
 
-        {/* NUOVA SEZIONE: Tabella Presenze Singole */}
+        {/* Tabella Presenze Singole */}
         <Card>
             <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="text-lg font-semibold flex items-center gap-2">
@@ -248,14 +246,15 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
                     <TableHead>Data</TableHead>
                     <TableHead>Tipo</TableHead>
                     <TableHead>Descrizione</TableHead>
-                    <TableHead>Allegato</TableHead> {/* AGGIUNTA COLONNA */}
+                    <TableHead>Allegato</TableHead>
+                    <TableHead>Stato</TableHead> {/* NUOVA COLONNA */}
                     <TableHead className="text-right">Importo</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {movimenti.map((mov) => (
                     <TableRow key={mov.id}>
-                      <TableCell className="font-medium">
+                      <TableCell className="font-medium whitespace-nowrap">
                         {new Date(mov.data_movimento).toLocaleDateString('it-IT')}
                       </TableCell>
                       <TableCell>
@@ -263,9 +262,10 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
                           {getIcon(mov.tipo)} {mov.tipo.replace('_', ' ')}
                         </div>
                       </TableCell>
-                      <TableCell className="max-w-[300px] truncate">{mov.descrizione}</TableCell>
+                      <TableCell className="max-w-[250px] truncate" title={mov.descrizione}>
+                        {mov.descrizione}
+                      </TableCell>
                       
-                      {/* AGGIUNTA CELLA ALLEGATO */}
                       <TableCell>
                         {mov.file_url ? (
                           <a 
@@ -282,7 +282,43 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
                         )}
                       </TableCell>
 
-                      <TableCell className="text-right font-bold text-zinc-900">
+                      {/* NUOVA CELLA STATO */}
+                      <TableCell>
+                        {mov.note ? (
+                          mov.note.includes('⚠️') ? (
+                            <Badge 
+                              variant="outline" 
+                              className="bg-amber-50 text-amber-600 border-amber-200 cursor-help whitespace-nowrap" 
+                              title={mov.note}
+                            >
+                              <AlertTriangle className="w-3 h-3 mr-1" />
+                              Parziale
+                            </Badge>
+                          ) : mov.note.includes('✅') ? (
+                            <Badge 
+                              variant="outline" 
+                              className="bg-green-50 text-green-600 border-green-200 cursor-help whitespace-nowrap" 
+                              title={mov.note}
+                            >
+                              <CheckCircle2 className="w-3 h-3 mr-1" />
+                              Verificato
+                            </Badge>
+                          ) : (
+                            <Badge 
+                              variant="outline" 
+                              className="bg-zinc-50 text-zinc-600 border-zinc-200 cursor-help whitespace-nowrap" 
+                              title={mov.note}
+                            >
+                              <Info className="w-3 h-3 mr-1" />
+                              Info
+                            </Badge>
+                          )
+                        ) : (
+                          <span className="text-zinc-400 text-xs">-</span>
+                        )}
+                      </TableCell>
+
+                      <TableCell className="text-right font-bold text-zinc-900 whitespace-nowrap">
                         € {mov.importo?.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
                       </TableCell>
                     </TableRow>
