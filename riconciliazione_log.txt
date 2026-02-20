@@ -334,3 +334,4 @@ Traceback (most recent call last):
 UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f680' in position 0: character maps to <undefined>
 [20/02/2026 10:21:29.53] Fine importazione XML 
 ---------------------------------------- 
+[20/02/2026 11:21:31.48] Avvio importazione XML 

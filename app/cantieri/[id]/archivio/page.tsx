@@ -47,7 +47,7 @@ export default async function ArchivioCantierePage({ params }: { params: Promise
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <form action={uploadDocumento} className="flex flex-col sm:flex-row gap-4 sm:items-end">
+            <form action={uploadDocumento as any} className="flex flex-col sm:flex-row gap-4 sm:items-end">
               <input type="hidden" name="cantiere_id" value={id} />
               <div className="grid w-full max-w-md items-center gap-1.5">
                 <Input name="file" type="file" required className="bg-white" />
