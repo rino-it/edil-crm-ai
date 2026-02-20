@@ -716,3 +716,121 @@ export async function getStoricoForRAG(descrizione: string): Promise<string> {
     )
     .join("\n");
 }
+
+// ============================================================
+// ARCHIVIO CANTIERE: Gestione Documentale e CRUD
+// Lettura/Scrittura della vista e tabella cantiere_documenti
+// ============================================================
+
+export interface DocumentoCantiere {
+  id: string;
+  cantiere_id: string;
+  nome_file: string;
+  url_storage: string;
+  categoria: string;
+  data_scadenza: string | null;
+  stato_scadenza: "Valido" | "In_Scadenza" | "Scaduto";
+  note: string | null;
+  scadenza_notificata: boolean;
+  created_at: string;
+  // Join fittizio se vogliamo il nome del cantiere in alcune viste
+  cantieri?: { nome: string };
+}
+
+// 1. Lettura Documenti (Usa la vista per avere lo stato aggiornato)
+export async function getDocumentiCantiere(cantiereId: string): Promise<DocumentoCantiere[]> {
+  const supabase = getSupabaseAdmin();
+  
+  const { data, error } = await supabase
+    .from("vista_cantiere_documenti")
+    .select("*")
+    .eq("cantiere_id", cantiereId)
+    .order("created_at", { ascending: false });
+
+  if (error || !data) {
+    console.warn(`⚠️ Nessun documento trovato per cantiere ${cantiereId}`);
+    return [];
+  }
+
+  return data as DocumentoCantiere[];
+}
+
+// 2. Inserimento Nuovo Documento
+export async function salvaDocumentoCantiere(params: {
+  cantiere_id: string;
+  nome_file: string;
+  url_storage: string;
+  categoria: string;
+  data_scadenza?: string | null;
+  note?: string | null;
+  ai_dati_estratti?: Record<string, unknown> | null;
+}): Promise<{ success: boolean; id?: string; error?: string }> {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from("cantiere_documenti")
+    .insert({
+      cantiere_id: params.cantiere_id,
+      nome_file: params.nome_file,
+      url_storage: params.url_storage,
+      categoria: params.categoria,
+      data_scadenza: params.data_scadenza || null,
+      note: params.note || null,
+      ai_dati_estratti: params.ai_dati_estratti || null,
+      scadenza_notificata: false
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("❌ Errore salvaDocumentoCantiere:", error);
+    return { success: false, error: error.message };
+  }
+
+  return { success: true, id: data.id };
+}
+
+// 3. Eliminazione Documento (Gestirà anche la cancellazione dal Bucket nel Frontend/Actions)
+export async function eliminaDocumentoCantiereRecord(id: string): Promise<{ success: boolean; error?: string }> {
+  const supabase = getSupabaseAdmin();
+
+  const { error } = await supabase
+    .from("cantiere_documenti")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    console.error("❌ Errore eliminaDocumentoCantiereRecord:", error);
+    return { success: false, error: error.message };
+  }
+
+  return { success: true };
+}
+
+// 4. Per il Cron Job: Trova i documenti in scadenza di tutti i cantieri
+export async function getDocumentiCantiereInScadenza(giorniAvviso = 30): Promise<DocumentoCantiere[]> {
+  const supabase = getSupabaseAdmin();
+
+  const oggi = new Date();
+  const limite = new Date();
+  limite.setDate(oggi.getDate() + giorniAvviso);
+
+  const { data, error } = await supabase
+    .from("vista_cantiere_documenti")
+    .select(`
+      *,
+      cantieri!inner(nome)
+    `)
+    .not("data_scadenza", "is", null)
+    .lte("data_scadenza", limite.toISOString().split("T")[0])
+    .gte("data_scadenza", oggi.toISOString().split("T")[0])
+    .eq("scadenza_notificata", false)
+    .order("data_scadenza", { ascending: true });
+
+  if (error || !data) {
+    console.warn("⚠️ Nessun documento cantiere in scadenza trovato.");
+    return [];
+  }
+
+  return data as DocumentoCantiere[];
+}

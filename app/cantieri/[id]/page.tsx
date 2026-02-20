@@ -81,6 +81,15 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
           </div>
           
           <div className="flex flex-wrap gap-2">
+            {/* INIZIO MODIFICA: Aggiunto pulsante Archivio Documenti */}
+            <Link href={`/cantieri/${id}/archivio`}>
+              <Button variant="outline" className="flex items-center gap-2 border-blue-200 text-blue-700 hover:bg-blue-50">
+                <FileText className="h-4 w-4" />
+                Archivio Documenti
+              </Button>
+            </Link>
+            {/* FINE MODIFICA */}
+            
             <Link href={`/cantieri/${id}/computo`}>
               <Button variant="outline" className="flex items-center gap-2">
                 <ListChecks className="h-4 w-4" />
@@ -247,7 +256,7 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
                     <TableHead>Tipo</TableHead>
                     <TableHead>Descrizione</TableHead>
                     <TableHead>Allegato</TableHead>
-                    <TableHead>Stato</TableHead> {/* NUOVA COLONNA */}
+                    <TableHead>Stato</TableHead>
                     <TableHead className="text-right">Importo</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -282,7 +291,6 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
                         )}
                       </TableCell>
 
-                      {/* NUOVA CELLA STATO */}
                       <TableCell>
                         {mov.note ? (
                           mov.note.includes('⚠️') ? (

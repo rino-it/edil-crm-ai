@@ -458,3 +458,85 @@ Rispondi SOLO con un JSON valido (no markdown, no backtick), con questa esatta s
 
   return JSON.parse(cleanJson) as PreventivoMatchResult;
 }
+
+// ============================================================
+// ARCHIVIO CANTIERE: Analisi Documenti e Scadenze (Smart Expiry)
+// Estrae tipo documento, categoria e data di scadenza da PDF/Immagini
+// ============================================================
+
+export interface DocumentoCantiereParsed {
+  tipo_documento: string;        // es. POS, Libretto Gru, Corso Sicurezza
+  data_scadenza: string | null;  // YYYY-MM-DD
+  categoria_suggerita: string;   // Sicurezza_POS_PSC, Manutenzione_Mezzi, Personale, DDT_Fatture, Foto, Altro
+  confidence: number;            // 0.0-1.0
+  note_estratte: string;         // Info aggiuntive
+}
+
+export async function parseDocumentoCantiere(
+  media: MediaInput
+): Promise<DocumentoCantiereParsed> {
+  const apiKey = process.env.GOOGLE_API_KEY;
+  if (!apiKey) throw new Error("GOOGLE_API_KEY mancante");
+
+  const prompt = `Sei un assistente per la sicurezza e gestione cantieri edili in Italia.
+Analizza il documento fornito (può essere un'immagine o la prima pagina di un PDF).
+Il tuo obiettivo è estrarre le informazioni chiave per l'archivio del cantiere.
+
+ISTRUZIONI:
+1. Identifica il 'tipo_documento' (es. "POS", "PSC", "DURC", "Libretto Macchina", "Fattura Fornitore").
+2. Cerca una 'data_scadenza' (validità, scadenza revisione, fine validità). Restituisci nel formato YYYY-MM-DD. Se non c'è, restituisci null.
+3. Suggerisci la 'categoria_suggerita' scegliendo ESATTAMENTE tra una di queste stringhe: 
+   - "Sicurezza_POS_PSC"
+   - "Manutenzione_Mezzi"
+   - "Personale"
+   - "DDT_Fatture"
+   - "Foto"
+   - "Altro"
+4. Valuta la 'confidence' (da 0.0 a 1.0) della tua analisi.
+5. In 'note_estratte' inserisci eventuali dati rilevanti (es. targa del mezzo, nome ditta esterna).
+
+Rispondi SOLO con JSON valido, senza markdown e senza backtick, usando questa struttura esatta:
+{
+  "tipo_documento": "Piano Operativo di Sicurezza (POS)",
+  "data_scadenza": "2026-12-31",
+  "categoria_suggerita": "Sicurezza_POS_PSC",
+  "confidence": 0.95,
+  "note_estratte": "Ditta subappaltatrice: EdilRossi Srl"
+}`;
+
+  const parts: Array<Record<string, unknown>> = [
+    { text: prompt },
+    {
+      inline_data: {
+        mime_type: media.mimeType,
+        data: media.base64,
+      },
+    },
+  ];
+
+  const modelToUse = "gemini-2.5-flash";
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${apiKey}`;
+
+  console.log(`🤖 parseDocumentoCantiere: avvio analisi...`);
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contents: [{ parts }] }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    console.error("🔥 Errore Gemini parseDocumentoCantiere:", err);
+    throw new Error(`Errore API Gemini: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!aiText) throw new Error("Risposta vuota da Gemini");
+
+  const cleanJson = aiText.replace(/```json\s*|```\s*/g, "").trim();
+  console.log("✅ parseDocumentoCantiere completato");
+
+  return JSON.parse(cleanJson) as DocumentoCantiereParsed;
+}
