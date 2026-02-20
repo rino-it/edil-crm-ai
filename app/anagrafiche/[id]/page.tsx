@@ -7,8 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Textarea } from "@/components/ui/textarea"
-import { ArrowLeft, Building2, Save, Trash2, Calendar, CreditCard, Mail, Phone, MapPin } from "lucide-react"
+import { ArrowLeft, Save, Trash2 } from "lucide-react"
 import Link from 'next/link'
 
 export default async function SoggettoDetailPage({ 
@@ -119,7 +118,6 @@ export default async function SoggettoDetailPage({
               <CardContent>
                 <form action={editSoggetto} className="space-y-4">
                   <input type="hidden" name="id" value={soggetto.id} />
-                  {/* Riporto i dati obbligatori per non perderli nell'update se non gestito diversamente */}
                   <input type="hidden" name="ragione_sociale" value={soggetto.ragione_sociale} />
                   <input type="hidden" name="tipo" value={soggetto.tipo} />
 
@@ -134,7 +132,13 @@ export default async function SoggettoDetailPage({
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="note">Note Interne</Label>
-                      <Textarea name="note" defaultValue={soggetto.note || ''} rows={4} />
+                      {/* Sostituito Textarea di shadcn con textarea HTML standard per evitare errori di dipendenza */}
+                      <textarea 
+                        name="note" 
+                        defaultValue={soggetto.note || ''} 
+                        rows={4}
+                        className="flex min-h-[80px] w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      />
                     </div>
                   </div>
                   <div className="pt-4 flex justify-end">
@@ -170,9 +174,8 @@ export default async function SoggettoDetailPage({
                 <CardTitle className="text-red-800 text-sm">Zona Pericolo</CardTitle>
               </CardHeader>
               <CardContent>
-                <form action={deleteSoggetto} onSubmit={(e) => {
-                  if(!confirm("Sei sicuro? Questa azione eliminerà definitivamente l'anagrafica.")) e.preventDefault()
-                }}>
+                {/* Rimosso onSubmit con confirm() perché non supportato nei Server Components */}
+                <form action={deleteSoggetto}>
                   <input type="hidden" name="id" value={soggetto.id} />
                   <Button type="submit" variant="destructive" className="w-full">
                     <Trash2 className="mr-2 h-4 w-4" /> Elimina Soggetto
