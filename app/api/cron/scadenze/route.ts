@@ -34,7 +34,7 @@ export async function GET(request: Request) {
   }
 
   const adminWhatsapp = params.admin_whatsapp;
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://edil-crm-ai.vercel.app";
 
   let notificatiTotali = 0;
   const errori: string[] = [];
