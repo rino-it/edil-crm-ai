@@ -19,6 +19,8 @@ import {
   Plus
 } from "lucide-react"
 import Link from 'next/link'
+// NUOVO IMPORT: Il Client Component per gestire l'onChange
+import { CantiereFilter } from "@/components/CantiereFilter"
 
 export default async function ScadenzePage({
   searchParams,
@@ -151,26 +153,10 @@ export default async function ScadenzePage({
                 </Link>
               </div>
 
-              {/* Filtro Cantiere (Select dropdown) */}
+              {/* Filtro Cantiere (Usando il nuovo Client Component) */}
               <div className="flex items-center gap-3 w-full md:w-auto">
                 <Filter size={14} className="text-zinc-400" />
-                <form className="w-full">
-                  <select 
-                    name="cantiere_id" 
-                    className="h-9 w-full md:w-64 rounded-md border border-zinc-200 bg-white px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                    defaultValue={params.cantiere_id || ""}
-                    // Semplice trucco per cambiare pagina senza JS complesso lato client
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      window.location.href = val ? `/scadenze?cantiere_id=${val}` : '/scadenze';
-                    }}
-                  >
-                    <option value="">Filtra per cantiere...</option>
-                    {cantieri.map(c => (
-                      <option key={c.id} value={c.id}>{c.nome}</option>
-                    ))}
-                  </select>
-                </form>
+                <CantiereFilter cantieri={cantieri} currentId={params.cantiere_id} />
               </div>
             </div>
           </CardHeader>

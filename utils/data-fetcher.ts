@@ -1091,3 +1091,29 @@ export async function getAgingAnalysis() {
 
   return fasce;
 }
+
+export async function getCantieriAttivi() {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('cantieri')
+    .select('id, nome')
+    .order('nome');
+  
+  if (error) return [];
+  return data || [];
+}
+
+export async function getDocumentiCantiereInScadenza(giorni: number = 30) {
+  const supabase = await createClient();
+  const limite = new Date();
+  limite.setDate(limite.getDate() + giorni);
+
+  const { data, error } = await supabase
+    .from('cantiere_documenti')
+    .select('*, cantieri(nome)')
+    .lte('data_scadenza', limite.toISOString().split('T')[0])
+    .eq('scadenza_notificata', false);
+
+  if (error) return [];
+  return data;
+}
