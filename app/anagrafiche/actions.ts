@@ -31,8 +31,12 @@ export async function addSoggetto(formData: FormData) {
     redirect(`/anagrafiche?error=${encodeURIComponent(error.message)}`)
   }
 
+  // Ricarica i dati
   revalidatePath('/anagrafiche')
-  return { success: true }
+  
+  // Esegue un redirect per ricaricare la pagina senza il parametro ?nuovo=true
+  // NOTA: il redirect in Next.js lancia un'eccezione interna, quindi il return non serve
+  redirect('/anagrafiche')
 }
 
 export async function editSoggetto(formData: FormData) {
@@ -66,7 +70,9 @@ export async function editSoggetto(formData: FormData) {
 
   revalidatePath('/anagrafiche')
   revalidatePath(`/anagrafiche/${id}`)
-  return { success: true }
+  
+  // Nessun return: la funzione restituisce implicitamente Promise<void>, 
+  // che è esattamente quello che React 19 si aspetta nel form action.
 }
 
 export async function deleteSoggetto(formData: FormData) {
