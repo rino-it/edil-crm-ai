@@ -1,5 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
 import { sendWhatsAppMessage } from "@/utils/whatsapp";
+import { getDocumentiCantiereInScadenza } from "@/utils/data-fetcher";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -28,66 +29,81 @@ export async function GET(request: Request) {
   }
 
   const adminWhatsapp = params.admin_whatsapp;
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
 
-  // 2. Calcola la data limite (oggi + 30 giorni)
+  let notificatiTotali = 0;
+  const errori: string[] = [];
+
+  // ==========================================
+  // PARTE 1: SCADENZE PERSONALE (Logica Esistente)
+  // ==========================================
   const oggi = new Date();
   const limite = new Date(oggi);
   limite.setDate(limite.getDate() + 30);
   const limiteDateStr = limite.toISOString().split("T")[0]; // YYYY-MM-DD
 
-  // 3. Cerca documenti in scadenza non ancora notificati
-  const { data: documenti, error: docsError } = await supabase
+  const { data: docPersonale, error: errPersonale } = await supabase
     .from("personale_documenti")
     .select("id, nome, data_scadenza")
     .lte("data_scadenza", limiteDateStr)
     .eq("scadenza_notificata", false)
     .not("data_scadenza", "is", null);
 
-  if (docsError) {
-    console.error("❌ Errore query personale_documenti:", docsError);
-    return NextResponse.json({ error: docsError.message }, { status: 500 });
-  }
+  if (docPersonale && docPersonale.length > 0) {
+    for (const doc of docPersonale) {
+      const dataFormattata = new Date(doc.data_scadenza).toLocaleDateString("it-IT");
+      const calendarLink = `${siteUrl}/api/calendar?titolo=${encodeURIComponent(doc.nome)}&data=${doc.data_scadenza}`;
+      const messaggio = `⚠️ *Scadenza Personale*\nIl documento _${doc.nome}_ scade il ${dataFormattata}.\n\n📅 Salva a calendario: ${calendarLink}`;
 
-  if (!documenti || documenti.length === 0) {
-    console.log("✅ Nessun documento in scadenza da notificare.");
-    return NextResponse.json({ notificati: 0 });
-  }
-
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
-  const notificatiIds: string[] = [];
-  const errori: string[] = [];
-
-  // 4. Per ogni documento: invia WhatsApp e aggiorna il DB
-  for (const doc of documenti) {
-    const dataFormattata = new Date(doc.data_scadenza).toLocaleDateString("it-IT");
-    const calendarLink = `${siteUrl}/api/calendar?titolo=${encodeURIComponent(doc.nome)}&data=${doc.data_scadenza}`;
-    const messaggio = `⚠️ Attenzione: Il documento ${doc.nome} scade il ${dataFormattata}. Promemoria: ${calendarLink}`;
-
-    try {
-      await sendWhatsAppMessage(adminWhatsapp, messaggio);
-
-      // Aggiorna scadenza_notificata = true solo se l'invio non ha lanciato eccezioni
-      const { error: updateError } = await supabase
-        .from("personale_documenti")
-        .update({ scadenza_notificata: true })
-        .eq("id", doc.id);
-
-      if (updateError) {
-        console.error(`❌ Errore aggiornamento doc ${doc.id}:`, updateError);
-        errori.push(doc.id);
-      } else {
-        notificatiIds.push(doc.id);
+      try {
+        await sendWhatsAppMessage(adminWhatsapp, messaggio);
+        const { error } = await supabase.from("personale_documenti").update({ scadenza_notificata: true }).eq("id", doc.id);
+        if (!error) notificatiTotali++;
+      } catch (err) {
+        errori.push(`Personale-${doc.id}`);
       }
-    } catch (err) {
-      console.error(`❌ Errore invio WhatsApp per doc ${doc.id}:`, err);
-      errori.push(doc.id);
     }
   }
 
+  // ==========================================
+  // PARTE 2: SCADENZE CANTIERE (Nuova Logica)
+  // ==========================================
+  try {
+    const docCantiere = await getDocumentiCantiereInScadenza(30); // Usa la vista dinamica
+
+    if (docCantiere && docCantiere.length > 0) {
+      for (const doc of docCantiere) {
+        if (!doc.data_scadenza) continue;
+
+        const dataFormattata = new Date(doc.data_scadenza).toLocaleDateString("it-IT");
+        const nomeCantiere = doc.cantieri?.nome || "Cantiere Sconosciuto";
+        const calendarLink = `${siteUrl}/api/calendar?titolo=${encodeURIComponent(doc.nome_file)}&data=${doc.data_scadenza}&cantiere=${encodeURIComponent(nomeCantiere)}`;
+        
+        const messaggio = `🏗️ *Scadenza Cantiere Imminente*\n` +
+                          `📄 Documento: _${doc.nome_file}_\n` +
+                          `📍 Cantiere: *${nomeCantiere}*\n` +
+                          `📅 Scade il: ${dataFormattata}\n\n` +
+                          `📲 Salva a calendario: ${calendarLink}`;
+
+        try {
+          await sendWhatsAppMessage(adminWhatsapp, messaggio);
+          // Aggiorna tabella fisica (non la vista)
+          const { error } = await supabase.from("cantiere_documenti").update({ scadenza_notificata: true }).eq("id", doc.id);
+          if (!error) notificatiTotali++;
+        } catch (err) {
+          errori.push(`Cantiere-${doc.id}`);
+        }
+      }
+    }
+  } catch (errCantiere) {
+    console.error("❌ Errore ricerca documenti cantiere:", errCantiere);
+    errori.push("Errore query cantiere");
+  }
+
   return NextResponse.json({
-    notificati: notificatiIds.length,
+    success: true,
+    notificati_totali: notificatiTotali,
     errori: errori.length,
-    ids_notificati: notificatiIds,
-    ids_errori: errori,
+    dettaglio_errori: errori
   });
 }

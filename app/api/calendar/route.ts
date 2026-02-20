@@ -6,6 +6,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const titolo = searchParams.get("titolo") ?? "Scadenza Documento";
   const data = searchParams.get("data"); // atteso formato YYYY-MM-DD
+  const cantiere = searchParams.get("cantiere"); // parametro opzionale aggiunto
 
   if (!data) {
     return NextResponse.json(
@@ -27,6 +28,10 @@ export async function GET(request: NextRequest) {
   // UID univoco per l'evento
   const uid = `scadenza-${dataIcs}-${Date.now()}@edil-crm`;
 
+  // Costruzione stringhe dinamiche per il calendario
+  const summaryPrefix = cantiere ? `[${cantiere}] ` : "";
+  const descrizioneCantiere = cantiere ? `\nRiferimento Cantiere: ${cantiere}` : "";
+
   const icsContent = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
@@ -38,8 +43,8 @@ export async function GET(request: NextRequest) {
     `DTSTAMP:${dtstamp}`,
     `DTSTART;VALUE=DATE:${dataIcs}`,
     `DTEND;VALUE=DATE:${dataIcs}`,
-    `SUMMARY:⚠️ Scadenza: ${titolo}`,
-    `DESCRIPTION:Il documento "${titolo}" scade in questa data.`,
+    `SUMMARY:⚠️ Scadenza: ${summaryPrefix}${titolo}`,
+    `DESCRIPTION:Il documento "${titolo}" scade in questa data.${descrizioneCantiere}`,
     "BEGIN:VALARM",
     "TRIGGER:-P1D",
     "ACTION:DISPLAY",
