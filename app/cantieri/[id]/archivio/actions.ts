@@ -2,21 +2,23 @@
 
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { salvaDocumentoCantiere, eliminaDocumentoCantiereRecord } from '@/utils/data-fetcher'
 import { parseDocumentoCantiere } from '@/utils/ai/gemini'
 
 export async function uploadDocumento(formData: FormData) {
-  const supabase = await createClient()
-
-  const file = formData.get('file') as File
   const cantiereId = formData.get('cantiere_id') as string
-  const categoriaUtente = formData.get('categoria') as string
-
-  if (!file || file.size === 0) {
-    throw new Error("Nessun file caricato")
-  }
+  let errorMessage = ''
 
   try {
+    const supabase = await createClient()
+    const file = formData.get('file') as File
+    const categoriaUtente = formData.get('categoria') as string
+
+    if (!file || file.size === 0) {
+      throw new Error("Nessun file caricato")
+    }
+
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
     const mimeType = file.type || 'application/octet-stream'
@@ -34,10 +36,7 @@ export async function uploadDocumento(formData: FormData) {
         upsert: true
       })
 
-    if (uploadError) {
-      console.error("Errore Storage:", uploadError)
-      throw new Error(`Errore caricamento file: ${uploadError.message}`)
-    }
+    if (uploadError) throw new Error(`Errore Storage: ${uploadError.message}`)
 
     const { data: { publicUrl } } = supabase
       .storage
@@ -46,13 +45,12 @@ export async function uploadDocumento(formData: FormData) {
 
     let datiAI = null
     try {
-      console.log("Invio documento all'AI per analisi...")
       datiAI = await parseDocumentoCantiere({
         base64: base64Data,
         mimeType: mimeType
       })
     } catch (aiError) {
-      console.error("L'AI non è riuscita ad analizzare il documento:", aiError)
+      console.error("AI Fallita, procedo senza dati:", aiError)
     }
 
     let categoriaFinale = 'Altro'
@@ -77,22 +75,27 @@ export async function uploadDocumento(formData: FormData) {
 
     if (!result.success) {
       await supabase.storage.from('documenti_cantiere').remove([filePath])
-      throw new Error(`Errore salvataggio DB: ${result.error}`)
+      throw new Error(`Errore Database: ${result.error}`)
     }
 
-    revalidatePath(`/cantieri/${cantiereId}/archivio`)
-    return { success: true }
-
   } catch (error: any) {
-    console.error("🔥 Errore Server Action uploadDocumento:", error)
-    throw new Error(error.message)
+    console.error("Errore upload:", error)
+    errorMessage = error.message
+  }
+
+  // Il redirect deve stare FUORI dal try/catch in Next.js
+  if (errorMessage) {
+    redirect(`/cantieri/${cantiereId}/archivio?error=${encodeURIComponent(errorMessage)}`)
+  } else {
+    revalidatePath(`/cantieri/${cantiereId}/archivio`)
+    redirect(`/cantieri/${cantiereId}/archivio`)
   }
 }
 
 export async function deleteDocumento(documentoId: string, urlStorage: string, cantiereId: string) {
-  const supabase = await createClient()
-  
+  let errorMessage = ''
   try {
+    const supabase = await createClient()
     const dbResult = await eliminaDocumentoCantiereRecord(documentoId)
     if (!dbResult.success) throw new Error(dbResult.error)
 
@@ -101,11 +104,14 @@ export async function deleteDocumento(documentoId: string, urlStorage: string, c
       const filePath = urlParts[1]
       await supabase.storage.from('documenti_cantiere').remove([filePath])
     }
-
-    revalidatePath(`/cantieri/${cantiereId}/archivio`)
-    return { success: true }
   } catch (error: any) {
-    console.error("Errore cancellazione:", error)
-    return { success: false, error: error.message }
+    errorMessage = error.message
+  }
+
+  if (errorMessage) {
+    redirect(`/cantieri/${cantiereId}/archivio?error=${encodeURIComponent(errorMessage)}`)
+  } else {
+    revalidatePath(`/cantieri/${cantiereId}/archivio`)
+    redirect(`/cantieri/${cantiereId}/archivio`)
   }
 }

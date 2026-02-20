@@ -6,10 +6,17 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Upload, FileText, Trash2, ExternalLink } from "lucide-react"
+import { ArrowLeft, Upload, FileText, Trash2, ExternalLink, AlertCircle } from "lucide-react"
 
-export default async function ArchivioCantierePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ArchivioCantierePage({ 
+  params,
+  searchParams
+}: { 
+  params: Promise<{ id: string }>,
+  searchParams: Promise<{ error?: string }> 
+}) {
   const { id } = await params
+  const { error } = await searchParams
   const documenti = await getDocumentiCantiere(id)
 
   const getStatusBadge = (stato: string) => {
@@ -39,6 +46,14 @@ export default async function ArchivioCantierePage({ params }: { params: Promise
           </div>
         </div>
 
+        {/* Banner Errore */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2">
+            <AlertCircle size={18} />
+            <p className="text-sm font-medium">{error}</p>
+          </div>
+        )}
+
         {/* Upload Form */}
         <Card className="border-blue-100 bg-blue-50/30 shadow-sm">
           <CardHeader className="pb-4">
@@ -54,7 +69,7 @@ export default async function ArchivioCantierePage({ params }: { params: Promise
               </div>
               <div className="grid w-full max-w-xs items-center gap-1.5">
                 <select name="categoria" className="flex h-10 w-full items-center justify-between rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm">
-                  <option value="">Auto-rileva (Intelligenza Artificiale)</option>
+                  <option value="">Auto-rileva (AI)</option>
                   <option value="Sicurezza_POS_PSC">Sicurezza (POS/PSC)</option>
                   <option value="Manutenzione_Mezzi">Manutenzione Mezzi</option>
                   <option value="Personale">Personale</option>
