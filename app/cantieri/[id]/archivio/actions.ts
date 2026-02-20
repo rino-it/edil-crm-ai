@@ -1,126 +1,126 @@
-'use server'
+import { getDocumentiCantiere } from '@/utils/data-fetcher'
+import { uploadDocumento, deleteDocumento } from './actions'
+import Link from 'next/link'
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
+import { ArrowLeft, Upload, FileText, Trash2, ExternalLink } from "lucide-react"
 
-import { createClient } from '@/utils/supabase/server'
-import { revalidatePath } from 'next/cache'
-import { salvaDocumentoCantiere, eliminaDocumentoCantiereRecord } from '@/utils/data-fetcher'
-import { parseDocumentoCantiere } from '@/utils/ai/gemini'
+export default async function ArchivioCantierePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const documenti = await getDocumentiCantiere(id)
 
-export async function uploadDocumento(formData: FormData) {
-  const supabase = await createClient()
-
-  const file = formData.get('file') as File
-  const cantiereId = formData.get('cantiere_id') as string
-  const categoriaUtente = formData.get('categoria') as string // Se l'utente l'ha forzata
-
-  if (!file || file.size === 0) {
-    throw new Error("Nessun file caricato")
+  const getStatusBadge = (stato: string) => {
+    switch (stato) {
+      case 'Valido': return <Badge className="bg-green-600">Valido 🟢</Badge>
+      case 'In_Scadenza': return <Badge className="bg-orange-500">In Scadenza 🟠</Badge>
+      case 'Scaduto': return <Badge className="bg-red-600">Scaduto 🔴</Badge>
+      default: return <Badge variant="secondary">Sconosciuto</Badge>
+    }
   }
 
-  try {
-    // 1. Lettura File come Buffer
-    const arrayBuffer = await file.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
-    const mimeType = file.type || 'application/octet-stream'
-    
-    // Per Gemini, convertiamo in base64
-    const base64Data = buffer.toString('base64')
+  return (
+    <div className="min-h-screen bg-zinc-50 p-8">
+      <div className="max-w-7xl mx-auto space-y-8">
+        
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-zinc-500 hover:text-zinc-900 transition-colors mb-2">
+              <ArrowLeft size={16} />
+              <Link href={`/cantieri/${id}`}>Torna alla Dashboard Cantiere</Link>
+            </div>
+            <h1 className="text-3xl font-bold text-zinc-900 flex items-center gap-2">
+              <FileText className="h-8 w-8 text-blue-600" /> Archivio Documenti
+            </h1>
+            <p className="text-zinc-500">Gestisci POS, libretti mezzi, fatture e file del cantiere.</p>
+          </div>
+        </div>
 
-    // 2. Upload su Supabase Storage
-    const fileName = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`
-    const filePath = `${cantiereId}/${fileName}`
+        {/* Upload Form */}
+        <Card className="border-blue-100 bg-blue-50/30 shadow-sm">
+          <CardHeader className="pb-4">
+            <CardTitle className="flex items-center gap-2 text-blue-800 text-lg">
+              <Upload size={18} /> Carica Nuovo Documento
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {/* FIX TYPESCRIPT: cast esplicito as any per ignorare il return type object */}
+            <form action={uploadDocumento as any} className="flex flex-col sm:flex-row gap-4 sm:items-end">
+              <input type="hidden" name="cantiere_id" value={id} />
+              <div className="grid w-full max-w-md items-center gap-1.5">
+                <Input name="file" type="file" required className="bg-white" />
+              </div>
+              <div className="grid w-full max-w-xs items-center gap-1.5">
+                <select name="categoria" className="flex h-10 w-full items-center justify-between rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm">
+                  <option value="">Auto-rileva (Intelligenza Artificiale)</option>
+                  <option value="Sicurezza_POS_PSC">Sicurezza (POS/PSC)</option>
+                  <option value="Manutenzione_Mezzi">Manutenzione Mezzi</option>
+                  <option value="Personale">Personale</option>
+                  <option value="DDT_Fatture">DDT / Fatture</option>
+                  <option value="Foto">Foto</option>
+                  <option value="Altro">Altro</option>
+                </select>
+              </div>
+              <Button type="submit" className="bg-blue-600 hover:bg-blue-700">Carica e Analizza</Button>
+            </form>
+          </CardContent>
+        </Card>
 
-    const { error: uploadError } = await supabase
-      .storage
-      .from('documenti_cantiere')
-      .upload(filePath, buffer, {
-        contentType: mimeType,
-        upsert: true
-      })
+        {/* Tabella Documenti */}
+        <Card className="shadow-sm border-zinc-200">
+          <CardHeader className="bg-white border-b border-zinc-100 pb-4">
+            <CardTitle className="text-lg">Documenti Archiviati ({documenti.length})</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {documenti.length === 0 ? (
+              <div className="text-center py-16 text-zinc-500 bg-zinc-50/50">
+                <p>Nessun documento presente in archivio.</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome File</TableHead>
+                    <TableHead>Categoria</TableHead>
+                    <TableHead>Scadenza</TableHead>
+                    <TableHead className="text-center">Stato</TableHead>
+                    <TableHead className="text-right">Azioni</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {documenti.map((doc) => (
+                    <TableRow key={doc.id}>
+                      <TableCell className="font-medium text-zinc-900">{doc.nome_file}</TableCell>
+                      <TableCell className="text-zinc-500">{doc.categoria.replace('_', ' ')}</TableCell>
+                      <TableCell className="text-zinc-500">
+                        {doc.data_scadenza ? new Date(doc.data_scadenza).toLocaleDateString('it-IT') : '-'}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {getStatusBadge(doc.stato_scadenza)}
+                      </TableCell>
+                      <TableCell className="text-right flex justify-end gap-2">
+                        <a href={doc.url_storage} target="_blank" rel="noopener noreferrer">
+                          <Button variant="outline" size="sm"><ExternalLink size={14} /></Button>
+                        </a>
+                        <form action={async () => {
+                          'use server'
+                          await deleteDocumento(doc.id, doc.url_storage, doc.cantiere_id)
+                        }}>
+                          <Button variant="destructive" size="sm" type="submit"><Trash2 size={14} /></Button>
+                        </form>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
 
-    if (uploadError) {
-      console.error("Errore Storage:", uploadError)
-      throw new Error(`Errore caricamento file: ${uploadError.message}`)
-    }
-
-    // Costruiamo URL Pubblico (o autenticato)
-    const { data: { publicUrl } } = supabase
-      .storage
-      .from('documenti_cantiere')
-      .getPublicUrl(filePath)
-
-    // 3. Analisi AI (Smart Expiry)
-    let datiAI = null
-    try {
-      console.log("Invio documento all'AI per analisi...")
-      datiAI = await parseDocumentoCantiere({
-        base64: base64Data,
-        mimeType: mimeType
-      })
-      console.log("Analisi AI completata:", datiAI)
-    } catch (aiError) {
-      console.error("L'AI non è riuscita ad analizzare il documento:", aiError)
-      // Non blocchiamo l'upload se l'AI fallisce
-    }
-
-    // 4. Scelta Categoria (Utente vince su AI)
-    let categoriaFinale = 'Altro'
-    if (categoriaUtente && categoriaUtente !== '') {
-      categoriaFinale = categoriaUtente
-    } else if (datiAI?.categoria_suggerita) {
-      // Validiamo che la categoria AI sia tra quelle ammesse
-      const ammesse = ['Sicurezza_POS_PSC', 'Manutenzione_Mezzi', 'Personale', 'DDT_Fatture', 'Foto', 'Altro']
-      if (ammesse.includes(datiAI.categoria_suggerita)) {
-        categoriaFinale = datiAI.categoria_suggerita
-      }
-    }
-
-    // 5. Salvataggio su Database
-    const result = await salvaDocumentoCantiere({
-      cantiere_id: cantiereId,
-      nome_file: file.name,
-      url_storage: publicUrl,
-      categoria: categoriaFinale,
-      data_scadenza: datiAI?.data_scadenza || null,
-      note: datiAI?.note_estratte || null,
-      // FIX TYPESCRIPT: Eseguiamo il casting forzato del tipo per il DB
-      ai_dati_estratti: datiAI ? (datiAI as unknown as Record<string, unknown>) : null
-    })
-
-    if (!result.success) {
-      // Rollback: se il DB fallisce, eliminiamo il file dallo storage
-      await supabase.storage.from('documenti_cantiere').remove([filePath])
-      throw new Error(`Errore salvataggio DB: ${result.error}`)
-    }
-
-    revalidatePath(`/cantieri/${cantiereId}/archivio`)
-    return { success: true }
-
-  } catch (error: any) {
-    console.error("🔥 Errore Server Action uploadDocumento:", error)
-    throw new Error(error.message)
-  }
-}
-
-export async function deleteDocumento(documentoId: string, urlStorage: string, cantiereId: string) {
-  const supabase = await createClient()
-  
-  try {
-    // 1. Elimina dal DB
-    const dbResult = await eliminaDocumentoCantiereRecord(documentoId)
-    if (!dbResult.success) throw new Error(dbResult.error)
-
-    // 2. Estrai il path relativo per lo storage dall'URL
-    // Es URL: https://.../storage/v1/object/public/documenti_cantiere/123/nome.pdf
-    const urlParts = urlStorage.split('documenti_cantiere/')
-    if (urlParts.length === 2) {
-      const filePath = urlParts[1]
-      await supabase.storage.from('documenti_cantiere').remove([filePath])
-    }
-
-    revalidatePath(`/cantieri/${cantiereId}/archivio`)
-    return { success: true }
-  } catch (error: any) {
-    console.error("Errore cancellazione:", error)
-    return { success: false, error: error.message }
-  }
+      </div>
+    </div>
+  )
 }
