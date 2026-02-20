@@ -540,3 +540,23 @@ Rispondi SOLO con JSON valido, senza markdown e senza backtick, usando questa st
 
   return JSON.parse(cleanJson) as DocumentoCantiereParsed;
 }
+
+export async function parseComputoFoto(media: MediaInput) {
+  const apiKey = process.env.GOOGLE_API_KEY;
+  const prompt = `Analizza questa foto di un computo metrico o preventivo edilizio. 
+Estrai i dati in una tabella JSON. Se mancano i prezzi, lascia null. 
+Formato: { "righe": [{ "codice": "...", "descrizione": "...", "unita_misura": "...", "quantita": 0, "prezzo_unitario": 0 }] }`;
+
+  const parts = [{ text: prompt }, { inline_data: { mime_type: media.mimeType, data: media.base64 } }];
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contents: [{ parts }] }),
+  });
+
+  const data = await response.json();
+  const text = data.candidates[0].content.parts[0].text.replace(/```json|```/g, "").trim();
+  return JSON.parse(text);
+}

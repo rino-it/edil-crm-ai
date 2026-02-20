@@ -6,7 +6,10 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Upload, FileSpreadsheet, Brain, AlertCircle, CheckCircle2 } from "lucide-react"
+import { ArrowLeft, Upload, FileSpreadsheet, Brain, AlertCircle, CheckCircle2, Camera, Sparkles } from "lucide-react"
+
+// Importiamo una piccola Client Component che creeremo tra poco per gestire l'invio della foto
+import { OCRUploadForm } from './OCRUploadForm'
 
 export default async function ComputoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -20,11 +23,10 @@ export default async function ComputoPage({ params }: { params: Promise<{ id: st
     .order('codice', { ascending: true })
 
   // Calcolo Statistiche
-  const totaleComputo = voci?.reduce((acc, v) => acc + (v.totale || 0), 0) || 0
+  const totaleComputo = voci?.reduce((acc, v) => acc + (v.quantita * v.prezzo_unitario || 0), 0) || 0
   const vociAnalizzateAI = voci?.filter(v => v.ai_prezzo_stimato !== null).length || 0
   const vociDaValidare = voci?.filter(v => v.stato_validazione === 'da_validare').length || 0
 
-  // Helper per il colore del badge di confidenza AI
   const getConfidenceBadge = (score: number | null) => {
     if (score === null) return <span className="text-zinc-400 text-xs">N/A</span>;
     const perc = Math.round(score * 100);
@@ -33,7 +35,6 @@ export default async function ComputoPage({ params }: { params: Promise<{ id: st
     return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Bassa ({perc}%)</Badge>;
   }
 
-  // Helper per lo stato validazione
   const getStatusBadge = (stato: string | null) => {
     switch(stato) {
       case 'confermato': return <Badge className="bg-green-600">Confermato</Badge>;
@@ -46,7 +47,7 @@ export default async function ComputoPage({ params }: { params: Promise<{ id: st
     <div className="min-h-screen bg-zinc-50 p-8">
       <div className="max-w-7xl mx-auto space-y-8">
         
-        {/* Header con Navigazione */}
+        {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-zinc-500 hover:text-zinc-900 transition-colors mb-2">
@@ -58,9 +59,12 @@ export default async function ComputoPage({ params }: { params: Promise<{ id: st
             </h1>
             <p className="text-zinc-500">Gestisci le voci di costo e sfrutta l'AI per la stima dei prezzi.</p>
           </div>
-          <div className="text-left md:text-right bg-white p-4 rounded-xl border border-zinc-200 shadow-sm">
+          <div className="text-left md:text-right bg-white p-4 rounded-xl border border-zinc-200 shadow-sm flex flex-col gap-2">
             <p className="text-sm text-zinc-500 uppercase tracking-wider font-semibold">Totale Preventivato</p>
             <p className="text-3xl font-bold text-blue-600">€ {totaleComputo.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</p>
+            <a href={`/api/preventivo/pdf?cantiere_id=${id}`} target="_blank" rel="noopener noreferrer">
+              <Button variant="outline" size="sm" className="w-full text-xs">Esporta PDF Professionale</Button>
+            </a>
           </div>
         </div>
 
@@ -99,26 +103,42 @@ export default async function ComputoPage({ params }: { params: Promise<{ id: st
           </Card>
         </div>
 
-        {/* Sezione Upload */}
-        <Card className="border-blue-100 bg-blue-50/30 shadow-sm">
-          <CardHeader className="pb-4">
-            <CardTitle className="flex items-center gap-2 text-blue-800 text-lg">
-              <Upload size={18} /> Importa Computo (CSV)
-            </CardTitle>
-            <CardDescription className="text-blue-600/80">
-              Carica un file CSV con le colonne: <strong>Codice, Descrizione, U.M., Quantità, Prezzo</strong>. Le voci senza prezzo verranno analizzate dall'AI.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form action={uploadComputo} className="flex flex-col sm:flex-row gap-4 sm:items-end">
-              <input type="hidden" name="cantiere_id" value={id} />
-              <div className="grid w-full max-w-md items-center gap-1.5">
-                <Input name="file" type="file" accept=".csv" required className="bg-white border-blue-200 hover:border-blue-300 transition-colors" />
-              </div>
-              <Button type="submit" className="bg-blue-600 hover:bg-blue-700"><Brain className="mr-2 h-4 w-4" /> Analizza con AI</Button>
-            </form>
-          </CardContent>
-        </Card>
+        {/* Sezione Importazione Doppia: CSV e FOTO */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Upload CSV */}
+          <Card className="border-blue-100 bg-blue-50/30 shadow-sm">
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-2 text-blue-800 text-lg">
+                <Upload size={18} /> Importa Computo (CSV)
+              </CardTitle>
+              <CardDescription className="text-blue-600/80">
+                Ideale per file strutturati da Excel o software tecnici.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form action={uploadComputo} className="flex flex-col gap-4">
+                <input type="hidden" name="cantiere_id" value={id} />
+                <Input name="file" type="file" accept=".csv" required className="bg-white border-blue-200" />
+                <Button type="submit" className="bg-blue-600 hover:bg-blue-700 w-full"><FileSpreadsheet className="mr-2 h-4 w-4" /> Analizza CSV</Button>
+              </form>
+            </CardContent>
+          </Card>
+
+          {/* Digitalizzazione da FOTO */}
+          <Card className="border-purple-100 bg-purple-50/30 shadow-sm">
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-2 text-purple-800 text-lg">
+                <Camera size={18} /> Digitalizza da Foto (AI Vision)
+              </CardTitle>
+              <CardDescription className="text-purple-600/80">
+                Scatta una foto a un foglio cartaceo. L'AI estrarrà tabelle e dati.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <OCRUploadForm cantiereId={id} />
+            </CardContent>
+          </Card>
+        </div>
 
         {/* Tabella Dati Intelligence */}
         <Card className="shadow-sm border-zinc-200 overflow-hidden">
@@ -132,7 +152,7 @@ export default async function ComputoPage({ params }: { params: Promise<{ id: st
               <div className="text-center py-16 text-zinc-500 bg-zinc-50/50">
                 <Brain className="h-12 w-12 mx-auto text-zinc-300 mb-4" />
                 <p>Nessuna voce presente.</p>
-                <p className="text-sm">Carica un computo CSV per avviare l'analisi intelligente dei prezzi.</p>
+                <p className="text-sm">Carica un computo CSV o scatta una foto per iniziare.</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -144,7 +164,7 @@ export default async function ComputoPage({ params }: { params: Promise<{ id: st
                       <TableHead className="w-[60px] text-center">U.M.</TableHead>
                       <TableHead className="text-right">Q.tà</TableHead>
                       <TableHead className="text-right bg-blue-50/50">Stima AI</TableHead>
-                      <TableHead className="text-center bg-blue-50/50">Range Predictor</TableHead>
+                      <TableHead className="text-center bg-blue-50/50">Range</TableHead>
                       <TableHead className="text-center bg-blue-50/50">Affidabilità</TableHead>
                       <TableHead className="text-right">Prezzo Scelto</TableHead>
                       <TableHead className="text-right">Totale</TableHead>
@@ -158,29 +178,23 @@ export default async function ComputoPage({ params }: { params: Promise<{ id: st
                         <TableCell className="font-medium text-zinc-800 text-sm">{voce.descrizione}</TableCell>
                         <TableCell className="text-center text-zinc-500">{voce.unita_misura}</TableCell>
                         <TableCell className="text-right font-medium">{voce.quantita}</TableCell>
-                        
-                        {/* Colonne AI */}
                         <TableCell className="text-right text-blue-700 font-semibold bg-blue-50/20">
                           {voce.ai_prezzo_stimato ? `€ ${voce.ai_prezzo_stimato}` : '-'}
                         </TableCell>
                         <TableCell className="text-center text-xs text-zinc-500 bg-blue-50/20">
                           {voce.ai_prezzo_min && voce.ai_prezzo_max 
-                            ? `€${voce.ai_prezzo_min} - €${voce.ai_prezzo_max}` 
+                            ? `€${voce.ai_prezzo_min}-€${voce.ai_prezzo_max}` 
                             : '-'}
                         </TableCell>
                         <TableCell className="text-center bg-blue-50/20">
                           {getConfidenceBadge(voce.ai_confidence_score)}
                         </TableCell>
-
-                        {/* Prezzo Finale e Totale */}
                         <TableCell className="text-right font-bold text-zinc-900">
                           € {voce.prezzo_unitario || '0.00'}
                         </TableCell>
                         <TableCell className="text-right font-bold text-zinc-900">
-                          € {voce.totale?.toLocaleString('it-IT', { minimumFractionDigits: 2 }) || '0.00'}
+                          € {(voce.quantita * voce.prezzo_unitario).toLocaleString('it-IT', { minimumFractionDigits: 2 })}
                         </TableCell>
-                        
-                        {/* Stato */}
                         <TableCell className="text-center">
                           {getStatusBadge(voce.stato_validazione)}
                         </TableCell>
@@ -192,7 +206,6 @@ export default async function ComputoPage({ params }: { params: Promise<{ id: st
             )}
           </CardContent>
         </Card>
-
       </div>
     </div>
   )
