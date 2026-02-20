@@ -376,3 +376,49 @@ Traceback (most recent call last):
 UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f680' in position 0: character maps to <undefined>
 [20/02/2026 13:21:39.96] Fine importazione XML 
 ---------------------------------------- 
+[20/02/2026 14:21:26.34] Avvio importazione XML 
+Traceback (most recent call last):
+  File "C:\Users\Ufficio\Desktop\PROGETTO X\Sviluppo\edil-crm-ai\riconciliazione_xml.py", line 176, in <module>
+    run()
+    ~~~^^
+  File "C:\Users\Ufficio\Desktop\PROGETTO X\Sviluppo\edil-crm-ai\riconciliazione_xml.py", line 153, in run
+    print(f"\U0001f680 AVVIO IMPORTAZIONE DA: {CARTELLA_ARCHIVIO}")
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Ufficio\AppData\Local\Programs\Python\Python313\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f680' in position 0: character maps to <undefined>
+[20/02/2026 14:21:31.39] Fine importazione XML 
+---------------------------------------- 
+[20/02/2026 15:21:26.66] Avvio importazione XML 
+Traceback (most recent call last):
+  File "C:\Users\Ufficio\Desktop\PROGETTO X\Sviluppo\edil-crm-ai\riconciliazione_xml.py", line 176, in <module>
+    run()
+    ~~~^^
+  File "C:\Users\Ufficio\Desktop\PROGETTO X\Sviluppo\edil-crm-ai\riconciliazione_xml.py", line 153, in run
+    print(f"\U0001f680 AVVIO IMPORTAZIONE DA: {CARTELLA_ARCHIVIO}")
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Ufficio\AppData\Local\Programs\Python\Python313\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f680' in position 0: character maps to <undefined>
+[20/02/2026 15:21:30.69] Fine importazione XML 
+---------------------------------------- 
+[20/02/2026 16:21:26.13] Avvio importazione XML 
+Traceback (most recent call last):
+  File "C:\Users\Ufficio\Desktop\PROGETTO X\Sviluppo\edil-crm-ai\riconciliazione_xml.py", line 176, in <module>
+    run()
+    ~~~^^
+  File "C:\Users\Ufficio\Desktop\PROGETTO X\Sviluppo\edil-crm-ai\riconciliazione_xml.py", line 153, in run
+    print(f"\U0001f680 AVVIO IMPORTAZIONE DA: {CARTELLA_ARCHIVIO}")
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Ufficio\AppData\Local\Programs\Python\Python313\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f680' in position 0: character maps to <undefined>
+[20/02/2026 16:21:31.15] Fine importazione XML 
+---------------------------------------- 
+[20/02/2026 17:21:26.65] Avvio importazione XML 
+python: can't open file 'C:\\Users\\Ufficio\\Desktop\\PROGETTO X\\Sviluppo\\edil-crm-ai\\riconciliazione_xml.py': [Errno 2] No such file or directory
+[20/02/2026 17:21:26.89] Fine importazione XML 
+---------------------------------------- 

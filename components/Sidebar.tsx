@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { HardHat, Users, FileText, Building2 } from "lucide-react"; // Aggiunta Building2
+import { HardHat, Users, FileText, Building2, CalendarCheck } from "lucide-react";
 
 const links = [
   { href: "/cantieri", label: "Cantieri", icon: HardHat },
   { href: "/personale", label: "Personale", icon: Users },
   { href: "/preventivi", label: "Preventivi", icon: FileText },
-  { href: "/anagrafiche", label: "Anagrafiche", icon: Building2 }, // Nuovo link Anagrafiche
+  { href: "/anagrafiche", label: "Anagrafiche", icon: Building2 },
+  { href: "/scadenze", label: "Scadenze", icon: CalendarCheck },
 ];
 
 export default function Sidebar() {

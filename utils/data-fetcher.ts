@@ -935,3 +935,159 @@ export async function getKPIAnagrafiche(): Promise<{ fornitori: number; clienti:
 
   return { fornitori, clienti };
 }
+
+// ============================================================
+// SCADENZIARIO E FINANZA: Interfacce
+// ============================================================
+
+export interface Scadenza {
+  id: string;
+  tipo: 'entrata' | 'uscita';
+  soggetto_id: string;
+  cantiere_id?: string;
+  fattura_riferimento?: string;
+  descrizione?: string;
+  importo_totale: number;
+  importo_pagato: number;
+  importo_residuo: number; // Calcolato
+  data_emissione?: string;
+  data_scadenza: string;
+  data_pagamento?: string;
+  stato: 'da_pagare' | 'parziale' | 'pagato' | 'scaduto';
+  metodo_pagamento?: string;
+  note?: string;
+  soggetto?: { ragione_sociale: string };
+  cantiere?: { nome: string };
+}
+
+export interface KPIScadenze {
+  da_incassare: number;
+  da_pagare: number;
+  scaduto: number;
+  dso: number;
+}
+
+// ============================================================
+// SCADENZIARIO E FINANZA: Query
+// ============================================================
+
+// 1. Lista scadenze con filtri e join
+export async function getScadenze(filtri?: { 
+  tipo?: string; 
+  stato?: string; 
+  cantiere_id?: string 
+}): Promise<Scadenza[]> {
+  const supabase = getSupabaseAdmin();
+  
+  let query = supabase
+    .from('scadenze_pagamento')
+    .select(`
+      *,
+      soggetto:anagrafica_soggetti(ragione_sociale),
+      cantiere:cantieri(nome)
+    `);
+
+  if (filtri?.tipo) query = query.eq('tipo', filtri.tipo);
+  if (filtri?.stato) {
+    if (filtri.stato === 'scaduto') {
+      query = query.eq('stato', 'scaduto');
+    } else {
+      query = query.eq('stato', filtri.stato);
+    }
+  }
+  if (filtri?.cantiere_id) query = query.eq('cantiere_id', filtri.cantiere_id);
+
+  // Default: prima le scadute, poi per data scadenza
+  const { data, error } = await query.order('data_scadenza', { ascending: true });
+
+  if (error) {
+    console.error("❌ Errore getScadenze:", error);
+    return [];
+  }
+
+  return (data || []).map(s => ({
+    ...s,
+    importo_residuo: s.importo_totale - s.importo_pagato
+  })) as Scadenza[];
+}
+
+// 2. Calcolo KPI Finanziari (Priorità Crediti)
+export async function getKPIScadenze(): Promise<KPIScadenze> {
+  const supabase = getSupabaseAdmin();
+  
+  const { data, error } = await supabase
+    .from('scadenze_pagamento')
+    .select('tipo, importo_totale, importo_pagato, stato, data_emissione, data_pagamento')
+    .neq('stato', 'pagato');
+
+  if (error) return { da_incassare: 0, da_pagare: 0, scaduto: 0, dso: 0 };
+
+  const da_incassare = data
+    .filter(s => s.tipo === 'entrata')
+    .reduce((acc, s) => acc + (s.importo_totale - s.importo_pagato), 0);
+
+  const da_pagare = data
+    .filter(s => s.tipo === 'uscita')
+    .reduce((acc, s) => acc + (s.importo_totale - s.importo_pagato), 0);
+
+  const scaduto = data
+    .filter(s => s.stato === 'scaduto')
+    .reduce((acc, s) => acc + (s.importo_totale - s.importo_pagato), 0);
+
+  const dso = await calcolaDSO();
+
+  return { da_incassare, da_pagare, scaduto, dso };
+}
+
+// 3. Formula DSO: Media giorni incasso ultimi 90gg
+export async function calcolaDSO(): Promise<number> {
+  const supabase = getSupabaseAdmin();
+  const novantaGiorniFa = new Date();
+  novantaGiorniFa.setDate(novantaGiorniFa.getDate() - 90);
+
+  const { data, error } = await supabase
+    .from('scadenze_pagamento')
+    .select('data_emissione, data_pagamento')
+    .eq('tipo', 'entrata')
+    .eq('stato', 'pagato')
+    .gte('data_pagamento', novantaGiorniFa.toISOString().split('T')[0]);
+
+  if (error || !data || data.length === 0) return 0;
+
+  const diffs = data.map(s => {
+    const emissione = new Date(s.data_emissione!).getTime();
+    const pagamento = new Date(s.data_pagamento!).getTime();
+    return (pagamento - emissione) / (1000 * 60 * 60 * 24);
+  });
+
+  const media = diffs.reduce((a, b) => a + b, 0) / diffs.length;
+  return Math.round(media);
+}
+
+// 4. Aging Analysis Crediti
+export async function getAgingAnalysis() {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('scadenze_pagamento')
+    .select('importo_totale, importo_pagato, data_scadenza')
+    .eq('tipo', 'entrata')
+    .neq('stato', 'pagato');
+
+  if (error || !data) return { f1: 0, f2: 0, f3: 0, f4: 0 };
+
+  const oggi = new Date();
+  const fasce = { f1: 0, f2: 0, f3: 0, f4: 0 }; // 0-30, 31-60, 61-90, >90
+
+  data.forEach(s => {
+    const scadenza = new Date(s.data_scadenza);
+    const diffGiorni = Math.floor((oggi.getTime() - scadenza.getTime()) / (1000 * 60 * 60 * 24));
+    const residuo = s.importo_totale - s.importo_pagato;
+
+    if (diffGiorni <= 30) fasce.f1 += residuo;
+    else if (diffGiorni <= 60) fasce.f2 += residuo;
+    else if (diffGiorni <= 90) fasce.f3 += residuo;
+    else fasce.f4 += residuo;
+  });
+
+  return fasce;
+}

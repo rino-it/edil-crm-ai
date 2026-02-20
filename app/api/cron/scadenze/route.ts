@@ -12,7 +12,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // FIX: Usiamo il Service Role Key (Admin) perché il Cron non ha una sessione utente loggata
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -27,81 +26,107 @@ export async function GET(request: Request) {
 
   if (paramsError || !params?.admin_whatsapp) {
     console.error("❌ admin_whatsapp non trovato in parametri_globali:", paramsError);
-    return NextResponse.json(
-      { error: "admin_whatsapp non configurato" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "admin_whatsapp non configurato" }, { status: 500 });
   }
 
   const adminWhatsapp = params.admin_whatsapp;
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://edil-crm-ai.vercel.app";
+  const oggi = new Date();
+  const oggiStr = oggi.toISOString().split("T")[0];
 
   let notificatiTotali = 0;
   const errori: string[] = [];
 
   // ==========================================
-  // PARTE 1: SCADENZE PERSONALE (Logica Esistente)
+  // PARTE 1: SCADENZE PERSONALE
   // ==========================================
-  const oggi = new Date();
-  const limite = new Date(oggi);
-  limite.setDate(limite.getDate() + 30);
-  const limiteDateStr = limite.toISOString().split("T")[0]; // YYYY-MM-DD
+  const limite30gg = new Date(oggi);
+  limite30gg.setDate(limite30gg.getDate() + 30);
+  const limite30ggStr = limite30gg.toISOString().split("T")[0];
 
-  const { data: docPersonale, error: errPersonale } = await supabase
+  const { data: docPersonale } = await supabase
     .from("personale_documenti")
     .select("id, nome, data_scadenza")
-    .lte("data_scadenza", limiteDateStr)
+    .lte("data_scadenza", limite30ggStr)
     .eq("scadenza_notificata", false)
     .not("data_scadenza", "is", null);
 
-  if (docPersonale && docPersonale.length > 0) {
+  if (docPersonale) {
     for (const doc of docPersonale) {
       const dataFormattata = new Date(doc.data_scadenza).toLocaleDateString("it-IT");
-      const calendarLink = `${siteUrl}/api/calendar?titolo=${encodeURIComponent(doc.nome)}&data=${doc.data_scadenza}`;
-      const messaggio = `⚠️ *Scadenza Personale*\nIl documento _${doc.nome}_ scade il ${dataFormattata}.\n\n📅 Salva a calendario: ${calendarLink}`;
-
+      const messaggio = `⚠️ *Scadenza Personale*\nIl documento _${doc.nome}_ scade il ${dataFormattata}.`;
       try {
         await sendWhatsAppMessage(adminWhatsapp, messaggio);
-        const { error } = await supabase.from("personale_documenti").update({ scadenza_notificata: true }).eq("id", doc.id);
-        if (!error) notificatiTotali++;
-      } catch (err) {
-        errori.push(`Personale-${doc.id}`);
-      }
+        await supabase.from("personale_documenti").update({ scadenza_notificata: true }).eq("id", doc.id);
+        notificatiTotali++;
+      } catch (err) { errori.push(`Personale-${doc.id}`); }
     }
   }
 
   // ==========================================
-  // PARTE 2: SCADENZE CANTIERE (Nuova Logica)
+  // PARTE 2: SCADENZE CANTIERE
   // ==========================================
   try {
     const docCantiere = await getDocumentiCantiereInScadenza(30);
-
-    if (docCantiere && docCantiere.length > 0) {
+    if (docCantiere) {
       for (const doc of docCantiere) {
-        if (!doc.data_scadenza) continue;
-
-        const dataFormattata = new Date(doc.data_scadenza).toLocaleDateString("it-IT");
-        const nomeCantiere = doc.cantieri?.nome || "Cantiere Sconosciuto";
-        const calendarLink = `${siteUrl}/api/calendar?titolo=${encodeURIComponent(doc.nome_file)}&data=${doc.data_scadenza}&cantiere=${encodeURIComponent(nomeCantiere)}`;
-        
-        const messaggio = `🏗️ *Scadenza Cantiere Imminente*\n` +
-                          `📄 Documento: _${doc.nome_file}_\n` +
-                          `📍 Cantiere: *${nomeCantiere}*\n` +
-                          `📅 Scade il: ${dataFormattata}\n\n` +
-                          `📲 Salva a calendario: ${calendarLink}`;
-
+        const dataFormattata = new Date(doc.data_scadenza!).toLocaleDateString("it-IT");
+        const messaggio = `🏗️ *Scadenza Cantiere*\nDoc: _${doc.nome_file}_\nCantiere: *${doc.cantieri?.nome}*\nScade: ${dataFormattata}`;
         try {
           await sendWhatsAppMessage(adminWhatsapp, messaggio);
-          const { error } = await supabase.from("cantiere_documenti").update({ scadenza_notificata: true }).eq("id", doc.id);
-          if (!error) notificatiTotali++;
-        } catch (err) {
-          errori.push(`Cantiere-${doc.id}`);
-        }
+          await supabase.from("cantiere_documenti").update({ scadenza_notificata: true }).eq("id", doc.id);
+          notificatiTotali++;
+        } catch (err) { errori.push(`Cantiere-${doc.id}`); }
       }
     }
-  } catch (errCantiere) {
-    console.error("❌ Errore ricerca documenti cantiere:", errCantiere);
-    errori.push("Errore query cantiere");
+  } catch (e) { console.error(e); }
+
+  // ==========================================
+  // PARTE 3: SCADENZE PAGAMENTO (Priorità Crediti)
+  // ==========================================
+  
+  // A. Aggiornamento automatico stato 'scaduto'
+  await supabase
+    .from("scadenze_pagamento")
+    .update({ stato: 'scaduto' })
+    .lt("data_scadenza", oggiStr)
+    .in("stato", ["da_pagare", "parziale"]);
+
+  // B. Query scadenze imminenti (prossimi 7 giorni)
+  const limite7gg = new Date(oggi);
+  limite7gg.setDate(limite7gg.getDate() + 7);
+  const limite7ggStr = limite7gg.toISOString().split("T")[0];
+
+  const { data: scadenzeFin } = await supabase
+    .from("scadenze_pagamento")
+    .select(`
+      id, tipo, fattura_riferimento, importo_totale, importo_pagato, data_scadenza,
+      soggetto:anagrafica_soggetti(ragione_sociale)
+    `)
+    .lte("data_scadenza", limite7ggStr)
+    .eq("scadenza_notificata", false)
+    .neq("stato", "pagato");
+
+  if (scadenzeFin) {
+    for (const s of scadenzeFin) {
+      const residuo = s.importo_totale - (s.importo_pagato || 0);
+      const dataFmt = new Date(s.data_scadenza).toLocaleDateString("it-IT");
+      const nomeSog = (s.soggetto as any)?.ragione_sociale || "Sconosciuto";
+      const rif = s.fattura_riferimento || "N/D";
+
+      let msg = "";
+      if (s.tipo === 'entrata') {
+        msg = `💰 *Credito in scadenza*\nCliente: *${nomeSog}*\nFattura: ${rif}\nImporto: €${residuo.toFixed(2)}\nScade: ${dataFmt}\n⚠️ Sollecitare incasso!`;
+      } else {
+        msg = `💸 *Pagamento in scadenza*\nFornitore: *${nomeSog}*\nFattura: ${rif}\nImporto: €${residuo.toFixed(2)}\nScade: ${dataFmt}`;
+      }
+
+      try {
+        await sendWhatsAppMessage(adminWhatsapp, msg);
+        await supabase.from("scadenze_pagamento").update({ scadenza_notificata: true }).eq("id", s.id);
+        notificatiTotali++;
+      } catch (err) { errori.push(`Pagamento-${s.id}`); }
+    }
   }
 
   return NextResponse.json({
