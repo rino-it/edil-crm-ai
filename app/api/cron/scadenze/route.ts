@@ -1,4 +1,4 @@
-import { createClient } from "@/utils/supabase/server";
+import { createClient } from "@supabase/supabase-js";
 import { sendWhatsAppMessage } from "@/utils/whatsapp";
 import { getDocumentiCantiereInScadenza } from "@/utils/data-fetcher";
 import { NextResponse } from "next/server";
@@ -8,11 +8,16 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   // Protezione: verifica il secret Vercel Cron
   const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const supabase = await createClient();
+  // FIX: Usiamo il Service Role Key (Admin) perché il Cron non ha una sessione utente loggata
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
 
   // 1. Recupera il numero WhatsApp admin da parametri_globali
   const { data: params, error: paramsError } = await supabase
@@ -69,7 +74,7 @@ export async function GET(request: Request) {
   // PARTE 2: SCADENZE CANTIERE (Nuova Logica)
   // ==========================================
   try {
-    const docCantiere = await getDocumentiCantiereInScadenza(30); // Usa la vista dinamica
+    const docCantiere = await getDocumentiCantiereInScadenza(30);
 
     if (docCantiere && docCantiere.length > 0) {
       for (const doc of docCantiere) {
@@ -87,7 +92,6 @@ export async function GET(request: Request) {
 
         try {
           await sendWhatsAppMessage(adminWhatsapp, messaggio);
-          // Aggiorna tabella fisica (non la vista)
           const { error } = await supabase.from("cantiere_documenti").update({ scadenza_notificata: true }).eq("id", doc.id);
           if (!error) notificatiTotali++;
         } catch (err) {
