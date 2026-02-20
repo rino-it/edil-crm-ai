@@ -82,7 +82,8 @@ export async function uploadDocumento(formData: FormData) {
       categoria: categoriaFinale,
       data_scadenza: datiAI?.data_scadenza || null,
       note: datiAI?.note_estratte || null,
-      ai_dati_estratti: datiAI || null
+      // FIX TYPESCRIPT: Eseguiamo il casting forzato del tipo per il DB
+      ai_dati_estratti: datiAI ? (datiAI as unknown as Record<string, unknown>) : null
     })
 
     if (!result.success) {
