@@ -541,14 +541,21 @@ Rispondi SOLO con JSON valido, senza markdown e senza backtick, usando questa st
   return JSON.parse(cleanJson) as DocumentoCantiereParsed;
 }
 
-export async function parseComputoFoto(media: MediaInput) {
+export async function parseComputoFoto(media: { base64: string; mimeType: string }) {
   const apiKey = process.env.GOOGLE_API_KEY;
+  if (!apiKey) throw new Error("GOOGLE_API_KEY mancante");
+
   const prompt = `Analizza questa foto di un computo metrico o preventivo edilizio. 
 Estrai i dati in una tabella JSON. Se mancano i prezzi, lascia null. 
-Formato: { "righe": [{ "codice": "...", "descrizione": "...", "unita_misura": "...", "quantita": 0, "prezzo_unitario": 0 }] }`;
+Rispondi SOLO con il JSON, senza markdown.
+Formato: { "righe": [{ "codice": "string", "descrizione": "string", "unita_misura": "string", "quantita": number, "prezzo_unitario": number | null }] }`;
 
-  const parts = [{ text: prompt }, { inline_data: { mime_type: media.mimeType, data: media.base64 } }];
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  const parts = [
+    { text: prompt }, 
+    { inline_data: { mime_type: media.mimeType, data: media.base64 } }
+  ];
+  
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
   const response = await fetch(url, {
     method: "POST",
@@ -556,7 +563,11 @@ Formato: { "righe": [{ "codice": "...", "descrizione": "...", "unita_misura": ".
     body: JSON.stringify({ contents: [{ parts }] }),
   });
 
+  if (!response.ok) throw new Error("Errore chiamata Gemini Vision");
+
   const data = await response.json();
-  const text = data.candidates[0].content.parts[0].text.replace(/```json|```/g, "").trim();
-  return JSON.parse(text);
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+  const cleanJson = text.replace(/```json|```/g, "").trim();
+  
+  return JSON.parse(cleanJson);
 }
