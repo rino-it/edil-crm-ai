@@ -10,7 +10,6 @@ SUPABASE_URL = "https://jnhpabgohnfdiqvjzjku.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpuaHBhYmdvaG5mZGlxdmp6amt1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDgxMjIxNSwiZXhwIjoyMDg2Mzg4MjE1fQ.DjTPDvDSa6KH33w8iuIgyo5tm-YZLtyAy2BT6XNyju4"
 
 # 2. PERCORSO ARCHIVIO FATTO
-# Assicurati che questo percorso sia corretto sul PC dove esegui lo script!
 CARTELLA_ARCHIVIO = r"\\192.168.1.231\scambio\AMMINISTRAZIONE\Clienti e Fornitori\2025\contabilità\Archivio_Fatto"
 
 # ================= FINE CONFIGURAZIONE =================
@@ -27,12 +26,7 @@ def pulisci_namespace(xml_content):
     return xml_content
 
 def estrai_ddt_da_descrizione(descrizione):
-    """
-    Cerca disperatamente un numero DDT dentro una stringa di testo.
-    Es: "Rif. DDT 45 del 12/12" -> restituisce "45"
-    """
     if not descrizione: return None
-    # Regex potenziata: Cerca 'DDT', 'Doc', 'Bolla', 'Rif', 'nr' seguito da numeri
     match = re.search(r'(?:DDT|Doc|Bolla|Rif)\.?\s*(?:n\.?|nr\.?)?\s*0*(\d+)', descrizione, re.IGNORECASE)
     if match:
         return match.group(1)
@@ -67,6 +61,17 @@ def parse_and_upload(percorso_file):
         id_fiscale = cedente.find(".//IdFiscaleIVA/IdCodice")
         piva = id_fiscale.text if id_fiscale is not None else "00000000000"
 
+        # --- STEP 2.6: UPSERT ANAGRAFICA SOGGETTI (FORNITORE) ---
+        try:
+            supabase.table("anagrafica_soggetti").upsert({
+                "partita_iva": piva,
+                "ragione_sociale": ragione_sociale,
+                "tipo": "fornitore"
+            }, on_conflict="partita_iva").execute()
+            print(f"   👤 Anagrafica fornitore verificata: {ragione_sociale}")
+        except Exception as e_anag:
+            print(f"   ⚠️ Nota: errore aggiornamento anagrafica: {e_anag}")
+
         dati_gen = body.find(".//DatiGeneraliDocumento")
         numero_fattura = dati_gen.find("Numero").text
         data_fattura = dati_gen.find("Data").text
@@ -86,29 +91,23 @@ def parse_and_upload(percorso_file):
         if not res_insert.data: return
         fattura_id = res_insert.data[0]['id'] 
 
-        # --- MAPPA DDT (LOGICA MULTI-DDT GLOBALE) ---
+        # --- MAPPA DDT ---
         ddt_line_map = {}
-        ddt_globali = [] # Lista per accumulare tutti i DDT senza riferimento riga
+        ddt_globali = []
         
         dati_ddt_list = body.findall(".//DatiDDT")
-        
         if dati_ddt_list:
             for ddt_block in dati_ddt_list:
                 num_ddt_tag = ddt_block.find("NumeroDDT")
                 if num_ddt_tag is not None:
                     valore_ddt = num_ddt_tag.text
                     rifs = ddt_block.findall("RiferimentoNumeroLinea")
-                    
                     if not rifs:
-                        # Se NON ci sono riferimenti riga, è un DDT globale per questa fattura
                         ddt_globali.append(valore_ddt)
                     else:
-                        # Se CI SONO riferimenti, mappa specificamente quelle righe
                         for r in rifs:
                             ddt_line_map[r.text] = valore_ddt
         
-        # Uniamo tutti i DDT globali in una stringa (es. "13176,13535,13713")
-        # Questo permette alla funzione SQL Fuzzy di trovarli tutti
         stringa_ddt_globali = ",".join(ddt_globali) if ddt_globali else None
 
         # --- DETTAGLIO RIGHE ---
@@ -119,24 +118,16 @@ def parse_and_upload(percorso_file):
             try:
                 num_linea = linea.find("NumeroLinea").text
                 descrizione = linea.find("Descrizione").text if linea.find("Descrizione") is not None else ""
-                
                 qty_tag = linea.find("Quantita")
                 qty = float(qty_tag.text) if qty_tag is not None else 0.0
-                
                 prezzo_tag = linea.find("PrezzoTotale")
                 prezzo = float(prezzo_tag.text) if prezzo_tag is not None else 0.0
-                
                 um_tag = linea.find("UnitaMisura")
                 um = um_tag.text if um_tag is not None else ""
 
-                # 1. Cerca nel link strutturato (priorità alta)
                 ddt_assegnato = ddt_line_map.get(num_linea)
-
-                # 2. Se vuoto, usa i DDT globali separati da virgola (Fix Edilcommercio)
                 if not ddt_assegnato and stringa_ddt_globali:
                     ddt_assegnato = stringa_ddt_globali
-                
-                # 3. Fallback sul testo della descrizione (Regex migliorata)
                 if not ddt_assegnato:
                     ddt_assegnato = estrai_ddt_da_descrizione(descrizione)
 
@@ -160,19 +151,16 @@ def parse_and_upload(percorso_file):
 
 def run():
     print(f"🚀 AVVIO IMPORTAZIONE DA: {CARTELLA_ARCHIVIO}")
-    
     if not os.path.exists(CARTELLA_ARCHIVIO):
         print(f"❌ Cartella non trovata: {CARTELLA_ARCHIVIO}")
         return
 
     files = [f for f in os.listdir(CARTELLA_ARCHIVIO) if f.lower().endswith('.xml')]
-    
     if not files:
         print(f"⚠️ Nessun file XML trovato in Archivio_Fatto.")
         return
 
     print(f"📂 Trovati {len(files)} file totali in archivio.")
-    print("⏳ Controllo quali mancano su Supabase...")
     print("-" * 50)
 
     count = 0

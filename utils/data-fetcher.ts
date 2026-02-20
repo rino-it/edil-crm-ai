@@ -834,3 +834,104 @@ export async function getDocumentiCantiereInScadenza(giorniAvviso = 30): Promise
 
   return data as DocumentoCantiere[];
 }
+
+// ============================================================
+// ANAGRAFICHE: Soggetti (Fornitori e Clienti)
+// ============================================================
+
+export interface Soggetto {
+  id: string;
+  tipo: "fornitore" | "cliente";
+  ragione_sociale: string;
+  partita_iva?: string;
+  codice_fiscale?: string;
+  indirizzo?: string;
+  email?: string;
+  telefono?: string;
+  pec?: string;
+  codice_sdi?: string;
+  iban?: string;
+  condizioni_pagamento?: string;
+  note?: string;
+  created_at: string;
+}
+
+// 1. Lista soggetti con filtro opzionale per tipo
+export async function getSoggetti(tipo?: string): Promise<Soggetto[]> {
+  const supabase = getSupabaseAdmin();
+  let query = supabase
+    .from("anagrafica_soggetti")
+    .select("*")
+    .order("ragione_sociale", { ascending: true });
+
+  if (tipo) {
+    query = query.eq("tipo", tipo);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error("❌ Errore getSoggetti:", error);
+    return [];
+  }
+
+  return data as Soggetto[];
+}
+
+// 2. Dettaglio singolo soggetto
+export async function getSoggettoById(id: string): Promise<Soggetto | null> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("anagrafica_soggetti")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error || !data) {
+    console.warn(`⚠️ Soggetto non trovato: ${id}`);
+    return null;
+  }
+
+  return data as Soggetto;
+}
+
+// 3. Upsert per import automatico (usato da riconciliazione XML)
+export async function upsertSoggettoDaPIVA(
+  piva: string,
+  ragione_sociale: string,
+  tipo: "fornitore" | "cliente"
+): Promise<{ success: boolean; id?: string; error?: string }> {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from("anagrafica_soggetti")
+    .upsert(
+      { partita_iva: piva, ragione_sociale, tipo },
+      { onConflict: "partita_iva" }
+    )
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("❌ Errore upsertSoggettoDaPIVA:", error);
+    return { success: false, error: error.message };
+  }
+
+  return { success: true, id: data.id };
+}
+
+// 4. KPI Anagrafiche (Totale Fornitori, Totale Clienti)
+export async function getKPIAnagrafiche(): Promise<{ fornitori: number; clienti: number }> {
+  const supabase = getSupabaseAdmin();
+  
+  const { data, error } = await supabase
+    .from("anagrafica_soggetti")
+    .select("tipo");
+
+  if (error || !data) return { fornitori: 0, clienti: 0 };
+
+  const fornitori = data.filter(s => s.tipo === 'fornitore').length;
+  const clienti = data.filter(s => s.tipo === 'cliente').length;
+
+  return { fornitori, clienti };
+}
