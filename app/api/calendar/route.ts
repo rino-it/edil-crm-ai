@@ -59,9 +59,13 @@ export async function GET(request: NextRequest) {
   return new NextResponse(icsContent, {
     status: 200,
     headers: {
+      // Header fondamentale per Apple
       "Content-Type": "text/calendar; charset=utf-8",
       "Content-Disposition": `attachment; filename="${nomeFile}"`,
-      "Cache-Control": "no-store",
+      // Questi due header dicono all'iPhone di non mettere il file in cache e di trattarlo come nuovo
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+      "Pragma": "no-cache",
+      "Expires": "0",
     },
   });
 }
