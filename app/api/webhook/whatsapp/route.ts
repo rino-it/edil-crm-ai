@@ -66,21 +66,13 @@ async function getParametriGlobali(): Promise<ParametriGlobali> {
 
 // ============================================================
 // CALCOLO COSTO REALE — Straordinari + Trasferta
-//
-// Formule approvate:
-//   ore_ordinarie   = MIN(ore, soglia_ore_straordinario)
-//   ore_straord     = MAX(ore - soglia_ore_straordinario, 0)
-//   costo_manodopera = (ore_ordinarie × costo_orario)
-//                    + (ore_straord × costo_orario × moltiplicatore_straordinario)
-//   trasferta        = km_da_sede > soglia_km_trasferta ? indennita_trasferta : 0
-//   costo_calcolato  = costo_manodopera + trasferta
 // ============================================================
 interface CostoRealeResult {
   costo_calcolato: number
   ore_ordinarie: number
   ore_straordinarie: number
   trasferta_applicata: boolean
-  dettaglio: string  // stringa leggibile per il messaggio WhatsApp
+  dettaglio: string
 }
 
 function calcolaPresenzeConCostoReale(
@@ -95,7 +87,6 @@ function calcolaPresenzeConCostoReale(
   const rows = trovati.map((t) => {
     const costoOrario = t.personale.costo_orario
 
-    // --- Scorporo straordinari ---
     const oreOrdinarie    = Math.min(ore, params.soglia_ore_straordinario)
     const oreStraordinarie = Math.max(ore - params.soglia_ore_straordinario, 0)
 
@@ -103,14 +94,11 @@ function calcolaPresenzeConCostoReale(
     const costoStraordinario  = oreStraordinarie * costoOrario * params.moltiplicatore_straordinario
     const costoManodopera     = costoOrdinario + costoStraordinario
 
-    // --- Trigger trasferta ---
     const trasfertaApplicata = kmDaSede > params.soglia_km_trasferta
     const bonusTrasferta     = trasfertaApplicata ? params.indennita_trasferta : 0
 
-    // --- Totale ---
     const costoCalcolato = costoManodopera + bonusTrasferta
 
-    // --- Dettaglio leggibile ---
     let dettaglio = `${t.personale.nome}: ${oreOrdinarie}h ord. × €${costoOrario}/h`
     if (oreStraordinarie > 0) {
       dettaglio += ` + ${oreStraordinarie}h str. × €${(costoOrario * params.moltiplicatore_straordinario).toFixed(2)}/h`
@@ -129,18 +117,36 @@ function calcolaPresenzeConCostoReale(
     })
 
     return {
-      cantiere_id:     '',  // verrà sovrascritto dal chiamante
-      personale_id:    t.personale.id,
+      cantiere_id:    '',
+      personale_id:   t.personale.id,
       ore,
       descrizione:     descrizione || undefined,
       costo_calcolato: costoCalcolato,
     } satisfies PresenzaInput
   })
 
-  // Attacchiamo i metadati all'array (non finiscono nel DB)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ;(rows as any)._meta = metas
   return rows as PresenzaInput[] & { _meta: CostoRealeResult[] }
+}
+
+// ============================================================
+// HELPERS PREVENTIVAZIONE (Ambiguity Resolver)
+// ============================================================
+async function getProssimaVoceDaValidare(supabaseAdmin: any) {
+  const { data, error } = await supabaseAdmin
+    .from('computo_voci')
+    .select(`
+      id, descrizione, quantita, unita_misura, ai_prezzo_stimato, cantiere_id,
+      cantieri!inner(nome)
+    `)
+    .eq('stato_validazione', 'da_validare')
+    .not('ai_prezzo_stimato', 'is', null)
+    .limit(1)
+    .single()
+
+  if (error || !data) return null;
+  return data;
 }
 
 // ============================================================
@@ -206,9 +212,6 @@ export async function POST(request: NextRequest) {
 
         console.log(`👤 Mittente: ${sender} | Tipo: ${type} | Contenuto: ${rawContent}`)
 
-        // =====================================================
-        // STEP 0: Recupera lo stato precedente della conversazione
-        // =====================================================
         const { data: lastInteraction } = await supabaseAdmin
           .from('chat_log')
           .select('interaction_step, temp_data')
@@ -222,47 +225,114 @@ export async function POST(request: NextRequest) {
 
         console.log(`🔄 Stato conversazione: ${pendingStep}`)
 
-        // =====================================================
-        // GESTIONE MEDIA: Download + Upload su Supabase
-        // =====================================================
         let mediaData = null
         let uploadedFileUrl: string | null = null 
 
         if (mediaId) {
-          console.log(`📸 Tipo: ${type} | Media ID: ${mediaId} — download in corso...`)
           mediaData = await downloadMedia(mediaId)
-          
           if (mediaData) {
              const extension = mediaData.mimeType.split('/')[1] || 'jpg';
              const fileName = `whatsapp_${mediaId}.${extension}`;
-             
-             // Carichiamo su Supabase (bucket cantiere-docs)
-             uploadedFileUrl = await uploadFileToSupabase(
-                mediaData.buffer, 
-                fileName,
-                mediaData.mimeType
-             );
-             console.log("🌍 Foto caricata su Cloud:", uploadedFileUrl);
-          }
-          
-          if (!mediaData) {
-            console.warn("⚠️ Download media fallito, proseguo con solo testo")
+             uploadedFileUrl = await uploadFileToSupabase(mediaData.buffer, fileName, mediaData.mimeType);
           }
         }
 
-        // Chiamata Gemini
+        // --- INTERCETTAZIONE RAPIDA PREVENTIVI (Nuovo Ramo) ---
+        // Se l'utente scrive "preventivi" o "valida", bypassiamo Gemini per velocizzare
+        const textLower = rawContent.trim().toLowerCase();
+        if (pendingStep === 'idle' && (textLower.includes('preventivi') || textLower.includes('valida') || textLower.includes('prezzi'))) {
+            const voce = await getProssimaVoceDaValidare(supabaseAdmin);
+            
+            if (voce) {
+                const finalReply = `🏗️ *Preventivo: ${voce.cantieri.nome}*\n\n` +
+                                   `Lavorazione: *${voce.descrizione}*\n` +
+                                   `Q.tà: ${voce.quantita} ${voce.unita_misura}\n` +
+                                   `Stima AI: *€${voce.ai_prezzo_stimato}*\n\n` +
+                                   `Confermi questa stima? Rispondi *Sì*, oppure scrivimi il prezzo corretto (es. *15.50*).`;
+                
+                await sendWhatsAppMessage(sender, finalReply);
+                await supabaseAdmin.from('chat_log').insert({
+                    raw_text: rawContent, sender_number: sender, status_ai: 'completed', interaction_step: 'waiting_confirm_preventivo', temp_data: { voce_id: voce.id, cantiere_id: voce.cantiere_id, prezzo_stimato: voce.ai_prezzo_stimato }
+                });
+                return new NextResponse('Ricevuto', { status: 200 });
+            } else {
+                await sendWhatsAppMessage(sender, "✅ Nessuna stima in sospeso. Tutti i preventivi sono aggiornati.");
+                return new NextResponse('Ricevuto', { status: 200 });
+            }
+        }
+
+        // =====================================================
+        // CASO A-TER: L'utente sta VALIDANDO UN PREVENTIVO
+        // =====================================================
+        if (pendingStep === 'waiting_confirm_preventivo' && type === 'text') {
+            const confirmation = detectConfirmation(rawContent);
+            let prezzoFinale = pendingData.prezzo_stimato;
+            let stato = 'confermato';
+
+            if (confirmation === 'yes') {
+                // Prezzo confermato (mantiene la stima)
+            } else if (confirmation === 'no') {
+                await sendWhatsAppMessage(sender, "❌ Ok, dimmi tu il prezzo corretto (es. 12.50) o scrivi *Stop* per uscire.");
+                await supabaseAdmin.from('chat_log').insert({
+                    raw_text: rawContent, sender_number: sender, status_ai: 'completed', interaction_step: 'waiting_confirm_preventivo', temp_data: pendingData
+                });
+                return new NextResponse('Ricevuto', { status: 200 });
+            } else if (textLower === 'stop') {
+                await sendWhatsAppMessage(sender, "Operazione interrotta.");
+                await supabaseAdmin.from('chat_log').insert({ raw_text: rawContent, sender_number: sender, interaction_step: 'idle' });
+                return new NextResponse('Ricevuto', { status: 200 });
+            } else {
+                // Tenta di estrarre un numero se l'utente digita "15", "15,50" ecc.
+                const parseNum = parseFloat(rawContent.replace(',', '.'));
+                if (!isNaN(parseNum)) {
+                    prezzoFinale = parseNum;
+                    stato = 'modificato';
+                } else {
+                    await sendWhatsAppMessage(sender, "Non ho capito. Rispondi *Sì* per confermare, scrivi un numero, o scrivi *Stop*.");
+                    await supabaseAdmin.from('chat_log').insert({
+                        raw_text: rawContent, sender_number: sender, status_ai: 'completed', interaction_step: 'waiting_confirm_preventivo', temp_data: pendingData
+                    });
+                    return new NextResponse('Ricevuto', { status: 200 });
+                }
+            }
+
+            // Aggiorna il Database (Computo)
+            await supabaseAdmin.from('computo_voci').update({
+                prezzo_unitario: prezzoFinale,
+                stato_validazione: stato
+            }).eq('id', pendingData.voce_id);
+
+            // Cerca la prossima voce
+            const prossimaVoce = await getProssimaVoceDaValidare(supabaseAdmin);
+            
+            let reply = `✅ Prezzo salvato: €${prezzoFinale}.`;
+            let nextStep = 'idle';
+            let nextData = null;
+
+            if (prossimaVoce) {
+                reply += `\n\nProssima voce in *${prossimaVoce.cantieri.nome}*:\nLavorazione: *${prossimaVoce.descrizione}*\nStima AI: *€${prossimaVoce.ai_prezzo_stimato}*\nConfermi o modifichi?`;
+                nextStep = 'waiting_confirm_preventivo';
+                nextData = { voce_id: prossimaVoce.id, cantiere_id: prossimaVoce.cantiere_id, prezzo_stimato: prossimaVoce.ai_prezzo_stimato };
+            } else {
+                reply += `\n🎉 Hai finito! Tutte le voci sono state validate.`;
+            }
+
+            await sendWhatsAppMessage(sender, reply);
+            await supabaseAdmin.from('chat_log').insert({
+                raw_text: rawContent, sender_number: sender, status_ai: 'completed', interaction_step: nextStep, temp_data: nextData
+            });
+            return new NextResponse('Ricevuto', { status: 200 });
+        }
+
+
+        // Chiamata Gemini (Flusso Normale per DDT, Budget, Presenze)
         const geminiResult = await processWithGemini(rawContent, mediaData)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let aiAnalysis: any = geminiResult
-
-        // Variabili per il risultato finale
         let finalReply = ''
         let interactionStep = 'idle'
         let tempData: Record<string, unknown> = {}
 
-        // =====================================================
-        // CASO A: L'utente sta CONFERMANDO un DDT ("Sì" / "No")
-        // =====================================================
         if (pendingStep === 'waiting_confirm' && type === 'text') {
           const confirmation = detectConfirmation(rawContent)
 
@@ -277,7 +347,7 @@ export async function POST(request: NextRequest) {
               data_movimento: (pendingData.data as string) || new Date().toISOString().split('T')[0],
               fornitore: pendingData.fornitore as string,
               file_url: (pendingData.file_url as string) || null,
-              numero_documento: (pendingData.numero_ddt as string) || null // <--- MODIFICA AGGIUNTA QUI
+              numero_documento: (pendingData.numero_ddt as string) || null
             })
 
             if (result.success) {
@@ -302,15 +372,10 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // =====================================================
-        // CASO A-BIS: Conferma PRESENZE ("Sì" / "No")
-        // =====================================================
         else if (pendingStep === 'waiting_confirm_presenze' && type === 'text') {
           const confirmation = detectConfirmation(rawContent)
 
           if (confirmation === 'yes') {
-            console.log("✅ Utente conferma presenze! Inserisco...")
-
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const presenzeRows = (pendingData.presenze_da_inserire as any[]) || []
             const result = await inserisciPresenze(presenzeRows)
@@ -325,7 +390,6 @@ export async function POST(request: NextRequest) {
               finalReply = `❌ Errore nel salvataggio: ${result.error}`
               interactionStep = 'idle'
             }
-
             aiAnalysis = { category: 'presenze', summary: `Presenze confermate su ${pendingData.cantiere_nome}` }
 
           } else if (confirmation === 'no') {
@@ -340,9 +404,6 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // =====================================================
-        // CASO B: L'utente sta INDICANDO IL CANTIERE (DDT o Presenze)
-        // =====================================================
         else if (pendingStep === 'waiting_cantiere' && type === 'text') {
           const confirmation = detectConfirmation(rawContent)
           if (confirmation === 'no') {
@@ -350,7 +411,6 @@ export async function POST(request: NextRequest) {
             interactionStep = 'idle'
             aiAnalysis = { category: pendingData._flow_type as string || 'altro', summary: 'Annullato' }
           } else {
-            console.log(`🔍 Utente indica cantiere: "${rawContent}"`)
             const cantiere = await getCantiereData(rawContent)
 
             if (cantiere) {
@@ -363,7 +423,6 @@ export async function POST(request: NextRequest) {
                   finalReply = `Ho trovato il cantiere *${cantiere.nome}*, ma non riconosco nessuno dei nomi indicati: ${nonTrovati.join(', ')}.\n\nVerifica che siano registrati nel sistema.`
                   interactionStep = 'idle'
                 } else {
-                  // --- FASE 4: Calcolo costo reale con straordinari e trasferta ---
                   const params = await getParametriGlobali()
                   const kmDaSede = (cantiere as unknown as { km_da_sede?: number }).km_da_sede ?? 0
                   const calcolati = calcolaPresenzeConCostoReale(
@@ -395,7 +454,6 @@ export async function POST(request: NextRequest) {
                   }
                 }
               } else {
-                // Flusso DDT
                 finalReply = `Ho trovato *${cantiere.nome}*.\n\nRegistro la spesa di €${pendingData.importo} da ${pendingData.fornitore || 'N/D'}?\n\nRispondi *Sì* per confermare o *No* per annullare.`
                 interactionStep = 'waiting_confirm'
                 tempData = {
@@ -403,7 +461,7 @@ export async function POST(request: NextRequest) {
                   cantiere_id: cantiere.id,
                   cantiere_nome: cantiere.nome,
                   file_url: pendingData.file_url,
-                  numero_ddt: pendingData.numero_ddt // <--- MODIFICA: Preserviamo il numero DDT
+                  numero_ddt: pendingData.numero_ddt
                 }
               }
             } else {
@@ -416,20 +474,9 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // =====================================================
-        // CASO C: NESSUNO STATO ATTIVO → Flusso normale
-        // =====================================================
         else {
-          console.log("🔍 DEBUG AI FULL:", JSON.stringify(geminiResult))
-          console.log(`🧠 Intent: ${geminiResult.category} | Key: ${geminiResult.search_key || 'MANCANTE'} | ${geminiResult.summary}`)
-
-          // -------------------------------------------------
-          // SOTTO-CASO C1: DDT rilevato da foto
-          // -------------------------------------------------
           if (geminiResult.category === 'ddt' && geminiResult.extracted_data) {
             const dati = geminiResult.extracted_data
-            console.log(`📄 DDT rilevato: ${dati.fornitore} | €${dati.importo} | ${dati.materiali} | Doc: ${dati.numero_ddt}`)
-
             let cantiere = null
             if (dati.cantiere_rilevato) {
               cantiere = await getCantiereData(dati.cantiere_rilevato as string)
@@ -450,7 +497,7 @@ export async function POST(request: NextRequest) {
                 importo: dati.importo,
                 materiali: dati.materiali,
                 data: dati.data,
-                numero_ddt: dati.numero_ddt, // <--- Salviamo il numero estratto da Gemini
+                numero_ddt: dati.numero_ddt,
                 cantiere_id: cantiere.id,
                 cantiere_nome: cantiere.nome,
                 file_url: uploadedFileUrl
@@ -469,23 +516,17 @@ export async function POST(request: NextRequest) {
                 importo: dati.importo,
                 materiali: dati.materiali,
                 data: dati.data,
-                numero_ddt: dati.numero_ddt, // <--- Salviamo il numero anche qui
+                numero_ddt: dati.numero_ddt,
                 file_url: uploadedFileUrl
               }
             }
           }
 
-          // ... (resto del codice Presenze e Budget invariato)
-          // -------------------------------------------------
-          // SOTTO-CASO C4: PRESENZE / RAPPORTINO
-          // -------------------------------------------------
           else if (geminiResult.category === 'presenze' && geminiResult.extracted_data) {
             const dati = geminiResult.extracted_data
             const nomi = (dati.nomi_rilevati as string[]) || []
             const ore = (dati.ore as number) || 0
             const cantiereNome = dati.cantiere_rilevato as string
-
-            console.log(`👷 Presenze: ${nomi.join(', ')} | ${ore}h | Cantiere: ${cantiereNome || 'N/D'}`)
 
             let cantiere = null
             if (cantiereNome) {
@@ -499,7 +540,6 @@ export async function POST(request: NextRequest) {
                 finalReply = `Non riconosco nessuno dei nomi indicati: ${nonTrovati.join(', ')}.\n\nAssicurati che siano registrati nel sistema.`
                 interactionStep = 'idle'
               } else {
-                // --- FASE 4: Calcolo costo reale con straordinari e trasferta ---
                 const params = await getParametriGlobali()
                 const kmDaSede = (cantiere as unknown as { km_da_sede?: number }).km_da_sede ?? 0
                 const calcolati = calcolaPresenzeConCostoReale(
@@ -549,39 +589,29 @@ export async function POST(request: NextRequest) {
             }
           }
 
-          // -------------------------------------------------
-          // SOTTO-CASO C2: Richiesta BUDGET (RAG) — logica esistente
-          // -------------------------------------------------
           else if (geminiResult.category === 'budget') {
-            // Fallback search_key
             if (!geminiResult.search_key) {
-              console.warn("⚠️ Gemini 'budget' senza search_key. Fallback...")
               const budgetKeywords = /\b(quanto|ci manca|di budget|budget|su|del|della|sul|speso|spesa|costi|costo|come|siamo|messi|situazione|stato)\b/gi
               const cleaned = rawContent.replace(budgetKeywords, '').replace(/[?!.,]/g, '').trim()
               geminiResult.search_key = cleaned.length >= 3 ? cleaned : '__ALL__'
-              console.log(`🔧 Fallback search_key: "${geminiResult.search_key}"`)
             }
 
             if (geminiResult.search_key) {
-              console.log(`🔍 RAG attivato! Cerco dati per: "${geminiResult.search_key}"`)
               let dbContext: string | null = null
 
               if (geminiResult.search_key === '__ALL__') {
                 const cantieri = await getCantieriAttivi()
                 if (cantieri.length > 0) {
                   dbContext = formatCantieriListForAI(cantieri)
-                  console.log(`📊 Trovati ${cantieri.length} cantieri aperti`)
                 }
               } else {
                 const cantiere = await getCantiereData(geminiResult.search_key)
                 if (cantiere) {
                   dbContext = formatCantiereForAI(cantiere)
-                  console.log(`📊 Dati trovati per: ${cantiere.nome}`)
                 }
               }
 
               if (dbContext) {
-                console.log("🤖 Seconda chiamata Gemini con dati reali...")
                 const finalResponse = await synthesizeWithData(rawContent, dbContext)
                 finalReply = finalResponse.reply_to_user
                 aiAnalysis = { ...geminiResult, reply_to_user: finalReply, summary: finalResponse.summary }
@@ -593,17 +623,11 @@ export async function POST(request: NextRequest) {
             }
           }
 
-          // -------------------------------------------------
-          // SOTTO-CASO C3: Qualsiasi altro messaggio
-          // -------------------------------------------------
           else {
             finalReply = geminiResult.reply_to_user || ''
           }
         }
 
-        // =====================================================
-        // STEP FINALE: Invio risposta + salvataggio DB
-        // =====================================================
         if (finalReply) {
           await sendWhatsAppMessage(sender, finalReply)
         }
@@ -620,7 +644,6 @@ export async function POST(request: NextRequest) {
             temp_data: Object.keys(tempData).length > 0 ? tempData : null,
           })
 
-        console.log(`✅ Ciclo completato | Step: ${interactionStep} | Risposta: "${finalReply.substring(0, 50)}..."`)
       }
     }
 
