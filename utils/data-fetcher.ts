@@ -984,7 +984,7 @@ export async function getScadenze(filtri?: {
     .select(`
       *,
       soggetto:anagrafica_soggetti(ragione_sociale),
-      cantiere:cantieri(nome)
+      cantiere:cantieri(id, nome)
     `);
 
   if (filtri?.tipo) query = query.eq('tipo', filtri.tipo);
