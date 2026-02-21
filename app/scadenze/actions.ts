@@ -112,3 +112,20 @@ export async function aggiornaStatoScadute() {
   revalidatePath('/scadenze')
   return { success: true }
 }
+
+export async function assegnaCantiereAScadenza(scadenzaId: string, cantiereId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("scadenze_pagamento")
+    .update({ cantiere_id: cantiereId === "null" ? null : cantiereId })
+    .eq("id", scadenzaId);
+
+  if (error) {
+    console.error("❌ Errore assegnazione cantiere:", error);
+    return { error: error.message };
+  }
+  
+  revalidatePath('/scadenze');
+  revalidatePath('/finanza'); // Aggiorna anche la dashboard!
+  return { success: true };
+}

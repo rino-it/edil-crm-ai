@@ -19,8 +19,8 @@ import {
   Plus
 } from "lucide-react"
 import Link from 'next/link'
-// NUOVO IMPORT: Il Client Component per gestire l'onChange
 import { CantiereFilter } from "@/components/CantiereFilter"
+import { AssegnaCantiereSelect } from "@/components/AssegnaCantiereSelect"
 
 export default async function ScadenzePage({
   searchParams,
@@ -126,37 +126,43 @@ export default async function ScadenzePage({
           <CardHeader className="border-b border-zinc-100 bg-white rounded-t-xl">
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
               {/* Tabs Rapidi */}
-              <div className="flex bg-zinc-100 p-1 rounded-lg w-full md:w-auto">
+              <div className="flex flex-wrap bg-zinc-100 p-1 rounded-lg w-full md:w-auto">
                 <Link 
                   href="/scadenze" 
-                  className={`flex-1 md:flex-none px-4 py-1.5 rounded-md text-sm font-medium text-center transition-all ${(!params.tipo && !params.stato) ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}
+                  className={`px-4 py-1.5 rounded-md text-sm font-medium text-center transition-all ${(!params.tipo && !params.stato && !params.cantiere_id) ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}
                 >
                   Tutte
                 </Link>
                 <Link 
                   href="/scadenze?tipo=entrata" 
-                  className={`flex-1 md:flex-none px-4 py-1.5 rounded-md text-sm font-medium text-center transition-all ${params.tipo === 'entrata' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}
+                  className={`px-4 py-1.5 rounded-md text-sm font-medium text-center transition-all ${params.tipo === 'entrata' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}
                 >
                   Entrate
                 </Link>
                 <Link 
                   href="/scadenze?tipo=uscita" 
-                  className={`flex-1 md:flex-none px-4 py-1.5 rounded-md text-sm font-medium text-center transition-all ${params.tipo === 'uscita' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}
+                  className={`px-4 py-1.5 rounded-md text-sm font-medium text-center transition-all ${params.tipo === 'uscita' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}
                 >
                   Uscite
                 </Link>
                 <Link 
                   href="/scadenze?stato=scaduto" 
-                  className={`flex-1 md:flex-none px-4 py-1.5 rounded-md text-sm font-medium text-center transition-all ${params.stato === 'scaduto' ? 'bg-white shadow-sm text-red-600' : 'text-zinc-500 hover:text-zinc-700'}`}
+                  className={`px-4 py-1.5 rounded-md text-sm font-medium text-center transition-all ${params.stato === 'scaduto' ? 'bg-white shadow-sm text-red-600' : 'text-zinc-500 hover:text-zinc-700'}`}
                 >
                   Scadute
+                </Link>
+                <Link 
+                  href="/scadenze?cantiere_id=null" 
+                  className={`px-4 py-1.5 rounded-md text-sm font-medium text-center transition-all ${params.cantiere_id === 'null' ? 'bg-amber-100 shadow-sm text-amber-900 font-bold border border-amber-300' : 'text-zinc-500 hover:text-zinc-700'}`}
+                >
+                  ⚠️ Da Smistare
                 </Link>
               </div>
 
               {/* Filtro Cantiere (Usando il nuovo Client Component) */}
               <div className="flex items-center gap-3 w-full md:w-auto">
                 <Filter size={14} className="text-zinc-400" />
-                <CantiereFilter cantieri={cantieri} currentId={params.cantiere_id} />
+                <CantiereFilter cantieri={cantieri} currentId={params.cantiere_id !== 'null' ? params.cantiere_id : undefined} />
               </div>
             </div>
           </CardHeader>
@@ -187,11 +193,14 @@ export default async function ScadenzePage({
                   scadenze.map((s) => (
                     <TableRow key={s.id} className="hover:bg-zinc-50/80 transition-colors group">
                       <TableCell>
-                        <div className="flex flex-col gap-0.5">
+                        <div className="flex flex-col gap-1 items-start">
                           <span className="font-bold text-zinc-900 truncate">{s.soggetto?.ragione_sociale || 'N/D'}</span>
-                          <span className="text-[10px] uppercase font-semibold text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded w-fit">
-                            {s.cantiere?.nome || 'Spese Generali'}
-                          </span>
+                          {/* Selettore rapido del cantiere integrato */}
+                          <AssegnaCantiereSelect 
+                            scadenzaId={s.id} 
+                            currentCantiereId={s.cantiere?.id || null} 
+                            cantieri={cantieri} 
+                          />
                         </div>
                       </TableCell>
                       <TableCell className="text-xs text-zinc-500 font-mono">
