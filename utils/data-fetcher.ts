@@ -1291,45 +1291,54 @@ export async function getCashflowPrevisionale(giorni: number = 90) {
 // ============================================================
 
 export function parseCSVBanca(csvText: string) {
-  // Pulizia iniziale: rimuoviamo spazi bianchi eccessivi
   const lines = csvText.split('\n').map(l => l.trim()).filter(l => l !== '');
-  const movimenti = [];
+  const movimenti: Array<{ data_operazione: string; descrizione: string; importo: number; stato: string }> = [];
 
   console.log("📊 DEBUG CSV: Prime 3 righe rilevate:", lines.slice(0, 3));
 
-  for (let i = 1; i < lines.length; i++) {
-    // Prova prima col punto e virgola, se fallisce prova con la virgola
-    let cols = lines[i].split(';');
-    if (cols.length < 5) cols = lines[i].split(','); 
+  // Parser CSV che rispetta le virgolette
+  function parseCSVLine(line: string): string[] {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    for (let c = 0; c < line.length; c++) {
+      const ch = line[c];
+      if (ch === '"') {
+        inQuotes = !inQuotes;
+      } else if (ch === ',' && !inQuotes) {
+        result.push(current.trim());
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+    result.push(current.trim());
+    return result;
+  }
 
-    if (cols.length < 5) {
+  for (let i = 1; i < lines.length; i++) {
+    const cols = parseCSVLine(lines[i]);
+
+    if (cols.length < 3) {
       console.warn(`⚠️ Riga ${i} scartata: troppe poche colonne (${cols.length})`);
       continue;
     }
 
-    const dataOpRaw = cols[0].trim();
-    let data_operazione = dataOpRaw;
-    
-    // Supporto per vari formati data (DD/MM/YYYY o DD-MM-YYYY)
-    const separator = dataOpRaw.includes('/') ? '/' : '-';
-    const parts = dataOpRaw.split(separator);
-    if (parts.length === 3) {
-      // Se l'anno è il primo elemento (YYYY-MM-DD), lo teniamo così, altrimenti invertiamo
-      data_operazione = parts[2].length === 4 ? `${parts[2]}-${parts[1]}-${parts[0]}` : dataOpRaw;
+    // Data: DD/MM/YYYY → YYYY-MM-DD
+    const dataRaw = cols[0];
+    let data_operazione = dataRaw;
+    const sep = dataRaw.includes('/') ? '/' : '-';
+    const parts = dataRaw.split(sep);
+    if (parts.length === 3 && parts[0].length <= 2) {
+      data_operazione = `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
     }
 
-    const descrizione = cols[2]?.trim() || "Senza descrizione";
-    
-    const parseImporto = (val: string) => {
-      if (!val) return 0;
-      // Toglie valuta, spazi, e converte formato europeo (1.200,00) in standard (1200.00)
-      const pulito = val.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.');
-      return parseFloat(pulito) || 0;
-    };
+    // Importo: campo singolo, formato europeo "-16.000,00" → -16000.00
+    const importoRaw = cols[2] || '0';
+    const importoPulito = importoRaw.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.');
+    const importo = parseFloat(importoPulito) || 0;
 
-    const dare = parseImporto(cols[3]); 
-    const avere = parseImporto(cols[4]); 
-    const importo = avere !== 0 ? avere : -dare;
+    const descrizione = cols[3]?.trim() || "Senza descrizione";
 
     if (importo !== 0) {
       movimenti.push({
@@ -1340,7 +1349,7 @@ export function parseCSVBanca(csvText: string) {
       });
     }
   }
-  
+
   console.log(`✅ Analisi completata: ${movimenti.length} movimenti validi trovati.`);
   return movimenti;
 }
