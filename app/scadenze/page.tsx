@@ -198,7 +198,7 @@ export default async function ScadenzePage({
                           {/* Selettore rapido del cantiere integrato */}
                           <AssegnaCantiereSelect 
                             scadenzaId={s.id} 
-                            currentCantiereId={s.cantiere?.id || null} 
+                            currentCantiereId={(s.cantiere as any)?.id || null} 
                             cantieri={cantieri} 
                           />
                         </div>
