@@ -576,11 +576,20 @@ Formato: { "righe": [{ "codice": "string", "descrizione": "string", "unita_misur
 // STEP 5: RICONCILIAZIONE BANCARIA AI
 // ============================================================================
 
+// Importiamo esplicitamente l'SDK per assicurarci che sia disponibile
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
 export async function matchRiconciliazioneBancaria(movimento: any, scadenzeAperte: any[]) {
-  if (!genAI) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  
+  if (!apiKey) {
+    console.warn("⚠️ API Key GEMINI_API_KEY mancante nelle variabili d'ambiente.");
     return { scadenza_id: null, confidence: 0, motivo: "API Key mancante" };
   }
 
+  // Inizializziamo il client direttamente qui dentro per evitare errori di scope
+  const genAI = new GoogleGenerativeAI(apiKey);
+  
   const model = genAI.getGenerativeModel({ 
     model: "gemini-2.5-flash",
     generationConfig: { responseMimeType: "application/json" } 
