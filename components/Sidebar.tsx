@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { HardHat, Users, FileText, Building2, CalendarCheck } from "lucide-react";
+import { HardHat, Users, FileText, Building2, CalendarCheck, TrendingUp } from "lucide-react";
 
 const links = [
   { href: "/cantieri", label: "Cantieri", icon: HardHat },
@@ -10,6 +10,7 @@ const links = [
   { href: "/preventivi", label: "Preventivi", icon: FileText },
   { href: "/anagrafiche", label: "Anagrafiche", icon: Building2 },
   { href: "/scadenze", label: "Scadenze", icon: CalendarCheck },
+  { href: "/finanza", label: "Finanza", icon: TrendingUp }, // Nuovo link Step 4
 ];
 
 export default function Sidebar() {

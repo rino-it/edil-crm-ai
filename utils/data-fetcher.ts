@@ -1091,3 +1091,199 @@ export async function getAgingAnalysis() {
 
   return fasce;
 }
+
+// ============================================================
+// STEP 4: DASHBOARD FINANZIARIA
+// ============================================================
+
+export async function getKPIFinanziariGlob() {
+  const supabase = await createClient();
+  
+  // 1. Recupera saldo iniziale e soglia da parametri_globali
+  const { data: params } = await supabase
+    .from('parametri_globali')
+    .select('saldo_iniziale_banca, soglia_alert_cassa')
+    .single();
+
+  const saldo_iniziale = params?.saldo_iniziale_banca || 0;
+  const soglia_alert = params?.soglia_alert_cassa || 5000;
+
+  // 2. Calcola Fatturato (Entrate totali documentate) e Costi (Uscite totali)
+  const { data: scadenze } = await supabase
+    .from('scadenze_pagamento')
+    .select('tipo, importo_totale, importo_pagato, stato');
+
+  let fatturato = 0;
+  let costi = 0;
+  let cassa_attuale = saldo_iniziale;
+
+  if (scadenze) {
+    scadenze.forEach(s => {
+      if (s.tipo === 'entrata') {
+        fatturato += s.importo_totale;
+        cassa_attuale += (s.importo_pagato || 0);
+      } else if (s.tipo === 'uscita') {
+        costi += s.importo_totale;
+        cassa_attuale -= (s.importo_pagato || 0);
+      }
+    });
+  }
+
+  const margine = fatturato - costi;
+  const dso = await calcolaDSO(); // Presume che calcolaDSO sia già definita nello Step 3
+
+  return { 
+    cassa_attuale, 
+    fatturato, 
+    costi, 
+    margine, 
+    dso,
+    soglia_alert
+  };
+}
+
+export async function getAgingAnalysisData() {
+  const supabase = await createClient();
+  const oggi = new Date();
+  
+  // Prendi solo le entrate non pagate e scadute
+  const { data } = await supabase
+    .from('scadenze_pagamento')
+    .select('importo_totale, importo_pagato, data_scadenza')
+    .eq('tipo', 'entrata')
+    .neq('stato', 'pagato')
+    .lt('data_scadenza', oggi.toISOString().split('T')[0]);
+
+  const fasce = {
+    f30: { label: "0-30 gg", importo: 0, count: 0, color: "#eab308" },
+    f60: { label: "31-60 gg", importo: 0, count: 0, color: "#f97316" },
+    f90: { label: "61-90 gg", importo: 0, count: 0, color: "#ea580c" },
+    fOltre: { label: "> 90 gg", importo: 0, count: 0, color: "#ef4444" }
+  };
+
+  if (data) {
+    data.forEach(s => {
+      const scadenza = new Date(s.data_scadenza);
+      const diffGiorni = Math.floor((oggi.getTime() - scadenza.getTime()) / (1000 * 60 * 60 * 24));
+      const residuo = s.importo_totale - (s.importo_pagato || 0);
+
+      if (diffGiorni <= 30) { fasce.f30.importo += residuo; fasce.f30.count++; }
+      else if (diffGiorni <= 60) { fasce.f60.importo += residuo; fasce.f60.count++; }
+      else if (diffGiorni <= 90) { fasce.f90.importo += residuo; fasce.f90.count++; }
+      else { fasce.fOltre.importo += residuo; fasce.fOltre.count++; }
+    });
+  }
+
+  return Object.values(fasce);
+}
+
+export async function getFinanzaPerCantiere() {
+  const supabase = await createClient();
+  
+  // Recupera i cantieri attivi e unisce le relative scadenze
+  const { data: cantieri } = await supabase
+    .from('cantieri')
+    .select(`
+      id, nome, stato, percentuale_completamento,
+      scadenze_pagamento ( tipo, importo_totale )
+    `)
+    .in('stato', ['attivo', 'pianificato']);
+
+  if (!cantieri) return [];
+
+  return cantieri.map(c => {
+    let entrate = 0;
+    let uscite = 0;
+
+    c.scadenze_pagamento?.forEach((s: any) => {
+      if (s.tipo === 'entrata') entrate += s.importo_totale;
+      if (s.tipo === 'uscita') uscite += s.importo_totale;
+    });
+
+    return {
+      id: c.id,
+      nome: c.nome,
+      completamento: c.percentuale_completamento || 0,
+      entrate,
+      uscite,
+      margine: entrate - uscite
+    };
+  });
+}
+
+// Simulazione della vista SQL per il Cashflow Previsionale
+export async function getCashflowPrevisionale(giorni: number = 90) {
+  const supabase = await createClient();
+  const kpis = await getKPIFinanziariGlob();
+  let cassaProgressiva = kpis.cassa_attuale;
+
+  const oggi = new Date();
+  const limite = new Date();
+  limite.setDate(limite.getDate() + giorni);
+
+  const { data: scadenze } = await supabase
+    .from('scadenze_pagamento')
+    .select('tipo, importo_totale, importo_pagato, data_scadenza')
+    .neq('stato', 'pagato')
+    .gte('data_scadenza', oggi.toISOString().split('T')[0])
+    .lte('data_scadenza', limite.toISOString().split('T')[0])
+    .order('data_scadenza', { ascending: true });
+
+  const proiezioni: Array<{ data: string, saldo: number, entrate_giorno: number, uscite_giorno: number }> = [];
+  
+  // Inseriamo il punto di partenza (Oggi)
+  proiezioni.push({
+    data: oggi.toISOString().split('T')[0],
+    saldo: cassaProgressiva,
+    entrate_giorno: 0,
+    uscite_giorno: 0
+  });
+
+  // Aggruppiamo le scadenze per giorno
+  const timeline: Record<string, { entrate: number, uscite: number }> = {};
+  
+  if (scadenze) {
+    scadenze.forEach(s => {
+      const dataStr = s.data_scadenza;
+      const residuo = s.importo_totale - (s.importo_pagato || 0);
+      
+      if (!timeline[dataStr]) timeline[dataStr] = { entrate: 0, uscite: 0 };
+      if (s.tipo === 'entrata') timeline[dataStr].entrate += residuo;
+      if (s.tipo === 'uscita') timeline[dataStr].uscite += residuo;
+    });
+  }
+
+  // Costruiamo la progressione (step di 7 giorni per non appesantire il grafico)
+  for (let i = 1; i <= giorni; i += 7) {
+    const dataStep = new Date(oggi);
+    dataStep.setDate(dataStep.getDate() + i);
+    const dataStr = dataStep.toISOString().split('T')[0];
+    
+    // Sommiamo tutto ciò che scade tra il punto precedente e questo step
+    let entratePeriodo = 0;
+    let uscitePeriodo = 0;
+
+    Object.keys(timeline).forEach(giorno => {
+      const dataGiorno = new Date(giorno);
+      const dataStepPrec = new Date(dataStep);
+      dataStepPrec.setDate(dataStepPrec.getDate() - 7);
+      
+      if (dataGiorno > dataStepPrec && dataGiorno <= dataStep) {
+        entratePeriodo += timeline[giorno].entrate;
+        uscitePeriodo += timeline[giorno].uscite;
+      }
+    });
+
+    cassaProgressiva += entratePeriodo;
+    cassaProgressiva -= uscitePeriodo;
+
+    proiezioni.push({
+      data: dataStr,
+      saldo: cassaProgressiva,
+      entrate_giorno: entratePeriodo,
+      uscite_giorno: uscitePeriodo
+    });
+  }
+
+  return proiezioni;
+}
