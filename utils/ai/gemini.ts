@@ -580,10 +580,10 @@ Formato: { "righe": [{ "codice": "string", "descrizione": "string", "unita_misur
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export async function matchRiconciliazioneBancaria(movimento: any, scadenzeAperte: any[]) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  
+  const apiKey = process.env.GOOGLE_API_KEY;
+
   if (!apiKey) {
-    console.warn("⚠️ API Key GEMINI_API_KEY mancante nelle variabili d'ambiente.");
+    console.warn("⚠️ API Key GOOGLE_API_KEY mancante nelle variabili d'ambiente.");
     return { scadenza_id: null, confidence: 0, motivo: "API Key mancante" };
   }
 
