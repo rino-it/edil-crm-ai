@@ -10,52 +10,52 @@ import {
 import CashflowChart from './CashflowChart'
 import AgingChart from './AgingChart'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  Wallet, 
-  Activity, 
-  BarChart3, 
-  HardHat,
-  ChevronRight
-} from 'lucide-react'
+import { TrendingUp, TrendingDown, Wallet, Activity, BarChart3, HardHat, ChevronRight, AlertCircle } from 'lucide-react'
 
-export const dynamic = 'force-dynamic' // Garantisce dati sempre freschi
+export const dynamic = 'force-dynamic'
 
 export default async function FinanzaPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // Fetching parallelo dei dati per ottimizzare le prestazioni
-  const [kpis, cashflowData, agingData, cantieriData] = await Promise.all([
+  // Fetching Parallelo (Nota: Ora facciamo due chiamate all'Aging)
+  const [kpis, cashflowData, agingCrediti, agingDebiti, cantieriData] = await Promise.all([
     getKPIFinanziariGlob(),
     getCashflowPrevisionale(90),
-    getAgingAnalysisData(),
+    getAgingAnalysisData('entrata'), // Clienti in ritardo
+    getAgingAnalysisData('uscita'),  // Fornitori che non abbiamo pagato (Dati da Excel!)
     getFinanzaPerCantiere()
   ])
 
-  const formatEuro = (val: number) => 
-    new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val)
+  const formatEuro = (val: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val)
 
   return (
     <div className="min-h-screen bg-zinc-50 p-8">
       <div className="max-w-7xl mx-auto space-y-8">
         
-        {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 flex items-center gap-3">
-            <TrendingUp className="h-8 w-8 text-blue-600" /> Finanza & Controllo
-          </h1>
-          <p className="text-zinc-500 mt-1">Monitoraggio flussi di cassa, scadenze e redditività commesse.</p>
+        {/* Header con Alert Cassa */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-zinc-900 flex items-center gap-3">
+              <TrendingUp className="h-8 w-8 text-blue-600" /> Finanza & Controllo
+            </h1>
+            <p className="text-zinc-500 mt-1">Cashflow reale, con impatto immediato dello storico arretrato.</p>
+          </div>
+          
+          {kpis.cassa_attuale < 0 && (
+            <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-2 rounded-lg text-sm flex items-center gap-2 font-medium animate-pulse">
+              <AlertCircle size={16} /> Attenzione: Esposizione di cassa rilevata.
+            </div>
+          )}
         </div>
 
         {/* SEZIONE 1: KPI Globali */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <Card className="bg-white shadow-sm border-l-4 border-l-blue-500">
+          <Card className={`bg-white shadow-sm border-l-4 ${kpis.cassa_attuale < 0 ? 'border-l-rose-500' : 'border-l-blue-500'}`}>
             <CardHeader className="pb-2">
               <CardTitle className="text-xs font-bold text-zinc-500 uppercase flex items-center justify-between">
-                Saldo Attuale <Wallet className="h-4 w-4 text-blue-500" />
+                Cassa (incluso arretrati) <Wallet className={`h-4 w-4 ${kpis.cassa_attuale < 0 ? 'text-rose-500' : 'text-blue-500'}`} />
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -68,7 +68,7 @@ export default async function FinanzaPage() {
           <Card className="bg-white shadow-sm border-l-4 border-l-emerald-500">
             <CardHeader className="pb-2">
               <CardTitle className="text-xs font-bold text-zinc-500 uppercase flex items-center justify-between">
-                Fatturato <TrendingUp className="h-4 w-4 text-emerald-500" />
+                Tot. Emesso <TrendingUp className="h-4 w-4 text-emerald-500" />
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -79,7 +79,7 @@ export default async function FinanzaPage() {
           <Card className="bg-white shadow-sm border-l-4 border-l-rose-500">
             <CardHeader className="pb-2">
               <CardTitle className="text-xs font-bold text-zinc-500 uppercase flex items-center justify-between">
-                Costi <TrendingDown className="h-4 w-4 text-rose-500" />
+                Tot. Impegnato <TrendingDown className="h-4 w-4 text-rose-500" />
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -90,7 +90,7 @@ export default async function FinanzaPage() {
           <Card className="bg-white shadow-sm border-l-4 border-l-indigo-500">
             <CardHeader className="pb-2">
               <CardTitle className="text-xs font-bold text-zinc-500 uppercase flex items-center justify-between">
-                Margine <Activity className="h-4 w-4 text-indigo-500" />
+                Bilancio Globale <Activity className="h-4 w-4 text-indigo-500" />
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -100,7 +100,7 @@ export default async function FinanzaPage() {
             </CardContent>
           </Card>
 
-          <Card className={`bg-white shadow-sm border-l-4 ${kpis.dso > 60 ? 'border-l-amber-500' : 'border-l-slate-500'}`}>
+          <Card className={`bg-white shadow-sm border-l-4 border-l-slate-500`}>
             <CardHeader className="pb-2">
               <CardTitle className="text-xs font-bold text-zinc-500 uppercase flex items-center justify-between">
                 DSO <BarChart3 className="h-4 w-4 text-slate-500" />
@@ -112,39 +112,51 @@ export default async function FinanzaPage() {
           </Card>
         </div>
 
-        {/* SEZIONE 2 & 3: Grafici (Cashflow + Aging) */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Cashflow Previsionale */}
-          <Card className="md:col-span-2 shadow-sm bg-white">
+        {/* SEZIONE 2 & 3: Grafici e Aging Analisi (Splittata) */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Cashflow Previsionale (2 colonne) */}
+          <Card className="lg:col-span-2 shadow-sm bg-white">
             <CardHeader>
-              <CardTitle className="text-lg">Proiezione Cashflow (90gg)</CardTitle>
-              <CardDescription>Andamento stimato della cassa in base alle scadenze attive.</CardDescription>
+              <CardTitle className="text-lg">Proiezione Liquidità (90gg)</CardTitle>
+              <CardDescription>Il punto iniziale include il peso di <strong>tutti i debiti/crediti scaduti nel passato</strong>.</CardDescription>
             </CardHeader>
             <CardContent className="pt-2">
               <CashflowChart data={cashflowData} soglia={kpis.soglia_alert} />
             </CardContent>
           </Card>
 
-          {/* Aging Analysis */}
-          <Card className="md:col-span-1 shadow-sm bg-white">
-            <CardHeader>
-              <CardTitle className="text-lg">Aging Crediti</CardTitle>
-              <CardDescription>Anzianità delle fatture da incassare.</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-2">
-              <AgingChart data={agingData} />
-            </CardContent>
-          </Card>
+          {/* Aging Analysis (1 colonna impilata) */}
+          <div className="flex flex-col gap-6">
+            <Card className="shadow-sm bg-white border-t-4 border-t-emerald-500">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-sm">⚠️ Ritardi Clienti (Da Incassare)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <AgingChart data={agingCrediti} />
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-sm bg-white border-t-4 border-t-rose-500">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-sm">⚠️ Ritardi Fornitori (Da Pagare)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <AgingChart data={agingDebiti} />
+              </CardContent>
+            </Card>
+          </div>
         </div>
 
-        {/* SEZIONE 4: Analisi di Commessa (Cantieri) */}
+        {/* SEZIONE 4: Analisi di Commessa */}
         <div>
           <h2 className="text-xl font-bold tracking-tight text-zinc-900 mb-4 flex items-center gap-2">
-            <HardHat className="h-5 w-5 text-zinc-400" /> Redditività per Cantiere
+            <HardHat className="h-5 w-5 text-zinc-400" /> Redditività per Cantiere (Scadenze Assegnate)
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-4">
             {cantieriData.length === 0 ? (
-              <div className="col-span-full text-zinc-500 text-sm italic">Nessun cantiere attivo rilevato.</div>
+              <div className="col-span-full text-zinc-500 text-sm italic">
+                Nessun cantiere attivo, oppure nessuna fattura è stata ancora assegnata a un cantiere nello scadenziario.
+              </div>
             ) : (
               cantieriData.map(cantiere => (
                 <Link key={cantiere.id} href={`/cantieri/${cantiere.id}`}>
@@ -158,21 +170,16 @@ export default async function FinanzaPage() {
                       <ChevronRight className="h-4 w-4 text-zinc-300 group-hover:text-blue-500 transition-colors" />
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      {/* Barra completamento */}
                       <div className="space-y-1">
                         <div className="flex justify-between text-[10px] font-bold text-zinc-500 uppercase">
                           <span>Completamento</span>
                           <span>{cantiere.completamento}%</span>
                         </div>
                         <div className="h-1.5 w-full bg-zinc-100 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-blue-500 rounded-full" 
-                            style={{ width: `${cantiere.completamento}%` }}
-                          />
+                          <div className="h-full bg-blue-500 rounded-full" style={{ width: `${cantiere.completamento}%` }} />
                         </div>
                       </div>
                       
-                      {/* Metriche */}
                       <div className="grid grid-cols-2 gap-2 text-xs">
                         <div className="bg-emerald-50 p-2 rounded-md">
                           <div className="text-[9px] font-bold text-emerald-600 uppercase mb-0.5">Entrate</div>

@@ -1093,7 +1093,7 @@ export async function getAgingAnalysis() {
 }
 
 // ============================================================
-// STEP 4: DASHBOARD FINANZIARIA
+// STEP 4: DASHBOARD FINANZIARIA (MOTORE EVOLUTO)
 // ============================================================
 
 export async function getKPIFinanziariGlob() {
@@ -1120,30 +1120,27 @@ export async function getKPIFinanziariGlob() {
 
   if (scadenze) {
     scadenze.forEach(s => {
+      const pagato = Number(s.importo_pagato) || 0;
+      const totale = Number(s.importo_totale) || 0;
+      
       if (s.tipo === 'entrata') {
-        fatturato += s.importo_totale;
-        cassa_attuale += (s.importo_pagato || 0);
+        fatturato += totale;
+        cassa_attuale += pagato;
       } else if (s.tipo === 'uscita') {
-        costi += s.importo_totale;
-        cassa_attuale -= (s.importo_pagato || 0);
+        costi += totale;
+        cassa_attuale -= pagato;
       }
     });
   }
 
   const margine = fatturato - costi;
-  
-  // Calcolo DSO base di fallback (nel caso calcolaDSO non sia esportata)
-  let dso = 0;
-  try {
-    // Se hai già la funzione calcolaDSO nel file, questa riga funzionerà:
-    // dso = await calcolaDSO(); 
-    dso = 30; // Fallback temporaneo per non bloccare la build
-  } catch(e) {}
+  const dso = 30; // Placeholder per DSO (implementeremo formula complessa in seguito)
 
   return { cassa_attuale, fatturato, costi, margine, dso, soglia_alert };
 }
 
-export async function getAgingAnalysisData() {
+// Modificata: accetta il tipo (entrata o uscita) per analizzare sia crediti che debiti
+export async function getAgingAnalysisData(tipo: 'entrata' | 'uscita' = 'entrata') {
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -1153,22 +1150,22 @@ export async function getAgingAnalysisData() {
   const { data } = await supabase
     .from('scadenze_pagamento')
     .select('importo_totale, importo_pagato, data_scadenza')
-    .eq('tipo', 'entrata')
+    .eq('tipo', tipo)
     .neq('stato', 'pagato')
     .lt('data_scadenza', oggi.toISOString().split('T')[0]);
 
   const fasce = {
-    f30: { label: "0-30 gg", importo: 0, count: 0, color: "#eab308" },
-    f60: { label: "31-60 gg", importo: 0, count: 0, color: "#f97316" },
-    f90: { label: "61-90 gg", importo: 0, count: 0, color: "#ea580c" },
-    fOltre: { label: "> 90 gg", importo: 0, count: 0, color: "#ef4444" }
+    f30: { label: "0-30 gg", importo: 0, count: 0, color: tipo === 'entrata' ? "#eab308" : "#fbbf24" },
+    f60: { label: "31-60 gg", importo: 0, count: 0, color: tipo === 'entrata' ? "#f97316" : "#f59e0b" },
+    f90: { label: "61-90 gg", importo: 0, count: 0, color: tipo === 'entrata' ? "#ea580c" : "#ea580c" },
+    fOltre: { label: "> 90 gg", importo: 0, count: 0, color: tipo === 'entrata' ? "#ef4444" : "#dc2626" }
   };
 
   if (data) {
     data.forEach(s => {
       const scadenza = new Date(s.data_scadenza);
       const diffGiorni = Math.floor((oggi.getTime() - scadenza.getTime()) / (1000 * 60 * 60 * 24));
-      const residuo = s.importo_totale - (s.importo_pagato || 0);
+      const residuo = (Number(s.importo_totale) || 0) - (Number(s.importo_pagato) || 0);
 
       if (diffGiorni <= 30) { fasce.f30.importo += residuo; fasce.f30.count++; }
       else if (diffGiorni <= 60) { fasce.f60.importo += residuo; fasce.f60.count++; }
@@ -1188,34 +1185,22 @@ export async function getFinanzaPerCantiere() {
   
   const { data: cantieri } = await supabase
     .from('cantieri')
-    .select(`
-      id, nome, stato, percentuale_completamento,
-      scadenze_pagamento ( tipo, importo_totale )
-    `)
+    .select(`id, nome, stato, percentuale_completamento, scadenze_pagamento ( tipo, importo_totale )`)
     .in('stato', ['attivo', 'pianificato']);
 
   if (!cantieri) return [];
 
   return cantieri.map(c => {
-    let entrate = 0;
-    let uscite = 0;
-
+    let entrate = 0; let uscite = 0;
     c.scadenze_pagamento?.forEach((s: any) => {
-      if (s.tipo === 'entrata') entrate += s.importo_totale;
-      if (s.tipo === 'uscita') uscite += s.importo_totale;
+      if (s.tipo === 'entrata') entrate += Number(s.importo_totale) || 0;
+      if (s.tipo === 'uscita') uscite += Number(s.importo_totale) || 0;
     });
-
-    return {
-      id: c.id,
-      nome: c.nome,
-      completamento: c.percentuale_completamento || 0,
-      entrate,
-      uscite,
-      margine: entrate - uscite
-    };
+    return { id: c.id, nome: c.nome, completamento: c.percentuale_completamento || 0, entrate, uscite, margine: entrate - uscite };
   });
 }
 
+// Modificata: Il Cashflow ora considera il "peso" immediato di tutte le fatture già scadute
 export async function getCashflowPrevisionale(giorni: number = 90) {
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -1228,43 +1213,54 @@ export async function getCashflowPrevisionale(giorni: number = 90) {
   const limite = new Date();
   limite.setDate(limite.getDate() + giorni);
 
+  // Scarica TUTTO lo scaduto e il futuro non pagato
   const { data: scadenze } = await supabase
     .from('scadenze_pagamento')
     .select('tipo, importo_totale, importo_pagato, data_scadenza')
     .neq('stato', 'pagato')
-    .gte('data_scadenza', oggi.toISOString().split('T')[0])
-    .lte('data_scadenza', limite.toISOString().split('T')[0])
-    .order('data_scadenza', { ascending: true });
+    .lte('data_scadenza', limite.toISOString().split('T')[0]);
+
+  let debitiScaduti = 0;
+  let creditiScaduti = 0;
+  const timeline: Record<string, { entrate: number, uscite: number }> = {};
+
+  if (scadenze) {
+    scadenze.forEach(s => {
+      const residuo = (Number(s.importo_totale) || 0) - (Number(s.importo_pagato) || 0);
+      const dataScad = new Date(s.data_scadenza);
+
+      // Se è nel passato, lo accumuliamo nel "Giorno 0" (impatto immediato)
+      if (dataScad < oggi) {
+        if (s.tipo === 'entrata') creditiScaduti += residuo;
+        if (s.tipo === 'uscita') debitiScaduti += residuo;
+      } else {
+        // Altrimenti lo mettiamo nella timeline futura
+        const dataStr = s.data_scadenza;
+        if (!timeline[dataStr]) timeline[dataStr] = { entrate: 0, uscite: 0 };
+        if (s.tipo === 'entrata') timeline[dataStr].entrate += residuo;
+        if (s.tipo === 'uscita') timeline[dataStr].uscite += residuo;
+      }
+    });
+  }
+
+  // Applichiamo l'urto dello scaduto sulla cassa di partenza
+  cassaProgressiva = cassaProgressiva + creditiScaduti - debitiScaduti;
 
   const proiezioni: Array<{ data: string, saldo: number, entrate_giorno: number, uscite_giorno: number }> = [];
   
   proiezioni.push({
     data: oggi.toISOString().split('T')[0],
     saldo: cassaProgressiva,
-    entrate_giorno: 0,
-    uscite_giorno: 0
+    entrate_giorno: creditiScaduti, // Mostriamo sul grafico quanto scaduto c'è da sistemare subito
+    uscite_giorno: debitiScaduti
   });
-
-  const timeline: Record<string, { entrate: number, uscite: number }> = {};
-  
-  if (scadenze) {
-    scadenze.forEach(s => {
-      const dataStr = s.data_scadenza;
-      const residuo = s.importo_totale - (s.importo_pagato || 0);
-      
-      if (!timeline[dataStr]) timeline[dataStr] = { entrate: 0, uscite: 0 };
-      if (s.tipo === 'entrata') timeline[dataStr].entrate += residuo;
-      if (s.tipo === 'uscita') timeline[dataStr].uscite += residuo;
-    });
-  }
 
   for (let i = 1; i <= giorni; i += 7) {
     const dataStep = new Date(oggi);
     dataStep.setDate(dataStep.getDate() + i);
     const dataStr = dataStep.toISOString().split('T')[0];
     
-    let entratePeriodo = 0;
-    let uscitePeriodo = 0;
+    let entratePeriodo = 0; let uscitePeriodo = 0;
 
     Object.keys(timeline).forEach(giorno => {
       const dataGiorno = new Date(giorno);
@@ -1277,8 +1273,7 @@ export async function getCashflowPrevisionale(giorni: number = 90) {
       }
     });
 
-    cassaProgressiva += entratePeriodo;
-    cassaProgressiva -= uscitePeriodo;
+    cassaProgressiva += entratePeriodo - uscitePeriodo;
 
     proiezioni.push({
       data: dataStr,
