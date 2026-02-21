@@ -571,3 +571,59 @@ Formato: { "righe": [{ "codice": "string", "descrizione": "string", "unita_misur
   
   return JSON.parse(cleanJson);
 }
+
+// ============================================================================
+// STEP 5: RICONCILIAZIONE BANCARIA AI
+// ============================================================================
+
+export async function matchRiconciliazioneBancaria(movimento: any, scadenzeAperte: any[]) {
+  if (!genAI) {
+    return { scadenza_id: null, confidence: 0, motivo: "API Key mancante" };
+  }
+
+  const model = genAI.getGenerativeModel({ 
+    model: "gemini-2.5-flash",
+    generationConfig: { responseMimeType: "application/json" } 
+  });
+
+  const prompt = `
+Sei un software avanzato di riconciliazione bancaria.
+Devi trovare la fattura/scadenza corretta che corrisponde al seguente movimento bancario.
+
+MOVIMENTO BANCA (Cosa leggo nell'estratto conto):
+- Data: ${movimento.data_operazione}
+- Importo: ${movimento.importo} € (${movimento.importo > 0 ? 'Entrata / Cliente' : 'Uscita / Fornitore'})
+- Causale: "${movimento.descrizione}"
+
+SCADENZE APERTE DISPONIBILI:
+${JSON.stringify(scadenzeAperte.map(s => ({
+    id: s.id,
+    soggetto: s.anagrafica_soggetti?.ragione_sociale || 'N/D',
+    importo_da_saldare: Number(s.importo_totale) - Number(s.importo_pagato || 0),
+    data_scadenza: s.data_scadenza,
+    riferimento: s.fattura_riferimento
+})), null, 2)}
+
+REGOLE DI MATCHING (Confidence da 0.0 a 1.0):
+1. MATCH ESATTO (>0.90): L'importo coincide perfettamente (ignorando il segno) E la causale contiene chiaramente il nome del soggetto o il riferimento.
+2. MATCH FUZZY (0.60 - 0.89): L'importo differisce di poco (es. commissioni bancarie) ma la causale e la data sono chiaramente correlate al soggetto.
+3. MATCH DEBOLE (<0.60): L'importo coincide ma la causale è muta o generica.
+4. NESSUN MATCH: Restituisci scadenza_id: null e confidence: 0.
+
+Rispondi in JSON puro con questa esatta struttura:
+{
+  "scadenza_id": "id-della-scadenza-trovata-oppure-null",
+  "confidence": 0.95,
+  "motivo": "Breve spiegazione del ragionamento"
+}
+`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    let textInfo = result.response.text().trim();
+    return JSON.parse(textInfo);
+  } catch (error) {
+    console.error("❌ Errore Gemini Matching:", error);
+    return { scadenza_id: null, confidence: 0, motivo: "Errore AI" };
+  }
+}

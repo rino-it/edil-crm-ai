@@ -1285,3 +1285,139 @@ export async function getCashflowPrevisionale(giorni: number = 90) {
 
   return proiezioni;
 }
+
+// ============================================================
+// STEP 5: RICONCILIAZIONE BANCARIA (PARSER E DB)
+// ============================================================
+
+export function parseCSVBanca(csvText: string) {
+  // Gestisce i formati CSV con separatore ";" (standard banche italiane)
+  const lines = csvText.split('\n').filter(l => l.trim() !== '');
+  const movimenti = [];
+
+  // Partiamo da i=1 per saltare l'intestazione (Data Operazione;Data Valuta;Descrizione;Dare;Avere;Saldo)
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(';');
+    if (cols.length < 5) continue; // Salta righe malformate
+
+    const dataOpRaw = cols[0].trim();
+    // Convertiamo DD/MM/YYYY in YYYY-MM-DD per il database
+    let data_operazione = dataOpRaw;
+    if (dataOpRaw.includes('/')) {
+      const parts = dataOpRaw.split('/');
+      if (parts.length === 3) {
+        data_operazione = `${parts[2]}-${parts[1]}-${parts[0]}`;
+      }
+    }
+
+    const descrizione = cols[2].trim();
+    
+    // Gestione Dare/Avere (i CSV spesso hanno numeri come "1.500,00" o "1500.00")
+    const parseImporto = (val: string) => {
+      if (!val) return 0;
+      // Rimuove i punti delle migliaia e converte la virgola in punto decimale
+      const pulito = val.replace(/\./g, '').replace(',', '.');
+      return parseFloat(pulito) || 0;
+    };
+
+    const dare = parseImporto(cols[3]); // Uscite
+    const avere = parseImporto(cols[4]); // Entrate
+    
+    // L'importo sarà positivo per le entrate, negativo per le uscite
+    const importo = avere > 0 ? avere : -dare;
+
+    if (importo !== 0) {
+      movimenti.push({
+        data_operazione,
+        descrizione,
+        importo,
+        stato: 'non_riconciliato'
+      });
+    }
+  }
+  return movimenti;
+}
+
+export async function importMovimentiBanca(movimenti: any[]) {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+  
+  // Inseriamo i movimenti (Supabase ignorerà i duplicati se imposteremo un vincolo in futuro)
+  const { data, error } = await supabase
+    .from('movimenti_banca')
+    .insert(movimenti)
+    .select();
+    
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function getMovimentiNonRiconciliati() {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+  
+  const { data } = await supabase
+    .from('movimenti_banca')
+    .select('*')
+    .eq('stato', 'non_riconciliato')
+    .order('data_operazione', { ascending: false });
+    
+  return data || [];
+}
+
+export async function getScadenzeApertePerMatch(tipo: 'entrata' | 'uscita') {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+  
+  const { data } = await supabase
+    .from('scadenze_pagamento')
+    .select(`id, fattura_riferimento, importo_totale, importo_pagato, data_scadenza, tipo, anagrafica_soggetti(ragione_sociale)`)
+    .eq('tipo', tipo)
+    .neq('stato', 'pagato');
+    
+  return data || [];
+}
+
+export async function confermaRiconciliazione(movimento_id: string, scadenza_id: string, importo_movimento: number) {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+  
+  // 1. Segna il movimento come riconciliato
+  await supabase
+    .from('movimenti_banca')
+    .update({ 
+      stato: 'riconciliato', 
+      scadenza_id: scadenza_id 
+    })
+    .eq('id', movimento_id);
+
+  // 2. Recupera la scadenza attuale per sommare il pagato
+  const { data: scadenza } = await supabase
+    .from('scadenze_pagamento')
+    .select('importo_totale, importo_pagato')
+    .eq('id', scadenza_id)
+    .single();
+
+  if (scadenza) {
+    const nuovoPagato = (Number(scadenza.importo_pagato) || 0) + Math.abs(importo_movimento);
+    const nuovoStato = nuovoPagato >= Number(scadenza.importo_totale) ? 'pagato' : 'parziale';
+    
+    // 3. Aggiorna la scadenza
+    await supabase
+      .from('scadenze_pagamento')
+      .update({
+        importo_pagato: nuovoPagato,
+        stato: nuovoStato,
+        data_pagamento: new Date().toISOString().split('T')[0]
+      })
+      .eq('id', scadenza_id);
+  }
+}
