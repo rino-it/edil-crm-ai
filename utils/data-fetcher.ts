@@ -1291,25 +1291,59 @@ export async function getCashflowPrevisionale(giorni: number = 90) {
 // ============================================================
 
 export function parseCSVBanca(csvText: string) {
-  // Gestisce i formati CSV con separatore ";" (standard banche italiane)
-  const lines = csvText.split('\n').filter(l => l.trim() !== '');
+  // Pulizia iniziale: rimuoviamo spazi bianchi eccessivi
+  const lines = csvText.split('\n').map(l => l.trim()).filter(l => l !== '');
   const movimenti = [];
 
-  // Partiamo da i=1 per saltare l'intestazione (Data Operazione;Data Valuta;Descrizione;Dare;Avere;Saldo)
-  for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(';');
-    if (cols.length < 5) continue; // Salta righe malformate
+  console.log("📊 DEBUG CSV: Prime 3 righe rilevate:", lines.slice(0, 3));
 
-    const dataOpRaw = cols[0].trim();
-    // Convertiamo DD/MM/YYYY in YYYY-MM-DD per il database
-    let data_operazione = dataOpRaw;
-    if (dataOpRaw.includes('/')) {
-      const parts = dataOpRaw.split('/');
-      if (parts.length === 3) {
-        data_operazione = `${parts[2]}-${parts[1]}-${parts[0]}`;
-      }
+  for (let i = 1; i < lines.length; i++) {
+    // Prova prima col punto e virgola, se fallisce prova con la virgola
+    let cols = lines[i].split(';');
+    if (cols.length < 5) cols = lines[i].split(','); 
+
+    if (cols.length < 5) {
+      console.warn(`⚠️ Riga ${i} scartata: troppe poche colonne (${cols.length})`);
+      continue;
     }
 
+    const dataOpRaw = cols[0].trim();
+    let data_operazione = dataOpRaw;
+    
+    // Supporto per vari formati data (DD/MM/YYYY o DD-MM-YYYY)
+    const separator = dataOpRaw.includes('/') ? '/' : '-';
+    const parts = dataOpRaw.split(separator);
+    if (parts.length === 3) {
+      // Se l'anno è il primo elemento (YYYY-MM-DD), lo teniamo così, altrimenti invertiamo
+      data_operazione = parts[2].length === 4 ? `${parts[2]}-${parts[1]}-${parts[0]}` : dataOpRaw;
+    }
+
+    const descrizione = cols[2]?.trim() || "Senza descrizione";
+    
+    const parseImporto = (val: string) => {
+      if (!val) return 0;
+      // Toglie valuta, spazi, e converte formato europeo (1.200,00) in standard (1200.00)
+      const pulito = val.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.');
+      return parseFloat(pulito) || 0;
+    };
+
+    const dare = parseImporto(cols[3]); 
+    const avere = parseImporto(cols[4]); 
+    const importo = avere !== 0 ? avere : -dare;
+
+    if (importo !== 0) {
+      movimenti.push({
+        data_operazione,
+        descrizione,
+        importo,
+        stato: 'non_riconciliato'
+      });
+    }
+  }
+  
+  console.log(`✅ Analisi completata: ${movimenti.length} movimenti validi trovati.`);
+  return movimenti;
+}
     const descrizione = cols[2].trim();
     
     // Gestione Dare/Avere (i CSV spesso hanno numeri come "1.500,00" o "1500.00")
