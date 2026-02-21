@@ -16,7 +16,8 @@ import {
   Filter,
   CheckCircle2,
   MoreHorizontal,
-  Plus
+  Plus,
+  ArrowRight
 } from "lucide-react"
 import Link from 'next/link'
 import { CantiereFilter } from "@/components/CantiereFilter"
@@ -50,229 +51,226 @@ export default async function ScadenzePage({
     new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val)
 
   return (
-    <div className="min-h-screen bg-zinc-50 p-8">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className="min-h-screen bg-zinc-50 p-4 md:p-8 pb-24">
+      <div className="max-w-7xl mx-auto space-y-6 md:space-y-8">
         
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-zinc-900 flex items-center gap-3">
-              <CalendarCheck className="h-8 w-8 text-blue-600" /> Scadenziario Pagamenti
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 flex items-center gap-3">
+              <CalendarCheck className="h-6 w-6 md:h-8 md:w-8 text-blue-600" /> Scadenziario
             </h1>
-            <p className="text-zinc-500">Gestione flussi di cassa e monitoraggio tempi medi di incasso.</p>
+            <p className="text-sm text-zinc-500">Monitoraggio flussi di cassa e scadenze.</p>
           </div>
           
-          <Button className="bg-blue-600 hover:bg-blue-700">
+          <Button className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 h-12 md:h-10">
             <Plus className="mr-2 h-4 w-4" /> Nuova Scadenza
           </Button>
         </div>
 
         {/* Banner Errore */}
         {params.error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm font-medium">
             {params.error}
           </div>
         )}
 
-        {/* KPI Cards (Priorità Crediti) */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="border-l-4 border-l-green-500 bg-white shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs font-bold text-zinc-500 uppercase tracking-wider">💰 Da Incassare</CardTitle>
-              <TrendingUp className="h-4 w-4 text-green-500" />
+        {/* KPI Cards: Griglia responsiva */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card className="border-l-4 border-l-green-500 shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+              <CardTitle className="text-[10px] font-bold text-zinc-500 uppercase">💰 Da Incassare</CardTitle>
+              <TrendingUp size={16} className="text-green-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-black text-zinc-900">{formatEuro(kpis.da_incassare)}</div>
-              <p className="text-[10px] text-zinc-400 mt-1">Crediti clienti attivi</p>
+              <div className="text-xl font-black">{formatEuro(kpis.da_incassare)}</div>
             </CardContent>
           </Card>
 
-          <Card className="border-l-4 border-l-orange-500 bg-white shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs font-bold text-zinc-500 uppercase tracking-wider">💸 Da Pagare</CardTitle>
-              <Wallet className="h-4 w-4 text-orange-500" />
+          <Card className="border-l-4 border-l-orange-500 shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+              <CardTitle className="text-[10px] font-bold text-zinc-500 uppercase">💸 Da Pagare</CardTitle>
+              <Wallet size={16} className="text-orange-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-black text-zinc-900">{formatEuro(kpis.da_pagare)}</div>
-              <p className="text-[10px] text-zinc-400 mt-1">Debiti fornitori aperti</p>
+              <div className="text-xl font-black">{formatEuro(kpis.da_pagare)}</div>
             </CardContent>
           </Card>
 
-          <Card className={`border-l-4 border-l-red-600 shadow-sm ${kpis.scaduto > 0 ? 'bg-red-50 animate-pulse' : 'bg-white'}`}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs font-bold text-red-600 uppercase tracking-wider">⚠️ Scaduto</CardTitle>
-              <AlertTriangle className="h-4 w-4 text-red-600" />
+          <Card className={`border-l-4 border-l-red-600 shadow-sm ${kpis.scaduto > 0 ? 'bg-red-50' : ''}`}>
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+              <CardTitle className="text-[10px] font-bold text-red-600 uppercase">⚠️ Scaduto</CardTitle>
+              <AlertTriangle size={16} className="text-red-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-black text-red-700">{formatEuro(kpis.scaduto)}</div>
-              <p className="text-[10px] text-red-400 mt-1 font-medium italic">Richiede sollecito immediato!</p>
+              <div className="text-xl font-black text-red-700">{formatEuro(kpis.scaduto)}</div>
             </CardContent>
           </Card>
 
-          <Card className={`border-l-4 shadow-sm bg-white ${kpis.dso > 60 ? 'border-l-yellow-500' : 'border-l-blue-500'}`}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs font-bold text-zinc-500 uppercase tracking-wider">📊 DSO (Incasso Medio)</CardTitle>
-              <BarChart3 className="h-4 w-4 text-blue-500" />
+          <Card className="border-l-4 border-l-blue-500 shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+              <CardTitle className="text-[10px] font-bold text-zinc-500 uppercase">📊 DSO</CardTitle>
+              <BarChart3 size={16} className="text-blue-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-black text-zinc-900">{kpis.dso} <span className="text-sm font-medium text-zinc-400">gg</span></div>
-              <p className="text-[10px] text-zinc-400 mt-1">Target aziendale: &lt; 60gg</p>
+              <div className="text-xl font-black">{kpis.dso} <span className="text-xs font-normal text-zinc-400">gg</span></div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Filtri e Navigazione */}
-        <Card className="shadow-sm border-zinc-200">
-          <CardHeader className="border-b border-zinc-100 bg-white rounded-t-xl">
+        {/* Filtri */}
+        <Card className="shadow-sm border-zinc-200 overflow-hidden">
+          <div className="p-4 bg-white border-b border-zinc-100">
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-              {/* Tabs Rapidi */}
-              <div className="flex flex-wrap bg-zinc-100 p-1 rounded-lg w-full md:w-auto">
-                <Link 
-                  href="/scadenze" 
-                  className={`px-4 py-1.5 rounded-md text-sm font-medium text-center transition-all ${(!params.tipo && !params.stato && !params.cantiere_id) ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}
-                >
-                  Tutte
-                </Link>
-                <Link 
-                  href="/scadenze?tipo=entrata" 
-                  className={`px-4 py-1.5 rounded-md text-sm font-medium text-center transition-all ${params.tipo === 'entrata' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}
-                >
-                  Entrate
-                </Link>
-                <Link 
-                  href="/scadenze?tipo=uscita" 
-                  className={`px-4 py-1.5 rounded-md text-sm font-medium text-center transition-all ${params.tipo === 'uscita' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}
-                >
-                  Uscite
-                </Link>
-                <Link 
-                  href="/scadenze?stato=scaduto" 
-                  className={`px-4 py-1.5 rounded-md text-sm font-medium text-center transition-all ${params.stato === 'scaduto' ? 'bg-white shadow-sm text-red-600' : 'text-zinc-500 hover:text-zinc-700'}`}
-                >
-                  Scadute
-                </Link>
-                <Link 
-                  href="/scadenze?cantiere_id=null" 
-                  className={`px-4 py-1.5 rounded-md text-sm font-medium text-center transition-all ${params.cantiere_id === 'null' ? 'bg-amber-100 shadow-sm text-amber-900 font-bold border border-amber-300' : 'text-zinc-500 hover:text-zinc-700'}`}
-                >
-                  ⚠️ Da Smistare
-                </Link>
+              <div className="flex flex-wrap justify-center md:justify-start gap-1 bg-zinc-100 p-1 rounded-xl w-full md:w-auto">
+                {['Tutte', 'Entrate', 'Uscite', 'Scadute'].map((label) => {
+                  const href = label === 'Tutte' ? '/scadenze' : 
+                               label === 'Scadute' ? '/scadenze?stato=scaduto' : 
+                               `/scadenze?tipo=${label.toLowerCase().slice(0, -1)}a`;
+                  const active = (label === 'Tutte' && !params.tipo && !params.stato) ||
+                                 (label === 'Scadute' && params.stato === 'scaduto') ||
+                                 (params.tipo === label.toLowerCase().slice(0, -1) + 'a');
+                  return (
+                    <Link key={label} href={href} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${active ? 'bg-white shadow-sm text-blue-600' : 'text-zinc-500'}`}>
+                      {label}
+                    </Link>
+                  )
+                })}
               </div>
-
-              {/* Filtro Cantiere (Usando il nuovo Client Component) */}
-              <div className="flex items-center gap-3 w-full md:w-auto">
-                <Filter size={14} className="text-zinc-400" />
+              <div className="flex items-center gap-2 w-full md:w-auto">
                 <CantiereFilter cantieri={cantieri} currentId={params.cantiere_id !== 'null' ? params.cantiere_id : undefined} />
               </div>
             </div>
-          </CardHeader>
+          </div>
 
-          {/* Tabella Scadenze */}
-          <CardContent className="p-0 bg-white overflow-x-auto">
-            <Table>
-              <TableHeader className="bg-zinc-50/50">
-                <TableRow>
-                  <TableHead className="w-[200px]">Soggetto / Cantiere</TableHead>
-                  <TableHead>Fattura / Rif.</TableHead>
-                  <TableHead className="text-right">Importo Totale</TableHead>
-                  <TableHead className="text-right">Pagato / Residuo</TableHead>
-                  <TableHead>Data Scadenza</TableHead>
-                  <TableHead>Stato</TableHead>
-                  <TableHead className="text-right">Azioni</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {scadenze.length === 0 ? (
+          <CardContent className="p-0">
+            
+            {/* VISTA DESKTOP: Tabella (nascosta su mobile) */}
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader className="bg-zinc-50/50">
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-20 text-zinc-400 italic">
-                      <CalendarCheck className="h-10 w-10 mx-auto mb-2 opacity-20" />
-                      Nessuna scadenza trovata con i filtri selezionati.
-                    </TableCell>
+                    <TableHead>Soggetto / Cantiere</TableHead>
+                    <TableHead>Fattura / Rif.</TableHead>
+                    <TableHead className="text-right">Totale</TableHead>
+                    <TableHead className="text-right">Residuo</TableHead>
+                    <TableHead>Scadenza</TableHead>
+                    <TableHead>Stato</TableHead>
+                    <TableHead className="text-right">Azioni</TableHead>
                   </TableRow>
-                ) : (
-                  scadenze.map((s) => (
-                    <TableRow key={s.id} className="hover:bg-zinc-50/80 transition-colors group">
+                </TableHeader>
+                <TableBody>
+                  {scadenze.map((s) => (
+                    <TableRow key={s.id} className="hover:bg-zinc-50/80 transition-colors">
                       <TableCell>
-                        <div className="flex flex-col gap-1 items-start">
-                          <span className="font-bold text-zinc-900 truncate">{s.soggetto?.ragione_sociale || 'N/D'}</span>
-                          {/* Selettore rapido del cantiere integrato */}
-                          <AssegnaCantiereSelect 
-                            scadenzaId={s.id} 
-                            currentCantiereId={(s.cantiere as any)?.id || null} 
-                            cantieri={cantieri} 
-                          />
+                        <div className="flex flex-col gap-1">
+                          <span className="font-bold text-zinc-900">{s.soggetto?.ragione_sociale || 'N/D'}</span>
+                          <AssegnaCantiereSelect scadenzaId={s.id} currentCantiereId={(s.cantiere as any)?.id || null} cantieri={cantieri} />
                         </div>
                       </TableCell>
-                      <TableCell className="text-xs text-zinc-500 font-mono">
-                        {s.fattura_riferimento || s.descrizione || '-'}
-                      </TableCell>
-                      <TableCell className="text-right font-mono font-bold text-zinc-900">
-                        {formatEuro(s.importo_totale)}
-                      </TableCell>
-                      <TableCell className="text-right text-[11px]">
-                        <div className="flex flex-col">
-                          <span className="text-emerald-600 font-semibold">{formatEuro(s.importo_pagato)}</span>
-                          <span className={`font-black ${s.importo_residuo > 0 ? 'text-rose-600' : 'text-zinc-300'}`}>
-                            {formatEuro(s.importo_residuo)}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm font-medium">
-                        {new Date(s.data_scadenza).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-                      </TableCell>
+                      <TableCell className="text-xs font-mono">{s.fattura_riferimento || '-'}</TableCell>
+                      <TableCell className="text-right font-mono font-bold">{formatEuro(s.importo_totale)}</TableCell>
+                      <TableCell className="text-right text-rose-600 font-black">{formatEuro(s.importo_residuo)}</TableCell>
+                      <TableCell className="text-sm font-medium">{new Date(s.data_scadenza).toLocaleDateString('it-IT')}</TableCell>
                       <TableCell>
-                        <Badge variant="outline" className={
-                          s.stato === 'pagato' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                          s.stato === 'scaduto' ? 'bg-rose-50 text-rose-700 border-rose-200 font-bold' :
-                          s.stato === 'parziale' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                          'bg-zinc-50 text-zinc-500 border-zinc-200'
-                        }>
-                          {s.stato.replace('_', ' ').toUpperCase()}
+                        <Badge variant="outline" className={s.stato === 'pagato' ? 'bg-emerald-50 text-emerald-700' : s.stato === 'scaduto' ? 'bg-rose-50 text-rose-700' : ''}>
+                          {s.stato.toUpperCase()}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          {s.stato !== 'pagato' && (
-                            <Link href={`/scadenze?pagamento_id=${s.id}`}>
-                              <Button variant="outline" size="sm" className="h-8 text-blue-600 border-blue-200 hover:bg-blue-50 hover:border-blue-400 transition-all">
-                                <CheckCircle2 size={14} className="mr-1.5" /> Paga
-                              </Button>
-                            </Link>
-                          )}
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-300 hover:text-zinc-600">
-                            <MoreHorizontal size={16} />
-                          </Button>
-                        </div>
+                        {s.stato !== 'pagato' && (
+                          <Link href={`/scadenze?pagamento_id=${s.id}`}>
+                            <Button variant="outline" size="sm" className="h-8 text-blue-600"><CheckCircle2 size={14} className="mr-1" /> Paga</Button>
+                          </Link>
+                        )}
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* VISTA MOBILE: Cards (nascosta su desktop) */}
+            <div className="md:hidden divide-y divide-zinc-100">
+              {scadenze.length === 0 ? (
+                <div className="p-12 text-center text-zinc-400 italic">Nessun dato.</div>
+              ) : (
+                scadenze.map((s) => (
+                  <div key={s.id} className="p-4 space-y-4 bg-white active:bg-zinc-50 transition-colors">
+                    <div className="flex justify-between items-start">
+                      <div className="space-y-1 max-w-[65%]">
+                        <div className="font-black text-zinc-900 text-sm leading-tight uppercase truncate">
+                          {s.soggetto?.ragione_sociale || 'N/D'}
+                        </div>
+                        <AssegnaCantiereSelect 
+                          scadenzaId={s.id} 
+                          currentCantiereId={(s.cantiere as any)?.id || null} 
+                          cantieri={cantieri} 
+                        />
+                      </div>
+                      <div className="text-right">
+                        <div className="text-base font-black text-zinc-900">{formatEuro(s.importo_totale)}</div>
+                        <Badge variant="outline" className={`text-[9px] h-5 ${s.stato === 'scaduto' ? 'border-rose-200 text-rose-600 bg-rose-50' : ''}`}>
+                          {s.stato.toUpperCase()}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 bg-zinc-50 p-3 rounded-xl border border-zinc-100">
+                      <div>
+                        <div className="text-[9px] font-bold text-zinc-400 uppercase">Residuo</div>
+                        <div className={`text-sm font-black ${s.importo_residuo > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                          {formatEuro(s.importo_residuo)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] font-bold text-zinc-400 uppercase">Scadenza</div>
+                        <div className="text-sm font-bold text-zinc-700">
+                          {new Date(s.data_scadenza).toLocaleDateString('it-IT')}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      {s.stato !== 'pagato' && (
+                        <Link href={`/scadenze?pagamento_id=${s.id}`} className="flex-1">
+                          <Button className="w-full h-11 bg-blue-600 font-bold rounded-xl shadow-md shadow-blue-100">
+                            Registra Pagamento <ArrowRight size={16} className="ml-2" />
+                          </Button>
+                        </Link>
+                      )}
+                      <Button variant="outline" className="h-11 w-12 rounded-xl border-zinc-200">
+                        <MoreHorizontal size={18} className="text-zinc-400" />
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
           </CardContent>
         </Card>
 
-        {/* Modal Mini-form Pagamento (Overlay se pagamento_id presente) */}
+        {/* Modal Pagamento (sempre centrato e pulito) */}
         {params.pagamento_id && (
-          <div className="fixed inset-0 bg-zinc-950/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-            <Card className="w-full max-w-md shadow-2xl border-zinc-200 bg-white">
-              <CardHeader className="border-b border-zinc-50 pb-4">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <CheckCircle2 className="text-emerald-500" /> Registra Pagamento
+          <div className="fixed inset-0 bg-zinc-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
+            <Card className="w-full max-w-md shadow-2xl rounded-2xl border-none">
+              <CardHeader className="text-center pb-2">
+                <CardTitle className="text-lg font-black uppercase flex items-center justify-center gap-2">
+                  <CheckCircle2 className="text-emerald-500" /> Conferma Pagamento
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-6">
-                <form action={segnaComePagato} className="space-y-5">
+              <CardContent className="p-6">
+                <form action={segnaComePagato} className="space-y-6">
                   <input type="hidden" name="scadenza_id" value={params.pagamento_id} />
                   
                   <div className="space-y-2">
-                    <label className="text-xs font-black uppercase text-zinc-500">Importo da registrare (€)</label>
+                    <label className="text-[10px] font-black uppercase text-zinc-400 ml-1">Importo Versato (€)</label>
                     <Input 
                       type="number" 
                       step="0.01" 
                       name="importo_pagamento" 
-                      placeholder="0.00" 
-                      className="text-lg font-mono font-bold h-12"
+                      className="h-14 text-2xl font-black text-center rounded-2xl border-zinc-200"
                       required 
                       autoFocus
                     />
@@ -280,36 +278,32 @@ export default async function ScadenzePage({
                   
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className="text-xs font-black uppercase text-zinc-500">Data Operazione</label>
-                      <Input 
-                        type="date" 
-                        name="data_pagamento" 
-                        defaultValue={new Date().toISOString().split('T')[0]} 
-                        className="h-10 text-sm"
-                      />
+                      <label className="text-[10px] font-black uppercase text-zinc-400 ml-1">Data</label>
+                      <Input type="date" name="data_pagamento" defaultValue={new Date().toISOString().split('T')[0]} className="h-12 rounded-xl" />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-black uppercase text-zinc-500">Metodo</label>
-                      <select name="metodo_pagamento" className="w-full h-10 rounded-md border border-zinc-200 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="Bonifico">Bonifico</option>
-                        <option value="RIBA">RIBA</option>
-                        <option value="Contanti">Contanti</option>
-                        <option value="Assegno">Assegno</option>
+                      <label className="text-[10px] font-black uppercase text-zinc-400 ml-1">Metodo</label>
+                      <select name="metodo_pagamento" className="w-full h-12 rounded-xl border border-zinc-200 px-3 text-sm font-bold">
+                        <option>Bonifico</option>
+                        <option>Contanti</option>
+                        <option>Assegno</option>
+                        <option>RIBA</option>
                       </select>
                     </div>
                   </div>
 
-                  <div className="pt-4 flex gap-3">
-                    <Link href="/scadenze" className="flex-1">
-                      <Button variant="outline" type="button" className="w-full h-11">Annulla</Button>
+                  <div className="flex flex-col gap-2 pt-2">
+                    <Button type="submit" className="w-full h-14 bg-zinc-900 text-white font-black rounded-2xl text-base">Conferma Operazione</Button>
+                    <Link href="/scadenze" className="w-full">
+                      <Button variant="ghost" type="button" className="w-full h-10 text-zinc-400 font-bold">Annulla</Button>
                     </Link>
-                    <Button type="submit" className="flex-1 bg-zinc-900 hover:bg-black text-white h-11 font-bold">Conferma Pagamento</Button>
                   </div>
                 </form>
               </CardContent>
             </Card>
           </div>
         )}
+
       </div>
     </div>
   )
