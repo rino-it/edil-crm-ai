@@ -1344,33 +1344,6 @@ export function parseCSVBanca(csvText: string) {
   console.log(`✅ Analisi completata: ${movimenti.length} movimenti validi trovati.`);
   return movimenti;
 }
-    const descrizione = cols[2].trim();
-    
-    // Gestione Dare/Avere (i CSV spesso hanno numeri come "1.500,00" o "1500.00")
-    const parseImporto = (val: string) => {
-      if (!val) return 0;
-      // Rimuove i punti delle migliaia e converte la virgola in punto decimale
-      const pulito = val.replace(/\./g, '').replace(',', '.');
-      return parseFloat(pulito) || 0;
-    };
-
-    const dare = parseImporto(cols[3]); // Uscite
-    const avere = parseImporto(cols[4]); // Entrate
-    
-    // L'importo sarà positivo per le entrate, negativo per le uscite
-    const importo = avere > 0 ? avere : -dare;
-
-    if (importo !== 0) {
-      movimenti.push({
-        data_operazione,
-        descrizione,
-        importo,
-        stato: 'non_riconciliato'
-      });
-    }
-  }
-  return movimenti;
-}
 
 export async function importMovimentiBanca(movimenti: any[]) {
   const supabase = createClient(
