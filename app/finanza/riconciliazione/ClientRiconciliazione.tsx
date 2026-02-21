@@ -17,7 +17,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
 
   const formatEuro = (val: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val)
 
-  // Funzione per l'Upload del CSV
+  // Gestione Upload CSV
   const handleUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setIsUploading(true)
@@ -27,7 +27,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
     router.refresh()
   }
 
-  // Funzione per lanciare l'AI API (Step 5.3)
+  // Gestione Matching AI
   const handleAiAnalysis = async () => {
     setIsAnalyzing(true)
     const daAnalizzare = movimenti.filter(m => !m.ai_suggerimento)
@@ -43,9 +43,17 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
     router.refresh()
   }
 
+  // Wrapper per le Server Actions (RISOLVE L'ERRORE TS)
+  const handleConferma = async (formData: FormData) => {
+    await confermaMatch(formData)
+  }
+
+  const handleRifiuto = async (formData: FormData) => {
+    await rifiutaMatch(formData)
+  }
+
   return (
     <div className="space-y-6">
-      {/* SEZIONE 1: Azioni Globali */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card className="shadow-sm">
           <CardHeader className="pb-3"><CardTitle className="text-sm">1. Importa Estratto Conto</CardTitle></CardHeader>
@@ -74,9 +82,6 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
         </Card>
       </div>
 
-      
-
-      {/* SEZIONE 2: Tabella Movimenti */}
       <Card className="shadow-sm">
         <CardContent className="p-0 overflow-x-auto">
           <Table>
@@ -97,8 +102,6 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
               ) : (
                 movimenti.map((m) => {
                   const suggestedScadenza = scadenzeAperte.find(s => s.id === m.ai_suggerimento)
-                  
-                  // Colore badge confidence
                   const conf = m.ai_confidence || 0
                   const badgeColor = conf > 0.8 ? 'bg-emerald-100 text-emerald-800' : conf > 0.5 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
 
@@ -132,7 +135,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
                         <div className="flex justify-end gap-2">
                           {m.ai_suggerimento ? (
                             <>
-                              <form action={confermaMatch}>
+                              <form action={handleConferma}>
                                 <input type="hidden" name="movimento_id" value={m.id} />
                                 <input type="hidden" name="scadenza_id" value={m.ai_suggerimento} />
                                 <input type="hidden" name="importo" value={Math.abs(m.importo)} />
@@ -140,7 +143,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
                                   <Check className="h-4 w-4" />
                                 </Button>
                               </form>
-                              <form action={rifiutaMatch}>
+                              <form action={handleRifiuto}>
                                 <input type="hidden" name="movimento_id" value={m.id} />
                                 <Button size="sm" type="submit" variant="outline" className="text-rose-600 hover:bg-rose-50 h-8 px-2" title="Rifiuta">
                                   <X className="h-4 w-4" />
@@ -148,7 +151,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
                               </form>
                             </>
                           ) : (
-                            <form action={confermaMatch} className="flex gap-2 items-center">
+                            <form action={handleConferma} className="flex gap-2 items-center">
                               <input type="hidden" name="movimento_id" value={m.id} />
                               <input type="hidden" name="importo" value={Math.abs(m.importo)} />
                               <select name="scadenza_id" required className="h-8 text-xs border border-zinc-200 rounded px-2 w-[150px] outline-none">
