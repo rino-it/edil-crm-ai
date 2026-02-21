@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { HardHat, Users, FileText, Building2, CalendarCheck, TrendingUp } from "lucide-react";
+import { HardHat, Users, FileText, Building2, CalendarCheck, TrendingUp, Landmark } from "lucide-react";
 
 const links = [
   { href: "/cantieri", label: "Cantieri", icon: HardHat },
@@ -10,7 +10,8 @@ const links = [
   { href: "/preventivi", label: "Preventivi", icon: FileText },
   { href: "/anagrafiche", label: "Anagrafiche", icon: Building2 },
   { href: "/scadenze", label: "Scadenze", icon: CalendarCheck },
-  { href: "/finanza", label: "Finanza", icon: TrendingUp }, // Nuovo link Step 4
+  { href: "/finanza", label: "Finanza", icon: TrendingUp },
+  { href: "/finanza/riconciliazione", label: "Riconciliazione", icon: Landmark },
 ];
 
 export default function Sidebar() {
@@ -23,7 +24,9 @@ export default function Sidebar() {
       </div>
       <nav className="flex flex-col gap-1">
         {links.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href || pathname.startsWith(href + "/");
+          // Per la riconciliazione, facciamo un match esatto per non confonderla con /finanza base
+          const active = pathname === href; 
+          
           return (
             <Link
               key={href}
