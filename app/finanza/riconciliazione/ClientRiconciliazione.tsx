@@ -14,6 +14,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
   const router = useRouter()
   const [isUploading, setIsUploading] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [progress, setProgress] = useState({ current: 0, total: 0 })
 
   const formatEuro = (val: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val)
 
@@ -27,20 +28,43 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
     router.refresh()
   }
 
-  // Gestione Matching AI
+ // Gestione Matching AI (Architettura a Chunk dal Client per evitare Timeout Vercel)
   const handleAiAnalysis = async () => {
-    setIsAnalyzing(true)
     const daAnalizzare = movimenti.filter(m => !m.ai_suggerimento)
-    
-    if (daAnalizzare.length > 0) {
-      await fetch('/api/finanza/riconcilia-banca', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ movimenti: daAnalizzare })
-      })
+    if (daAnalizzare.length === 0) return;
+
+    setIsAnalyzing(true)
+    const CHUNK_SIZE = 10;
+    setProgress({ current: 0, total: daAnalizzare.length });
+
+    for (let i = 0; i < daAnalizzare.length; i += CHUNK_SIZE) {
+      const chunk = daAnalizzare.slice(i, i + CHUNK_SIZE);
+      
+      try {
+        // Manda 10 movimenti a Vercel
+        await fetch('/api/finanza/riconcilia-banca', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ movimenti: chunk })
+        });
+      } catch (error) {
+        console.error("Errore durante l'analisi del chunk", i, error);
+      }
+
+      const processed = Math.min(i + CHUNK_SIZE, daAnalizzare.length);
+      setProgress({ current: processed, total: daAnalizzare.length });
+      
+      // Aggiorniamo l'interfaccia riga per riga!
+      router.refresh();
+
+      // Se ci sono altri chunk, fa aspettare il BROWSER (non il server) per 12 secondi
+      if (processed < daAnalizzare.length) {
+        await new Promise(resolve => setTimeout(resolve, 12000));
+      }
     }
+
     setIsAnalyzing(false)
-    router.refresh()
+    setProgress({ current: 0, total: 0 })
   }
 
   // Wrapper per le Server Actions (RISOLVE L'ERRORE TS)
@@ -74,9 +98,9 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
             <span className="text-sm text-zinc-500">
               {movimenti.filter(m => !m.ai_suggerimento).length} movimenti in attesa di analisi.
             </span>
-            <Button onClick={handleAiAnalysis} disabled={isAnalyzing || movimenti.length === 0} className="bg-indigo-600 hover:bg-indigo-700">
+            <Button onClick={handleAiAnalysis} disabled={isAnalyzing || movimenti.length === 0} className="bg-indigo-600 hover:bg-indigo-700 w-full md:w-auto">
               {isAnalyzing ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <BrainCircuit className="h-4 w-4 mr-2" />}
-              {isAnalyzing ? "Gemini sta analizzando..." : "Avvia Matching AI"}
+              {isAnalyzing ? `Analisi: ${progress.current} / ${progress.total}` : "Avvia Matching AI"}
             </Button>
           </CardContent>
         </Card>

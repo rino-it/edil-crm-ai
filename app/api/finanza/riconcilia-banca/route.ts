@@ -12,63 +12,25 @@ export async function POST(request: Request) {
 
     const supabase = await createClient();
 
-    // 1. Scarichiamo TUTTE le scadenze aperte una sola volta per non stressare il database
+    // 1. Scarichiamo le scadenze aperte
     const { data: scadenzeAperte, error } = await supabase
       .from('scadenze_pagamento')
-      .select(`
-        id,
-        fattura_riferimento,
-        importo_totale,
-        importo_pagato,
-        data_scadenza,
-        tipo,
-        anagrafica_soggetti(ragione_sociale)
-      `)
+      .select('id, fattura_riferimento, importo_totale, importo_pagato, data_scadenza, tipo, anagrafica_soggetti(ragione_sociale)')
       .neq('stato', 'pagato');
 
     if (error) throw new Error(`Errore DB: ${error.message}`);
 
     if (!scadenzeAperte || scadenzeAperte.length === 0) {
-      return NextResponse.json({ 
-        risultati: movimenti.map(m => ({
-          movimento_id: m.id,
-          scadenza_id: null,
-          confidence: 0,
-          motivo: "Nessuna scadenza aperta nel database per fare il match."
-        }))
-      });
+      return NextResponse.json({ risultati: [] });
     }
 
-    // 2. Elaborazione in CHUNK (Batch) per aggirare l'errore 429 (Too Many Requests)
-    const CHUNK_SIZE = 10;
-    const risultatiTotali = [];
+    // 2. Chiamata a Gemini per QUESTO specifico blocco (massimo 10 movimenti, impiega 2-3 secondi)
+    const risultatiChunk = await matchBatchRiconciliazioneBancaria(movimenti, scadenzeAperte);
+    
+    const risultatiDaSalvare = Array.isArray(risultatiChunk) ? risultatiChunk : [];
 
-    for (let i = 0; i < movimenti.length; i += CHUNK_SIZE) {
-      const chunk = movimenti.slice(i, i + CHUNK_SIZE);
-      
-      // Chiamata Batch a Gemini - Passiamo tutte le scadenze, Gemini le abbinerà in base al segno (+ o -)
-      const risultatiChunk = await matchBatchRiconciliazioneBancaria(chunk, scadenzeAperte);
-      
-      // Controllo di sicurezza strutturale
-      if (Array.isArray(risultatiChunk)) {
-          risultatiTotali.push(...risultatiChunk);
-      } else {
-          chunk.forEach(m => risultatiTotali.push({ 
-            movimento_id: m.id, 
-            scadenza_id: null, 
-            confidence: 0, 
-            motivo: "Errore nel formato della risposta AI per questo blocco." 
-          }));
-      }
-
-      // 3. Pausa Tattica: Attendiamo 12 secondi tra un blocco e l'altro per rispettare la quota di Gemini (max 5 req/min)
-      if (i + CHUNK_SIZE < movimenti.length) {
-        await new Promise(resolve => setTimeout(resolve, 12000));
-      }
-    }
-
-    // 4. Aggiorniamo il database in modo che i suggerimenti rimangano salvati
-    for (const res of risultatiTotali) {
+    // 3. Salvataggio immediato sul Database
+    for (const res of risultatiDaSalvare) {
       if (res.scadenza_id) {
         await supabase
           .from('movimenti_banca')
@@ -81,10 +43,10 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json({ risultati: risultatiTotali });
+    return NextResponse.json({ success: true, risultati: risultatiDaSalvare });
 
   } catch (error: any) {
     console.error("❌ Errore API Riconciliazione:", error);
-    return NextResponse.json({ error: error.message || "Errore interno del server" }, { status: 500 });
+    return NextResponse.json({ error: error.message || "Errore interno" }, { status: 500 });
   }
 }
