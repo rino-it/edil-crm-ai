@@ -573,19 +573,18 @@ Formato: { "righe": [{ "codice": "string", "descrizione": "string", "unita_misur
 }
 
 // ============================================================================
-// STEP 5: RICONCILIAZIONE BANCARIA AI
+// STEP 5: RICONCILIAZIONE BANCARIA AI E LETTURA PDF SALDI
 // ============================================================================
 
-// Importiamo esplicitamente l'SDK per assicurarci che sia disponibile
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// utils/ai/gemini.ts
+// --- STEP 2.5: UPGRADE PROMPT MATCHING CON SOGGETTO E AUTO-ESTINZIONE ---
 
 export async function matchBatchRiconciliazioneBancaria(movimenti: any[], scadenzeAperte: any[]) {
   const apiKey = process.env.GOOGLE_API_KEY;
   if (!apiKey) {
     console.warn("⚠️ API Key GOOGLE_API_KEY mancante.");
-    return movimenti.map(m => ({ movimento_id: m.id, scadenza_id: null, confidence: 0, motivo: "API Key mancante" }));
+    return movimenti.map(m => ({ movimento_id: m.id, scadenza_id: null, soggetto_id: null, confidence: 0, motivo: "API Key mancante" }));
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
@@ -604,25 +603,29 @@ ${JSON.stringify(movimenti.map(m => ({ id: m.id, data: m.data_operazione, import
 SCADENZE APERTE DISPONIBILI (Fatture attive e passive):
 ${JSON.stringify(scadenzeAperte.map(s => ({
     id: s.id,
+    soggetto_id: s.soggetto_id, // Fondamentale per le foreign key a DB
     soggetto: s.anagrafica_soggetti?.ragione_sociale || 'N/D',
     importo_residuo: Number(s.importo_totale) - Number(s.importo_pagato || 0),
     data_scadenza: s.data_scadenza,
     riferimento: s.fattura_riferimento,
+    descrizione: s.descrizione,
     tipo: s.tipo
 })), null, 2)}
 
-REGOLE DI MATCHING:
-1. MATCH ESATTO (>0.90): Importo identico (segno opposto) E nome soggetto/fattura presente nella causale.
-2. MATCH FUZZY (0.60-0.89): Importo compatibile (acconto o piccole differenze) E data vicina o parole chiave correlate.
-3. MATCH DEBOLE (<0.60): Solo l'importo coincide, causale generica.
-4. NESSUN MATCH: Se non c'è corrispondenza logica.
+REGOLE DI MATCHING (RISPETTA SCRUPOLOSAMENTE I CONFIDENCE):
+1. MATCH AUTO (>= 0.98): Importo residuo della scadenza ESATTAMENTE IDENTICO all'importo del movimento E nome del soggetto o numero fattura chiaramente citati nella causale. Questa soglia innescherà l'estinzione automatica nel gestionale.
+2. MATCH FORTE (0.80 - 0.97): Importo coincidente ma causale ambigua, oppure nome in causale coincidente ma importo leggermente diverso (spese bancarie).
+3. ACCONTO (0.60 - 0.79): L'importo del movimento è chiaramente una cifra tonda (es. 5000) inferiore al residuo, e il soggetto o fattura sono nominati nella causale. Trattalo come anticipo.
+4. MATCH DEBOLE (< 0.60): Solo l'importo coincide per puro caso, nessuna menzione nella causale.
+5. NESSUN MATCH: Nessuna corrispondenza logica trovata. Restituisci null.
 
 Rispondi ESCLUSIVAMENTE con un array di oggetti JSON con questa struttura:
 [{
   "movimento_id": "id_del_movimento",
   "scadenza_id": "id_scadenza_trovata_o_null",
-  "confidence": 0.95,
-  "motivo": "Spiegazione breve"
+  "soggetto_id": "id_del_soggetto_se_trovato_o_null",
+  "confidence": 0.98,
+  "motivo": "Spiegazione breve e tecnica"
 }]
 `;
 
@@ -630,7 +633,7 @@ Rispondi ESCLUSIVAMENTE con un array di oggetti JSON con questa struttura:
     const result = await model.generateContent(prompt);
     let textInfo = result.response.text();
     
-    // RIGORE: Rimuoviamo il markdown prima di passare il testo al parser
+    // Pulizia rigorosa Markdown
     textInfo = textInfo.replace(/```json/gi, "").replace(/```/g, "").trim();
     
     return JSON.parse(textInfo);
@@ -639,8 +642,61 @@ Rispondi ESCLUSIVAMENTE con un array di oggetti JSON con questa struttura:
     return movimenti.map(m => ({ 
       movimento_id: m.id, 
       scadenza_id: null, 
+      soggetto_id: null,
       confidence: 0, 
       motivo: "Errore nel parsing AI." 
     }));
+  }
+}
+
+// --- STEP 2.6: ESTRAZIONE SALDO DA PDF ESTRATTO CONTO ---
+
+export interface DatiEstrattoConto {
+  saldo_finale: number | null;
+  data_riferimento: string | null;
+  note: string | null;
+}
+
+export async function estraiSaldoPDFEstrattoConto(pdfBase64: string, mimeType: string = "application/pdf"): Promise<DatiEstrattoConto> {
+  const apiKey = process.env.GOOGLE_API_KEY;
+  if (!apiKey) throw new Error("GOOGLE_API_KEY mancante");
+
+  // Per documenti formattati in modo complesso (tabelle, saldi), il modello 2.0-flash visivo è eccellente
+  const prompt = `Analizza questo documento che rappresenta un estratto conto bancario.
+Il tuo unico obiettivo è estrarre due dati cruciali per allineare la liquidità aziendale:
+1. "saldo_finale": Cerca diciture come "Saldo Contabile Finale", "Saldo al", "Nuovo Saldo". Estrai l'importo numerico (es. 15400.50).
+2. "data_riferimento": La data a cui si riferisce il saldo finale estratto, convertita nel formato YYYY-MM-DD.
+
+Rispondi SOLO in JSON valido senza markdown, con la struttura:
+{
+  "saldo_finale": 15000.50,
+  "data_riferimento": "2026-01-31",
+  "note": "Breve nota su dove hai trovato il dato (es. 'Trovato a pagina 1 sotto Saldo Finale')"
+}`;
+
+  const parts = [
+    { text: prompt }, 
+    { inline_data: { mime_type: mimeType, data: pdfBase64 } }
+  ];
+  
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contents: [{ parts }] }),
+    });
+
+    if (!response.ok) throw new Error(`Errore API Gemini Vision: ${response.status}`);
+
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+    const cleanJson = text.replace(/```json/gi, "").replace(/```/g, "").trim();
+    
+    return JSON.parse(cleanJson) as DatiEstrattoConto;
+  } catch (error) {
+    console.error("🔥 Errore estrazione saldo PDF:", error);
+    return { saldo_finale: null, data_riferimento: null, note: "Fallimento nell'estrazione OCR del documento." };
   }
 }

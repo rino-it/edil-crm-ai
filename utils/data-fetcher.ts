@@ -1287,7 +1287,7 @@ export async function getCashflowPrevisionale(giorni: number = 90) {
 }
 
 // ============================================================
-// STEP 5: RICONCILIAZIONE BANCARIA (PARSER E DB)
+// STEP 5: RICONCILIAZIONE BANCARIA (PARSER E DB) - FASE 2
 // ============================================================
 
 export function parseCSVBanca(csvText: string) {
@@ -1354,68 +1354,189 @@ export function parseCSVBanca(csvText: string) {
   return movimenti;
 }
 
-export async function importMovimentiBanca(movimenti: any[]) {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+// --- GESTIONE CONTI BANCARI ---
+
+export async function getContiBanca() {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('conti_banca')
+    .select('*')
+    .eq('attivo', true)
+    .order('nome_banca');
+    
+  if (error) console.error("❌ Errore getContiBanca:", error);
+  return data || [];
+}
+
+export async function aggiornaSaldoConto(id: string, saldo: number, data_aggiornamento: string) {
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase
+    .from('conti_banca')
+    .update({ saldo_attuale: saldo, saldo_aggiornato_al: data_aggiornamento })
+    .eq('id', id);
+    
+  if (error) console.error("❌ Errore aggiornaSaldoConto:", error);
+}
+
+export async function creaContoBanca(params: { nome_banca: string, nome_conto: string, iban?: string, formato_csv?: string }) {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('conti_banca')
+    .insert({
+      nome_banca: params.nome_banca,
+      nome_conto: params.nome_conto,
+      iban: params.iban || null,
+      formato_csv: params.formato_csv || 'generico'
+    })
+    .select('id')
+    .single();
+    
+  if (error) throw new Error(error.message);
+  return data.id;
+}
+
+// --- GESTIONE UPLOADS E LOGS ---
+
+export async function getUploadsBanca(contoId?: string) {
+  const supabase = getSupabaseAdmin();
+  let query = supabase
+    .from('upload_banca')
+    .select('*, conti_banca(nome_banca, nome_conto)')
+    .order('data_upload', { ascending: false });
+    
+  if (contoId) query = query.eq('conto_banca_id', contoId);
   
-  // Inseriamo i movimenti (Supabase ignorerà i duplicati se imposteremo un vincolo in futuro)
+  const { data, error } = await query;
+  if (error) console.error("❌ Errore getUploadsBanca:", error);
+  return data || [];
+}
+
+export async function creaUploadBancaRecord(params: {
+  conto_banca_id: string,
+  tipo: 'csv' | 'pdf_estratto',
+  nome_file: string,
+  url_storage: string,
+  num_movimenti?: number,
+  saldo_estratto?: number,
+  data_riferimento?: string
+}) {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('upload_banca')
+    .insert({
+      conto_banca_id: params.conto_banca_id,
+      tipo: params.tipo,
+      nome_file: params.nome_file,
+      url_storage: params.url_storage,
+      num_movimenti: params.num_movimenti || 0,
+      saldo_estratto: params.saldo_estratto || null,
+      periodo_a: params.data_riferimento || null
+    })
+    .select('id')
+    .single();
+    
+  if (error) throw new Error(error.message);
+  return data.id;
+}
+
+export async function creaLogRiconciliazione(params: {
+  movimento_id: string,
+  scadenza_id: string,
+  importo_applicato: number,
+  tipo_match: 'auto_ai' | 'confermato_utente' | 'manuale' | 'split',
+  ai_confidence?: number,
+  ai_motivo?: string
+}) {
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase
+    .from('riconciliazione_log')
+    .insert({
+      movimento_id: params.movimento_id,
+      scadenza_id: params.scadenza_id,
+      importo_applicato: params.importo_applicato,
+      tipo_match: params.tipo_match,
+      ai_confidence: params.ai_confidence || null,
+      ai_motivo: params.ai_motivo || null
+    });
+    
+  if (error) console.error("❌ Errore creaLogRiconciliazione:", error);
+}
+
+// --- GESTIONE MOVIMENTI ---
+
+export async function importMovimentiBanca(movimenti: any[], conto_banca_id?: string, upload_id?: string) {
+  const supabase = getSupabaseAdmin();
+  
+  // Aggiungiamo il riferimento al conto e all'upload per tracciabilità
+  const righe = movimenti.map(m => ({ 
+    ...m, 
+    conto_banca_id: conto_banca_id || null, 
+    upload_id: upload_id || null 
+  }));
+  
   const { data, error } = await supabase
     .from('movimenti_banca')
-    .insert(movimenti)
+    .insert(righe)
     .select();
     
   if (error) throw new Error(error.message);
   return data;
 }
 
-export async function getMovimentiNonRiconciliati() {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+export async function getMovimentiNonRiconciliati(contoId?: string) {
+  const supabase = getSupabaseAdmin();
   
-  const { data } = await supabase
+  let query = supabase
     .from('movimenti_banca')
-    .select('*')
+    .select('*, conti_banca(nome_banca, nome_conto), anagrafica_soggetti(ragione_sociale)')
     .eq('stato', 'non_riconciliato')
     .order('data_operazione', { ascending: false });
     
+  if (contoId) query = query.eq('conto_banca_id', contoId);
+  
+  const { data } = await query;
   return data || [];
 }
 
 export async function getScadenzeApertePerMatch(tipo: 'entrata' | 'uscita') {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  const supabase = getSupabaseAdmin();
   
   const { data } = await supabase
     .from('scadenze_pagamento')
-    .select(`id, fattura_riferimento, importo_totale, importo_pagato, data_scadenza, tipo, anagrafica_soggetti(ragione_sociale)`)
+    .select(`id, fattura_riferimento, importo_totale, importo_pagato, data_scadenza, tipo, soggetto_id, descrizione, anagrafica_soggetti(ragione_sociale)`)
     .eq('tipo', tipo)
     .neq('stato', 'pagato');
     
   return data || [];
 }
 
-export async function confermaRiconciliazione(movimento_id: string, scadenza_id: string, importo_movimento: number) {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+export async function confermaRiconciliazione(
+  movimento_id: string, 
+  scadenza_id: string, 
+  importo_movimento: number,
+  tipo_match: 'auto_ai' | 'confermato_utente' | 'manuale' | 'split' = 'manuale',
+  soggetto_id?: string,
+  ai_confidence?: number,
+  ai_motivo?: string
+) {
+  const supabase = getSupabaseAdmin();
   
-  // 1. Segna il movimento come riconciliato
+  // 1. Prepara i dati per l'aggiornamento del movimento
+  const updateData: any = { 
+    stato: 'riconciliato', 
+    scadenza_id: scadenza_id 
+  };
+  
+  if (soggetto_id) updateData.soggetto_id = soggetto_id;
+  if (tipo_match === 'auto_ai') updateData.auto_riconciliato = true;
+  
+  // 2. Segna il movimento come riconciliato
   await supabase
     .from('movimenti_banca')
-    .update({ 
-      stato: 'riconciliato', 
-      scadenza_id: scadenza_id 
-    })
+    .update(updateData)
     .eq('id', movimento_id);
 
-  // 2. Recupera la scadenza attuale per sommare il pagato
+  // 3. Recupera la scadenza attuale per sommare il pagato
   const { data: scadenza } = await supabase
     .from('scadenze_pagamento')
     .select('importo_totale, importo_pagato')
@@ -1426,7 +1547,7 @@ export async function confermaRiconciliazione(movimento_id: string, scadenza_id:
     const nuovoPagato = (Number(scadenza.importo_pagato) || 0) + Math.abs(importo_movimento);
     const nuovoStato = nuovoPagato >= Number(scadenza.importo_totale) ? 'pagato' : 'parziale';
     
-    // 3. Aggiorna la scadenza
+    // 4. Aggiorna la scadenza
     await supabase
       .from('scadenze_pagamento')
       .update({
@@ -1435,5 +1556,56 @@ export async function confermaRiconciliazione(movimento_id: string, scadenza_id:
         data_pagamento: new Date().toISOString().split('T')[0]
       })
       .eq('id', scadenza_id);
+      
+    // 5. Crea log dell'operazione per audit (SPLIT, AUTO_AI, MANUALE)
+    await creaLogRiconciliazione({
+      movimento_id,
+      scadenza_id,
+      importo_applicato: Math.abs(importo_movimento),
+      tipo_match,
+      ai_confidence,
+      ai_motivo
+    });
   }
+}
+
+// --- NUOVA AUTO-RICONCILIAZIONE ---
+
+export async function autoRiconciliaMovimenti(risultatiAI: any[]) {
+  const autoRiconciliati: string[] = [];
+  const daMostrare: any[] = [];
+  const supabase = getSupabaseAdmin();
+  
+  for (const res of risultatiAI) {
+    // Seleziona solo i match con precisione "Bancaria" (> 0.98)
+    if (res.scadenza_id && res.confidence >= 0.98) {
+      
+      // Recupera importo del movimento per la riconciliazione esatta
+      const { data: mov } = await supabase
+        .from('movimenti_banca')
+        .select('importo')
+        .eq('id', res.movimento_id)
+        .single();
+        
+      if (mov) {
+        await confermaRiconciliazione(
+          res.movimento_id, 
+          res.scadenza_id, 
+          mov.importo, 
+          'auto_ai', 
+          res.soggetto_id, 
+          res.confidence, 
+          res.motivo
+        );
+        autoRiconciliati.push(res.movimento_id);
+        console.log(`⚡️ AUTO-RICONCILIATO Movimento ${res.movimento_id}`);
+      } else {
+        daMostrare.push(res);
+      }
+    } else {
+      daMostrare.push(res); // Quelli da far decidere all'utente
+    }
+  }
+  
+  return { autoRiconciliati, daMostrare };
 }
