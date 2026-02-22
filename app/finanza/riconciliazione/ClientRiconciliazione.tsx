@@ -41,14 +41,18 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
       const chunk = daAnalizzare.slice(i, i + CHUNK_SIZE);
       
       try {
-        // Manda 10 movimenti a Vercel
-        await fetch('/api/finanza/riconcilia-banca', {
+        const response = await fetch('/api/finanza/riconcilia-banca', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ movimenti: chunk })
         });
+        
+        const data = await response.json();
+        // ORA VEDRAI I RISULTATI NELLA CONSOLE BROWSER!
+        console.log(`✅ Risposta AI per blocco ${i/CHUNK_SIZE + 1}:`, data); 
+        
       } catch (error) {
-        console.error("Errore durante l'analisi del chunk", i, error);
+        console.error(`❌ Errore critico nel blocco ${i/CHUNK_SIZE + 1}`, error);
       }
 
       const processed = Math.min(i + CHUNK_SIZE, daAnalizzare.length);

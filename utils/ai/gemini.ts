@@ -628,10 +628,18 @@ Rispondi ESCLUSIVAMENTE con un array di oggetti JSON con questa struttura:
 
   try {
     const result = await model.generateContent(prompt);
-    const response = await result.response;
-    return JSON.parse(response.text());
+    let textInfo = result.response.text();
+    
+    // RIGORE: Rimuoviamo il markdown prima di passare il testo al parser
+    textInfo = textInfo.replace(/```json/gi, "").replace(/```/g, "").trim();
+    
+    return JSON.parse(textInfo);
   } catch (error) {
     console.error("❌ Errore Gemini Batch Matching:", error);
-    return movimenti.map(m => ({ movimento_id: m.id, scadenza_id: null, confidence: 0, motivo: "Errore analisi AI" }));
+    return movimenti.map(m => ({ 
+      movimento_id: m.id, 
+      scadenza_id: null, 
+      confidence: 0, 
+      motivo: "Errore nel parsing AI." 
+    }));
   }
-}

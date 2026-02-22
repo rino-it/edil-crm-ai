@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/utils/supabase/server';
+import { createClient } from '@supabase/supabase-js';
 import { matchBatchRiconciliazioneBancaria } from "@/utils/ai/gemini";
 
 export async function POST(request: Request) {
@@ -10,7 +10,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Nessun movimento fornito per l'analisi." }, { status: 400 });
     }
 
-    const supabase = await createClient();
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
 
     // 1. Scarichiamo le scadenze aperte
     const { data: scadenzeAperte, error } = await supabase
