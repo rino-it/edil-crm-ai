@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { importaCSVBanca, confermaMatch, rifiutaMatch } from './actions'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -15,6 +15,14 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
   const [isUploading, setIsUploading] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [progress, setProgress] = useState({ current: 0, total: 0 })
+  
+  // Stato reattivo locale
+  const [movimentiLocali, setMovimentiLocali] = useState(movimenti);
+
+  // Sincronizza lo stato locale quando il server aggiorna i dati (es. dopo una Conferma o un Upload)
+  useEffect(() => {
+    setMovimentiLocali(movimenti);
+  }, [movimenti]);
 
   const formatEuro = (val: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val)
 
@@ -28,9 +36,10 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
     router.refresh()
   }
 
- // Gestione Matching AI (Architettura a Chunk dal Client per evitare Timeout Vercel)
+  // Gestione Matching AI (Architettura a Chunk dal Client per evitare Timeout Vercel)
   const handleAiAnalysis = async () => {
-    const daAnalizzare = movimenti.filter(m => !m.ai_suggerimento)
+    // Usiamo i movimenti locali per capire cosa analizzare
+    const daAnalizzare = movimentiLocali.filter(m => !m.ai_suggerimento)
     if (daAnalizzare.length === 0) return;
 
     setIsAnalyzing(true)
@@ -48,9 +57,26 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
         });
         
         const data = await response.json();
-        // ORA VEDRAI I RISULTATI NELLA CONSOLE BROWSER!
         console.log(`✅ Risposta AI per blocco ${i/CHUNK_SIZE + 1}:`, data); 
         
+        // ⚡️ AGGIORNAMENTO MAGICO IN TEMPO REALE SULLA UI ⚡️
+        if (data.risultati) {
+          setMovimentiLocali((prevMovimenti) => 
+            prevMovimenti.map((mov) => {
+              const match = data.risultati.find((r: any) => r.movimento_id === mov.id);
+              if (match && match.scadenza_id) {
+                return { 
+                  ...mov, 
+                  ai_suggerimento: match.scadenza_id, 
+                  ai_confidence: match.confidence, 
+                  ai_motivo: match.motivo 
+                };
+              }
+              return mov;
+            })
+          );
+        }
+
       } catch (error) {
         console.error(`❌ Errore critico nel blocco ${i/CHUNK_SIZE + 1}`, error);
       }
@@ -58,10 +84,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
       const processed = Math.min(i + CHUNK_SIZE, daAnalizzare.length);
       setProgress({ current: processed, total: daAnalizzare.length });
       
-      // Aggiorniamo l'interfaccia riga per riga!
-      router.refresh();
-
-      // Se ci sono altri chunk, fa aspettare il BROWSER (non il server) per 12 secondi
+      // Attesa per rispettare i limiti API (max 5 richieste/minuto)
       if (processed < daAnalizzare.length) {
         await new Promise(resolve => setTimeout(resolve, 12000));
       }
@@ -69,9 +92,12 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
 
     setIsAnalyzing(false)
     setProgress({ current: 0, total: 0 })
+    
+    // Refresh finale per allineamento di sicurezza
+    router.refresh();
   }
 
-  // Wrapper per le Server Actions (RISOLVE L'ERRORE TS)
+  // Wrapper per le Server Actions
   const handleConferma = async (formData: FormData) => {
     await confermaMatch(formData)
   }
@@ -100,9 +126,10 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
           <CardHeader className="pb-3"><CardTitle className="text-sm">2. Analisi Intelligente</CardTitle></CardHeader>
           <CardContent className="flex items-center justify-between">
             <span className="text-sm text-zinc-500">
-              {movimenti.filter(m => !m.ai_suggerimento).length} movimenti in attesa di analisi.
+              {/* Usa movimentiLocali qui */}
+              {movimentiLocali.filter(m => !m.ai_suggerimento).length} movimenti in attesa di analisi.
             </span>
-            <Button onClick={handleAiAnalysis} disabled={isAnalyzing || movimenti.length === 0} className="bg-indigo-600 hover:bg-indigo-700 w-full md:w-auto">
+            <Button onClick={handleAiAnalysis} disabled={isAnalyzing || movimentiLocali.length === 0} className="bg-indigo-600 hover:bg-indigo-700 w-full md:w-auto">
               {isAnalyzing ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <BrainCircuit className="h-4 w-4 mr-2" />}
               {isAnalyzing ? `Analisi: ${progress.current} / ${progress.total}` : "Avvia Matching AI"}
             </Button>
@@ -123,12 +150,13 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
               </TableRow>
             </TableHeader>
             <TableBody>
-              {movimenti.length === 0 ? (
+              {/* USA movimentiLocali nel loop */}
+              {movimentiLocali.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-12 text-zinc-400">Nessun movimento da riconciliare.</TableCell>
                 </TableRow>
               ) : (
-                movimenti.map((m) => {
+                movimentiLocali.map((m) => {
                   const suggestedScadenza = scadenzeAperte.find(s => s.id === m.ai_suggerimento)
                   const conf = m.ai_confidence || 0
                   const badgeColor = conf > 0.8 ? 'bg-emerald-100 text-emerald-800' : conf > 0.5 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
