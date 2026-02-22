@@ -643,3 +643,4 @@ Rispondi ESCLUSIVAMENTE con un array di oggetti JSON con questa struttura:
       motivo: "Errore nel parsing AI." 
     }));
   }
+}
