@@ -1,14 +1,55 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { matchRiconciliazioneBancaria } from '@/utils/ai/gemini';
+import { matchBatchRiconciliazioneBancaria } from "@/utils/ai/gemini";
 
 export async function POST(request: Request) {
   try {
     const { movimenti } = await request.json();
+    const supabase = await createClient();
 
-    if (!movimenti || !Array.isArray(movimenti) || movimenti.length === 0) {
-      return NextResponse.json({ error: "Nessun movimento fornito per l'analisi." }, { status: 400 });
+    // 1. Recupero scadenze aperte
+    const { data: scadenzeAperte } = await supabase
+      .from('scadenze_pagamento')
+      .select('*, anagrafica_soggetti(ragione_sociale)')
+      .neq('stato', 'pagato');
+
+    // 2. Dividiamo i movimenti in chunk di 10 (per stare nei limiti di quota e tempo)
+    const CHUNK_SIZE = 10;
+    const risultatiTotali = [];
+
+    for (let i = 0; i < movimenti.length; i += CHUNK_SIZE) {
+      const chunk = movimenti.slice(i, i + CHUNK_SIZE);
+      
+      // Chiamata Batch a Gemini
+      const risultatiChunk = await matchBatchRiconciliazioneBancaria(chunk, scadenzeAperte || []);
+      risultatiTotali.push(...risultatiChunk);
+
+      // Se ci sono altri chunk, attendiamo 12 secondi per rispettare il limite di 5 req/min
+      if (i + CHUNK_SIZE < movimenti.length) {
+        await new Promise(resolve => setTimeout(resolve, 12000));
+      }
     }
+
+    // 3. Aggiornamento DB massivo
+    for (const res of risultatiTotali) {
+      if (res.scadenza_id) {
+        await supabase
+          .from('movimenti_banca')
+          .update({
+            ai_suggerimento: res.scadenza_id,
+            ai_confidence: res.confidence,
+            ai_motivo: res.motivo
+          })
+          .eq('id', res.movimento_id);
+      }
+    }
+
+    return NextResponse.json({ success: true, analizzati: risultatiTotali.length });
+
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
 
     // 1. Recuperiamo il client Supabase con i permessi necessari
     const supabase = await createClient();
