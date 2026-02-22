@@ -15,11 +15,22 @@ export async function POST(request: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // 1. Scarichiamo le scadenze aperte
-    const { data: scadenzeAperte, error } = await supabase
+    // FIX 0.1 A: Determina se il chunk contiene uscite, entrate, o miste
+    const haUscite = movimenti.some((m: any) => m.importo < 0);
+    const haEntrate = movimenti.some((m: any) => m.importo > 0);
+
+    let query = supabase
       .from('scadenze_pagamento')
-      .select('id, fattura_riferimento, importo_totale, importo_pagato, data_scadenza, tipo, anagrafica_soggetti(ragione_sociale)')
-      .neq('stato', 'pagato');
+      .select('id, fattura_riferimento, importo_totale, importo_pagato, data_scadenza, tipo, soggetto_id, descrizione, anagrafica_soggetti(ragione_sociale)')
+      .neq('stato', 'pagato')
+      .order('data_scadenza', { ascending: true })
+      .limit(30);
+
+    // Applica il filtro solo se il blocco è "puro" (solo entrate o solo uscite)
+    if (haUscite && !haEntrate) query = query.eq('tipo', 'uscita');
+    if (haEntrate && !haUscite) query = query.eq('tipo', 'entrata');
+
+    const { data: scadenzeAperte, error } = await query;
 
     if (error) throw new Error(`Errore DB: ${error.message}`);
 
@@ -27,12 +38,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ risultati: [] });
     }
 
-    // 2. Chiamata a Gemini per QUESTO specifico blocco (massimo 10 movimenti, impiega 2-3 secondi)
+    // Chiamata a Gemini per QUESTO specifico blocco (ora i dati passati sono pochissimi)
     const risultatiChunk = await matchBatchRiconciliazioneBancaria(movimenti, scadenzeAperte);
-    
     const risultatiDaSalvare = Array.isArray(risultatiChunk) ? risultatiChunk : [];
 
-    // 3. Salvataggio immediato sul Database
+    // Salvataggio immediato sul Database
     for (const res of risultatiDaSalvare) {
       if (res.scadenza_id) {
         await supabase

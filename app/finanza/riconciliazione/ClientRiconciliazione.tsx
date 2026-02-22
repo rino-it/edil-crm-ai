@@ -43,7 +43,9 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
     if (daAnalizzare.length === 0) return;
 
     setIsAnalyzing(true)
-    const CHUNK_SIZE = 10;
+    
+    // FIX 0.1 B: Ridotto a 5 per dimezzare i tempi di risposta di Gemini ed evitare Timeout
+    const CHUNK_SIZE = 5; 
     setProgress({ current: 0, total: daAnalizzare.length });
 
     for (let i = 0; i < daAnalizzare.length; i += CHUNK_SIZE) {
@@ -57,9 +59,9 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
         });
         
         const data = await response.json();
-        console.log(`✅ Risposta AI per blocco ${i/CHUNK_SIZE + 1}:`, data); 
+        console.log(`✅ Risposta AI per blocco ${Math.floor(i/CHUNK_SIZE) + 1}:`, data); 
         
-        // ⚡️ AGGIORNAMENTO MAGICO IN TEMPO REALE SULLA UI ⚡️
+        // AGGIORNAMENTO MAGICO IN TEMPO REALE SULLA UI
         if (data.risultati) {
           setMovimentiLocali((prevMovimenti) => 
             prevMovimenti.map((mov) => {
@@ -78,13 +80,14 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
         }
 
       } catch (error) {
-        console.error(`❌ Errore critico nel blocco ${i/CHUNK_SIZE + 1}`, error);
+        console.error(`❌ Errore critico nel blocco ${Math.floor(i/CHUNK_SIZE) + 1}`, error);
       }
 
       const processed = Math.min(i + CHUNK_SIZE, daAnalizzare.length);
       setProgress({ current: processed, total: daAnalizzare.length });
       
-      // Attesa per rispettare i limiti API (max 5 richieste/minuto)
+      // FIX 0.1 C: Rimosso router.refresh() da qui per evitare render inutili e lag
+      
       if (processed < daAnalizzare.length) {
         await new Promise(resolve => setTimeout(resolve, 12000));
       }
@@ -93,7 +96,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
     setIsAnalyzing(false)
     setProgress({ current: 0, total: 0 })
     
-    // Refresh finale per allineamento di sicurezza
+    // Unico refresh finale per sicurezza
     router.refresh();
   }
 
