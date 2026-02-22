@@ -38,14 +38,13 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
 
   // Gestione Matching AI (Architettura a Chunk dal Client per evitare Timeout Vercel)
   const handleAiAnalysis = async () => {
-    // Usiamo i movimenti locali per capire cosa analizzare
     const daAnalizzare = movimentiLocali.filter(m => !m.ai_suggerimento)
     if (daAnalizzare.length === 0) return;
 
     setIsAnalyzing(true)
     
-    // FIX 0.1 B: Ridotto a 5 per dimezzare i tempi di risposta di Gemini ed evitare Timeout
-    const CHUNK_SIZE = 5; 
+    // FIX 0.3: Chunk da 20 per minimizzare chiamate API (1500 RPD su gemini-2.0-flash-001)
+    const CHUNK_SIZE = 20; 
     setProgress({ current: 0, total: daAnalizzare.length });
 
     for (let i = 0; i < daAnalizzare.length; i += CHUNK_SIZE) {
@@ -61,7 +60,6 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
         const data = await response.json();
         console.log(`✅ Risposta AI per blocco ${Math.floor(i/CHUNK_SIZE) + 1}:`, data); 
         
-        // AGGIORNAMENTO MAGICO IN TEMPO REALE SULLA UI
         if (data.risultati) {
           setMovimentiLocali((prevMovimenti) => 
             prevMovimenti.map((mov) => {
@@ -78,7 +76,6 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
             })
           );
         }
-
       } catch (error) {
         console.error(`❌ Errore critico nel blocco ${Math.floor(i/CHUNK_SIZE) + 1}`, error);
       }
@@ -86,7 +83,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
       const processed = Math.min(i + CHUNK_SIZE, daAnalizzare.length);
       setProgress({ current: processed, total: daAnalizzare.length });
       
-      // FIX 0.1 C: Rimosso router.refresh() da qui per evitare render inutili e lag
+      // FIX 0.1 C: router.refresh() rimosso dal ciclo per evitare lag UI
       
       if (processed < daAnalizzare.length) {
         await new Promise(resolve => setTimeout(resolve, 12000));
@@ -96,7 +93,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
     setIsAnalyzing(false)
     setProgress({ current: 0, total: 0 })
     
-    // Unico refresh finale per sicurezza
+    // Unico refresh alla fine
     router.refresh();
   }
 

@@ -7,8 +7,7 @@ import { HardHat, Users, FileText, Building2, CalendarCheck, TrendingUp, Landmar
 const links = [
   { href: "/cantieri", label: "Cantieri", icon: HardHat },
   { href: "/personale", label: "Personale", icon: Users },
-  // FIX 0.2: Rimosso preventivi per evitare errore 404 in console di prefetching
-  // { href: "/preventivi", label: "Preventivi", icon: FileText }, 
+  // { href: "/preventivi", label: "Preventivi", icon: FileText }, <-- RIGORE: Commentato per Fix 0.2
   { href: "/anagrafiche", label: "Anagrafiche", icon: Building2 },
   { href: "/scadenze", label: "Scadenze", icon: CalendarCheck },
   { href: "/finanza", label: "Finanza", icon: TrendingUp },
