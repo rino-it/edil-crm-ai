@@ -573,7 +573,7 @@ Formato: { "righe": [{ "codice": "string", "descrizione": "string", "unita_misur
 }
 
 // ============================================================================
-// STEP 5: RICONCILIAZIONE BANCARIA AI E LETTURA PDF SALDI
+// STEP 5 / FIX 3: RICONCILIAZIONE BANCARIA AI (IBAN E PATTERN CAUSALI)
 // ============================================================================
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -596,49 +596,54 @@ Sei un contabile esperto di un'impresa edile italiana. Devi associare movimenti 
 
 ATTENZIONE: Le descrizioni bancarie sono SPORCHE. Le banche troncano i nomi, rimuovono "Srl/SpA/Snc", usano MAIUSCOLE, accorciano parole. Devi essere ELASTICO nel riconoscere i nomi.
 
+DIZIONARIO CAUSALI BANCARIE ITALIANE:
+- "BON" o "BONIF" = Bonifico
+- "A FAV" o "A FAVORE" = destinatario del pagamento
+- "DA" o "DISP" = ordinante del pagamento (chi paga)
+- "RID" o "SDD" = Addebito diretto SEPA (utenze, rate)
+- "RIBA" o "RI.BA" = Ricevuta Bancaria (pagamento fornitore)
+- "MAV" = Pagamento mediante avviso
+- "PAGO" o "PAG" = Pagamento
+- "FATT" o "FT" o "FATTURA" = Riferimento fattura
+- "IBAN" seguito da codice = IBAN del beneficiario/ordinante
+- "CRO" o "TRN" = Codice riferimento operazione
+
 MOVIMENTI BANCA DA ANALIZZARE:
 ${JSON.stringify(movimenti.map(m => ({ id: m.id, data: m.data_operazione, importo: m.importo, causale: m.descrizione })), null, 2)}
 
-FATTURE/SCADENZE APERTE:
+FATTURE/SCADENZE APERTE DISPONIBILI:
 ${JSON.stringify(scadenzeAperte.map(s => ({
     id: s.id,
     soggetto_id: s.soggetto_id,
-    ragione_sociale: s.anagrafica_soggetti?.ragione_sociale || '',
-    partita_iva: s.anagrafica_soggetti?.partita_iva || '',
-    importo_residuo: Number(s.importo_totale) - Number(s.importo_pagato || 0),
-    fattura: s.fattura_riferimento,
+    nome: s.anagrafica_soggetti?.ragione_sociale || '',
+    piva: s.anagrafica_soggetti?.partita_iva || '',
+    iban: s.anagrafica_soggetti?.iban || '',
+    residuo: Number(s.importo_totale) - Number(s.importo_pagato || 0),
+    fatt: s.fattura_riferimento,
     tipo: s.tipo
 })), null, 2)}
 
-METODO DI LAVORO TASSATIVO (segui in ordine):
+STRATEGIA DI MATCHING (in ordine di priorità tassativo):
+1. IBAN: Cerca un IBAN nella causale (formato ITxx...) e confrontalo con gli IBAN dei soggetti. Questo garantisce il "soggetto_id".
+2. NOME: Cerca il nome/ragione sociale nella causale (fuzzy, ignora Srl/SpA/suffissi).
+3. P.IVA: Cerca la Partita IVA nella causale (11 cifre).
+4. FATTURA: Se hai trovato il soggetto, cerca un numero fattura nella causale e confrontalo con i riferimenti fattura aperti di quel soggetto.
+5. IMPORTO: Se il soggetto è trovato, confronta l'importo assoluto del movimento con gli importi residui delle sue scadenze (stai attento al SEGNO: importo<0 è uscita per fornitore, importo>0 è entrata da cliente).
 
-1. TROVA IL SOGGETTO (FUZZY MATCHING sulla causale):
-   - Cerca somiglianze con "ragione_sociale". IGNORA suffissi: Srl, S.r.l., SpA, S.p.A., Snc, S.n.c., Sas, S.a.s., di, e, &
-   - Esempio: causale "BON A FAV EDILIZIA ROSSI" → matcha con "Edilizia Rossi Srl"
-   - Esempio: causale "PAGO FATT MARIO BIANCHI" → matcha con "Mario Bianchi & C. Snc"
-   - Cerca anche la Partita IVA nella causale (11 cifre consecutive)
-   - Se trovi il soggetto, hai il "soggetto_id"
+REGOLE DI RISPOSTA (Confidence):
+- MATCH ESATTO (0.95 - 0.99): Importo coincide con la fattura E soggetto trovato, OPPURE numero fattura esatto trovato. (Fornisci soggetto_id E scadenza_id).
+- MATCH ACCONTO (0.70 - 0.94): Soggetto identificato con certezza, MA l'importo non combacia con nessuna fattura. (Fornisci soggetto_id, MA scadenza_id: null).
+- MATCH DEBOLE (0.40 - 0.69): Soggetto forse menzionato ma confuso.
+- NESSUN MATCH (< 0.40): Non riesci a identificare niente. Metti entrambi null.
 
-2. CONTROLLA IL SEGNO:
-   - Movimento NEGATIVO (importo < 0) = USCITA = cerca solo scadenze tipo "uscita" (pagamenti a fornitori)
-   - Movimento POSITIVO (importo > 0) = ENTRATA = cerca solo scadenze tipo "entrata" (incassi da clienti)
-
-3. ASSOCIA LA FATTURA:
-   - MATCH ESATTO (confidence >= 0.95): importo del movimento (valore assoluto) = importo_residuo della fattura E soggetto trovato. Cerca anche numeri fattura nella causale (es. "FT 123", "FATT. 2025/45", "N. 12")
-   - MATCH ACCONTO (confidence 0.70-0.94): soggetto trovato ma importo diverso (pagamento parziale o cumulativo). Scegli la fattura con importo_residuo piu' vicino
-   - MATCH SOLO SOGGETTO (confidence 0.40-0.69): soggetto trovato ma nessuna fattura corrisponde. Metti scadenza_id = null ma soggetto_id corretto
-   - NESSUN MATCH (confidence < 0.40): non riesci a identificare il soggetto. Metti entrambi null
-
-4. RISPONDI con un array JSON. Per OGNI movimento DEVI restituire un oggetto:
+RISPONDI con un array JSON. Per OGNI movimento DEVI restituire ESATTAMENTE un oggetto con questa struttura:
 [{
   "movimento_id": "uuid_del_movimento",
   "scadenza_id": "uuid_fattura_o_null",
   "soggetto_id": "uuid_soggetto_o_null",
   "confidence": 0.95,
-  "motivo": "Spiegazione breve in italiano"
+  "motivo": "Spiegazione breve e tecnica in italiano (es. Trovato IBAN e importo esatto fattura 12)"
 }]
-
-IMPORTANTE: Restituisci ESATTAMENTE un risultato per ogni movimento, anche se non trovi match.
 `;
 
   try {

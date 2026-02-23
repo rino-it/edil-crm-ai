@@ -36,78 +36,97 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
     router.refresh()
   }
 
-  // Gestione Matching AI (Architettura a Chunk dal Client per evitare Timeout Vercel e Rate Limits)
+  // FIX 4: Gestione Matching AI con Retry e Robustezza
   const handleAiAnalysis = async () => {
     const daAnalizzare = movimentiLocali.filter(m => !m.ai_motivo)
     if (daAnalizzare.length === 0) return;
 
     setIsAnalyzing(true)
     
-    // STEP 6: Chunk da 20. 81 movimenti = 5 chiamate API.
-    const CHUNK_SIZE = 20; 
+    // Prompt più gestibili: ridotto a 15
+    const CHUNK_SIZE = 15; 
     setProgress({ current: 0, total: daAnalizzare.length });
 
     for (let i = 0; i < daAnalizzare.length; i += CHUNK_SIZE) {
       const chunk = daAnalizzare.slice(i, i + CHUNK_SIZE);
+      let success = false;
+      let retries = 0;
       
-      try {
-        const response = await fetch('/api/finanza/riconcilia-banca', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ movimenti: chunk })
-        });
-        
-        const data = await response.json();
-        console.log(`✅ Risposta AI per blocco ${Math.floor(i/CHUNK_SIZE) + 1}:`, data); 
-        
-        if (data.risultati) {
-          setMovimentiLocali((prevMovimenti) => 
-            prevMovimenti.map((mov) => {
-              const match = data.risultati.find((r: any) => r.movimento_id === mov.id);
-              // STEP 3A: Mostrare tutti i risultati AI (anche quelli senza scadenza_id)
-              if (match) {
-                return { 
-                  ...mov, 
-                  ai_suggerimento: match.scadenza_id || null, 
-                  soggetto_id: match.soggetto_id || null,
-                  ai_confidence: match.confidence || 0, 
-                  ai_motivo: match.motivo || "Analisi completata"
-                };
+      while (!success && retries < 2) { // Massimo 2 tentativi per blocco
+        try {
+          const response = await fetch('/api/finanza/riconcilia-banca', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ movimenti: chunk })
+          });
+          
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          
+          const data = await response.json();
+          
+          if (data.risultati && Array.isArray(data.risultati)) {
+            const receivedIds = new Set(data.risultati.map((r: any) => r.movimento_id));
+            
+            setMovimentiLocali((prevMovimenti) => 
+              prevMovimenti.map((mov) => {
+                const match = data.risultati.find((r: any) => r.movimento_id === mov.id);
+                if (match) {
+                  return { 
+                    ...mov, 
+                    ai_suggerimento: match.scadenza_id || null, 
+                    soggetto_id: match.soggetto_id || null,
+                    ai_confidence: match.confidence || 0, 
+                    ai_motivo: match.motivo || "Analisi completata"
+                  };
+                }
+                
+                // Se il movimento era nel blocco ma l'AI non ha risposto, lo segno per evitare loop
+                if (chunk.some(c => c.id === mov.id) && !receivedIds.has(mov.id)) {
+                  return { ...mov, ai_motivo: "AI non ha fornito risposta", ai_confidence: 0 };
+                }
+                return mov;
+              })
+            );
+            success = true;
+          }
+        } catch (error) {
+          retries++;
+          console.error(`❌ Errore blocco ${Math.floor(i/CHUNK_SIZE) + 1}, tentativo ${retries}:`, error);
+          
+          if (retries >= 2) {
+            // Segna errore definitivo per questo blocco
+            setMovimentiLocali((prev) => prev.map((mov) => {
+              if (chunk.some(c => c.id === mov.id) && !mov.ai_motivo) {
+                return { ...mov, ai_motivo: "Errore analisi AI - riprovare", ai_confidence: 0 };
               }
               return mov;
-            })
-          );
+            }));
+          } else {
+            await new Promise(resolve => setTimeout(resolve, 5000)); // Aspetta 5s prima del retry
+          }
         }
-      } catch (error) {
-        console.error(`❌ Errore critico nel blocco ${Math.floor(i/CHUNK_SIZE) + 1}`, error);
       }
 
       const processed = Math.min(i + CHUNK_SIZE, daAnalizzare.length);
       setProgress({ current: processed, total: daAnalizzare.length });
       
-      // STEP 6: Nessun router.refresh() qui dentro.
-      
-      // STEP 6: Delay di 15 secondi tra chunk
+      // Delay ridotto a 3 secondi per maggiore velocità
       if (processed < daAnalizzare.length) {
-        await new Promise(resolve => setTimeout(resolve, 15000));
+        await new Promise(resolve => setTimeout(resolve, 3000));
       }
     }
 
     setIsAnalyzing(false)
     setProgress({ current: 0, total: 0 })
-    
-    // STEP 6: Unico refresh finale
     router.refresh();
   }
 
-  // STEP 3B: Rimuovere il movimento dallo state locale istantaneamente
   const handleConferma = async (formData: FormData) => {
     const movId = formData.get('movimento_id') as string;
     await confermaMatch(formData);
     setMovimentiLocali(prev => prev.filter(m => m.id !== movId));
   }
 
-  // STEP 3C: Azzerare i campi AI nello state locale istantaneamente
   const handleRifiuto = async (formData: FormData) => {
     const movId = formData.get('movimento_id') as string;
     await rifiutaMatch(formData);
@@ -184,7 +203,6 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
                       </TableCell>
                       
                       <TableCell>
-                        {/* STEP 3D: Mostrare motivo AI sempre se l'analisi è stata fatta */}
                         {m.ai_suggerimento ? (
                           <div className="flex flex-col gap-1">
                             <span className="text-sm font-semibold">{suggestedScadenza?.soggetto?.ragione_sociale || 'Match Trovato'}</span>

@@ -15,7 +15,8 @@ export async function POST(request: Request) {
     // TUTTE le scadenze aperte, senza limit. Gemini 2.5 Flash gestisce 1M token.
     const { data: scadenzeAperte, error } = await supabase
       .from('scadenze_pagamento')
-      .select('id, fattura_riferimento, importo_totale, importo_pagato, data_scadenza, tipo, soggetto_id, descrizione, anagrafica_soggetti(ragione_sociale, partita_iva)')
+      // FIX 3A: Aggiunto 'iban' all'estrazione dei dati dell'anagrafica
+      .select('id, fattura_riferimento, importo_totale, importo_pagato, data_scadenza, tipo, soggetto_id, descrizione, anagrafica_soggetti(ragione_sociale, partita_iva, iban)')
       .neq('stato', 'pagato')
       .order('data_scadenza', { ascending: true });
       
