@@ -21,7 +21,8 @@ export async function POST(request: Request) {
 
     let query = supabase
       .from('scadenze_pagamento')
-      .select('id, fattura_riferimento, importo_totale, importo_pagato, data_scadenza, tipo, soggetto_id, descrizione, anagrafica_soggetti(ragione_sociale)')
+      // Aggiunta partita_iva per migliorare le capacità di ricerca di Gemini
+      .select('id, fattura_riferimento, importo_totale, importo_pagato, data_scadenza, tipo, soggetto_id, descrizione, anagrafica_soggetti(ragione_sociale, partita_iva)')
       .neq('stato', 'pagato')
       .order('data_scadenza', { ascending: true })
       .limit(30);
@@ -41,18 +42,17 @@ export async function POST(request: Request) {
     const risultatiChunk = await matchBatchRiconciliazioneBancaria(movimenti, scadenzeAperte);
     const risultatiDaSalvare = Array.isArray(risultatiChunk) ? risultatiChunk : [];
 
-    // Salvataggio nel DB
+    // STEP 2B: Salvataggio nel DB di TUTTI i risultati AI (anche senza scadenza_id)
     for (const res of risultatiDaSalvare) {
-      if (res.scadenza_id) {
-        await supabase
-          .from('movimenti_banca')
-          .update({
-            ai_suggerimento: res.scadenza_id,
-            ai_confidence: res.confidence,
-            ai_motivo: res.motivo
-          })
-          .eq('id', res.movimento_id);
-      }
+      await supabase
+        .from('movimenti_banca')
+        .update({
+          ai_suggerimento: res.scadenza_id || null,
+          soggetto_id: res.soggetto_id || null, // Aggiunto per salvare l'acconto fornitore
+          ai_confidence: res.confidence || 0,
+          ai_motivo: res.motivo || "Nessun match o analisi fallita"
+        })
+        .eq('id', res.movimento_id);
     }
 
     return NextResponse.json({ success: true, risultati: risultatiDaSalvare });

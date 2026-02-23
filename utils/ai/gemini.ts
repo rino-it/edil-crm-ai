@@ -578,50 +578,49 @@ Formato: { "righe": [{ "codice": "string", "descrizione": "string", "unita_misur
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// --- STEP 2.5: UPGRADE PROMPT MATCHING CON SOGGETTO E AUTO-ESTINZIONE ---
-
 export async function matchBatchRiconciliazioneBancaria(movimenti: any[], scadenzeAperte: any[]) {
   const apiKey = process.env.GOOGLE_API_KEY;
-  if (!apiKey) {
-    console.warn("⚠️ API Key GOOGLE_API_KEY mancante.");
-    return movimenti.map(m => ({ movimento_id: m.id, scadenza_id: null, soggetto_id: null, confidence: 0, motivo: "API Key mancante" }));
-  }
+  if (!apiKey) return movimenti.map(m => ({ movimento_id: m.id, scadenza_id: null, soggetto_id: null, confidence: 0, motivo: "API Key mancante" }));
 
+  // 1A - Modello corretto (Tier 1 Free - 250 RPD)
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({ 
-    model: "gemini-2.5-flash", 
+    model: "gemini-2.5-flash",
     generationConfig: { responseMimeType: "application/json" } 
   });
 
+  // 1B / 1C - Prompt più intelligente e con meno token
   const prompt = `
 Sei il capo contabile di un'impresa edile. Devi analizzare un elenco di movimenti bancari e associarli ai fornitori o clienti corretti.
 
-ELENCO MOVIMENTI BANCA:
+ELENCO MOVIMENTI BANCA (CSV):
 ${JSON.stringify(movimenti.map(m => ({ id: m.id, data: m.data_operazione, importo: m.importo, causale: m.descrizione })), null, 2)}
 
 FATTURE/SCADENZE APERTE DISPONIBILI:
 ${JSON.stringify(scadenzeAperte.map(s => ({
     id: s.id,
     soggetto_id: s.soggetto_id, 
-    soggetto: s.anagrafica_soggetti?.ragione_sociale || 'N/D',
+    ragione_sociale: s.anagrafica_soggetti?.ragione_sociale || '',
+    partita_iva: s.anagrafica_soggetti?.partita_iva || '',
     importo_residuo: Number(s.importo_totale) - Number(s.importo_pagato || 0),
-    data_scadenza: s.data_scadenza,
-    riferimento: s.fattura_riferimento
+    fattura_riferimento: s.fattura_riferimento
 })), null, 2)}
 
-IL TUO METODO DI LAVORO (RISPETTA RIGOROSAMENTE QUESTO ORDINE):
-1. TROVA IL SOGGETTO: Leggi la "causale" del movimento. Cerca il nome di uno dei soggetti presenti nella lista delle scadenze aperte. Se la causale contiene il nome (o una parte chiara di esso), hai trovato il soggetto! DEVI restituire il suo "soggetto_id".
-2. SALDO FATTURA (Match Diretto): Una volta trovato il soggetto, confronta l'importo del movimento con l'importo residuo delle SUE fatture. Se l'importo coincide perfettamente, compila "scadenza_id" e imposta "confidence" a 0.98.
-3. ACCONTO AL SOGGETTO (Nessuna fattura coincide): Se hai trovato chiaramente il soggetto nella causale, MA l'importo non corrisponde a nessuna delle sue fatture specifiche, compila "soggetto_id" con l'ID del fornitore, MA lascia "scadenza_id" a null. Imposta "confidence" a 0.85. Questo dirà al gestionale: "So chi abbiamo pagato, mettiamolo a decurtazione del suo saldo totale aperto come acconto".
-4. IGNOTO: Se nella causale non c'è alcun riferimento riconducibile ai soggetti in elenco, restituisci null per entrambi gli ID e confidence 0.
+METODO DI LAVORO (ORDINE TASSATIVO):
+1. TROVA IL FORNITORE/CLIENTE: Cerca nella "causale" del movimento la "ragione_sociale" o "partita_iva". Considera anche abbreviazioni (es. "Srl", "SpA") o nomi parziali. Se lo trovi, annota "soggetto_id".
+2. ASSOCIA LA FATTURA: Se hai trovato il soggetto, cerca nella causale riferimenti come "FT", "FATT", "Fattura" seguiti dal numero "fattura_riferimento". In alternativa, se l'importo coincide perfettamente con l'"importo_residuo", hai un match!
+3. REGOLE DI MATCHING (Confidence):
+   - 0.98 (Match Diretto): Fornitore trovato + Importo esatto OPPURE Fornitore trovato + Numero Fattura esatto. Restituisci "soggetto_id" E "scadenza_id".
+   - 0.85 (Acconto): Fornitore trovato chiaramente nella causale, MA l'importo non combacia e non c'è numero fattura. Restituisci "soggetto_id" MA lascia "scadenza_id" a null.
+   - 0.00 (Ignoto): Nessun fornitore identificato e importo non combacia. Restituisci null per entrambi.
 
-Rispondi ESCLUSIVAMENTE con un array di oggetti JSON con questa struttura:
+Rispondi ESCLUSIVAMENTE con un array JSON:
 [{
-  "movimento_id": "id_del_movimento",
-  "scadenza_id": "id_scadenza_trovata_oppure_null",
-  "soggetto_id": "id_soggetto_trovato_oppure_null",
+  "movimento_id": "id_movimento",
+  "scadenza_id": "id_scadenza_o_null",
+  "soggetto_id": "id_soggetto_o_null",
   "confidence": 0.98,
-  "motivo": "Es: 'Trovato fornitore Mario Rossi Srl in causale. Importo non coincide con fatture, segnato come acconto.'"
+  "motivo": "Spiegazione breve e chiara"
 }]
 `;
 
@@ -631,14 +630,8 @@ Rispondi ESCLUSIVAMENTE con un array di oggetti JSON con questa struttura:
     textInfo = textInfo.replace(/```json/gi, "").replace(/```/g, "").trim();
     return JSON.parse(textInfo);
   } catch (error) {
-    console.error("❌ Errore Gemini Batch Matching:", error);
-    return movimenti.map(m => ({ 
-      movimento_id: m.id, 
-      scadenza_id: null, 
-      soggetto_id: null,
-      confidence: 0, 
-      motivo: "Errore nel parsing AI." 
-    }));
+    console.error("❌ Errore Gemini Batch:", error);
+    return movimenti.map(m => ({ movimento_id: m.id, scadenza_id: null, soggetto_id: null, confidence: 0, motivo: "Errore AI" }));
   }
 }
 

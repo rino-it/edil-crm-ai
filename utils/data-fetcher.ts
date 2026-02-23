@@ -1609,3 +1609,67 @@ export async function autoRiconciliaMovimenti(risultatiAI: any[]) {
   
   return { autoRiconciliati, daMostrare };
 }
+
+// ============================================================
+// STEP 5A: STORICO PAGAMENTI E ESPOSIZIONE SOGGETTO
+// ============================================================
+
+export async function getStoricoPaymentsSoggetto(soggetto_id: string) {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from('movimenti_banca')
+    .select(`
+      id,
+      data_operazione,
+      descrizione,
+      importo,
+      stato,
+      scadenza_id,
+      scadenze_pagamento (
+        fattura_riferimento,
+        importo_totale
+      )
+    `)
+    .eq('stato', 'riconciliato')
+    // Usiamo il soggetto_id direttamente sul movimento (che copre sia i match esatti che gli acconti)
+    .eq('soggetto_id', soggetto_id)
+    .order('data_operazione', { ascending: false });
+
+  if (error) {
+    console.error("❌ Errore getStoricoPaymentsSoggetto:", error);
+    return [];
+  }
+  return data || [];
+}
+
+export async function getEsposizioneSoggetto(soggetto_id: string) {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from('scadenze_pagamento')
+    .select('importo_totale, importo_pagato, stato')
+    .eq('soggetto_id', soggetto_id);
+
+  const info = { totale_fatture: 0, totale_pagato: 0, totale_da_pagare: 0, fatture_aperte: 0 };
+
+  if (error || !data) {
+    console.error("❌ Errore getEsposizioneSoggetto:", error);
+    return info;
+  }
+
+  data.forEach(s => {
+    const totale = Number(s.importo_totale) || 0;
+    const pagato = Number(s.importo_pagato) || 0;
+
+    info.totale_fatture += totale;
+    info.totale_pagato += pagato;
+    if (s.stato !== 'pagato') {
+      info.fatture_aperte += 1;
+    }
+  });
+
+  info.totale_da_pagare = info.totale_fatture - info.totale_pagato;
+
+  return info;
+}

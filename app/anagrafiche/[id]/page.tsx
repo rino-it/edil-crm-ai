@@ -1,13 +1,19 @@
 import { createClient } from '@/utils/supabase/server'
 import { notFound, redirect } from 'next/navigation'
-import { getSoggettoById } from '@/utils/data-fetcher'
+import { 
+  getSoggettoById, 
+  getEsposizioneSoggetto, 
+  getStoricoPaymentsSoggetto, 
+  getFattureAperteSoggetto 
+} from '@/utils/data-fetcher'
 import { editSoggetto, deleteSoggetto } from '../actions'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Save, Trash2 } from "lucide-react"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { ArrowLeft, Save, Trash2, Receipt, History } from "lucide-react"
 import Link from 'next/link'
 
 export default async function SoggettoDetailPage({ 
@@ -20,12 +26,19 @@ export default async function SoggettoDetailPage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
+  // --- Recupero Dati Aggregati e Storico (STEP 5A) ---
   const soggetto = await getSoggettoById(id)
   if (!soggetto) notFound()
 
+  const esposizione = await getEsposizioneSoggetto(id)
+  const storicoPagamenti = await getStoricoPaymentsSoggetto(id)
+  const fattureAperte = await getFattureAperteSoggetto(id)
+
+  const formatEuro = (val: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val)
+
   return (
     <div className="min-h-screen bg-zinc-50 p-8">
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-5xl mx-auto space-y-6">
         
         {/* Navigazione e Titolo */}
         <div className="flex items-center justify-between">
@@ -132,7 +145,6 @@ export default async function SoggettoDetailPage({
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="note">Note Interne</Label>
-                      {/* Sostituito Textarea di shadcn con textarea HTML standard per evitare errori di dipendenza */}
                       <textarea 
                         name="note" 
                         defaultValue={soggetto.note || ''} 
@@ -151,20 +163,32 @@ export default async function SoggettoDetailPage({
             </Card>
           </div>
 
-          {/* Colonna Destra: Stats e Pericolo */}
+          {/* Colonna Destra: Stats e Pericolo (STEP 5B) */}
           <div className="space-y-6">
             <Card className="bg-zinc-900 text-white">
               <CardHeader>
                 <CardTitle className="text-sm font-medium text-zinc-400 uppercase tracking-wider">Status Finanziario</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-6">
                 <div>
                   <p className="text-zinc-400 text-xs">Aperto da {soggetto.tipo === 'cliente' ? 'incassare' : 'pagare'}</p>
-                  <p className="text-2xl font-bold">€ 0,00</p>
+                  <p className="text-3xl font-bold text-rose-400">{formatEuro(esposizione.totale_da_pagare)}</p>
                 </div>
-                <div>
-                  <p className="text-zinc-400 text-xs">Media giorni pagamento</p>
-                  <p className="text-xl font-semibold">-- gg</p>
+                
+                <div className="grid grid-cols-2 gap-4 border-t border-zinc-800 pt-4">
+                  <div>
+                    <p className="text-zinc-500 text-xs">Totale Fatturato</p>
+                    <p className="text-sm font-semibold">{formatEuro(esposizione.totale_fatture)}</p>
+                  </div>
+                  <div>
+                    <p className="text-zinc-500 text-xs">Totale Pagato</p>
+                    <p className="text-sm font-semibold text-emerald-400">{formatEuro(esposizione.totale_pagato)}</p>
+                  </div>
+                </div>
+
+                <div className="border-t border-zinc-800 pt-4">
+                  <p className="text-zinc-400 text-xs">Fatture Aperte</p>
+                  <p className="text-xl font-semibold">{esposizione.fatture_aperte}</p>
                 </div>
               </CardContent>
             </Card>
@@ -174,7 +198,6 @@ export default async function SoggettoDetailPage({
                 <CardTitle className="text-red-800 text-sm">Zona Pericolo</CardTitle>
               </CardHeader>
               <CardContent>
-                {/* Rimosso onSubmit con confirm() perché non supportato nei Server Components */}
                 <form action={deleteSoggetto}>
                   <input type="hidden" name="id" value={soggetto.id} />
                   <Button type="submit" variant="destructive" className="w-full">
@@ -184,8 +207,126 @@ export default async function SoggettoDetailPage({
               </CardContent>
             </Card>
           </div>
-
         </div>
+
+        {/* STEP 5C: Sezione Fatture Aperte */}
+        <Card className="mt-8">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <div className="space-y-1">
+              <CardTitle className="flex items-center gap-2">
+                <Receipt className="h-5 w-5 text-zinc-500" />
+                Fatture Aperte ({fattureAperte.length})
+              </CardTitle>
+              <CardDescription>Elenco delle fatture non ancora saldate completamente.</CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Scadenza</TableHead>
+                  <TableHead>Fattura</TableHead>
+                  <TableHead className="text-right">Totale</TableHead>
+                  <TableHead className="text-right">Pagato</TableHead>
+                  <TableHead className="text-right font-bold">Residuo</TableHead>
+                  <TableHead>Stato</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {fattureAperte.length === 0 ? (
+                  <TableRow><TableCell colSpan={6} className="text-center py-6 text-zinc-400">Nessuna fattura aperta.</TableCell></TableRow>
+                ) : (
+                  fattureAperte.map((f) => {
+                    const residuo = Number(f.importo_totale) - Number(f.importo_pagato || 0);
+                    const isScaduta = new Date(f.data_scadenza) < new Date();
+                    
+                    return (
+                      <TableRow key={f.id}>
+                        <TableCell className="text-sm">
+                          {new Date(f.data_scadenza).toLocaleDateString('it-IT')}
+                        </TableCell>
+                        <TableCell className="font-medium">{f.fattura_riferimento || 'N/D'}</TableCell>
+                        <TableCell className="text-right">{formatEuro(Number(f.importo_totale))}</TableCell>
+                        <TableCell className="text-right text-emerald-600">{formatEuro(Number(f.importo_pagato || 0))}</TableCell>
+                        <TableCell className="text-right font-bold">{formatEuro(residuo)}</TableCell>
+                        <TableCell>
+                          {isScaduta ? (
+                            <Badge variant="destructive" className="animate-pulse">Scaduta</Badge>
+                          ) : f.stato === 'parziale' ? (
+                            <Badge variant="outline" className="bg-amber-100 text-amber-800 border-none">Parziale</Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-rose-100 text-rose-800 border-none">Da pagare</Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        {/* STEP 5B: Sezione Storico Pagamenti */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <div className="space-y-1">
+              <CardTitle className="flex items-center gap-2">
+                <History className="h-5 w-5 text-zinc-500" />
+                Storico Riconciliazioni Bancarie
+              </CardTitle>
+              <CardDescription>Ultimi pagamenti e acconti registrati e verificati in banca.</CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Data Op.</TableHead>
+                  <TableHead>Causale Bancaria</TableHead>
+                  <TableHead>Riferimento Fattura</TableHead>
+                  <TableHead className="text-right">Importo Banca</TableHead>
+                  <TableHead>Tipo</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {storicoPagamenti.length === 0 ? (
+                  <TableRow><TableCell colSpan={5} className="text-center py-6 text-zinc-400">Nessun pagamento registrato nello storico.</TableCell></TableRow>
+                ) : (
+                  storicoPagamenti.map((m: any) => {
+                    const isAcconto = !m.scadenza_id;
+                    const fattura = m.scadenze_pagamento ? m.scadenze_pagamento.fattura_riferimento : 'Nessuna';
+                    
+                    return (
+                      <TableRow key={m.id}>
+                        <TableCell className="text-sm">
+                          {new Date(m.data_operazione).toLocaleDateString('it-IT')}
+                        </TableCell>
+                        <TableCell className="text-xs font-mono truncate max-w-[250px]" title={m.descrizione}>
+                          {m.descrizione}
+                        </TableCell>
+                        <TableCell className="text-sm font-medium">
+                          {isAcconto ? <span className="text-zinc-400 italic">Acconto Generico</span> : fattura}
+                        </TableCell>
+                        <TableCell className={`text-right font-bold ${m.importo > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {formatEuro(m.importo)}
+                        </TableCell>
+                        <TableCell>
+                          {isAcconto ? (
+                            <Badge variant="outline" className="bg-amber-100 text-amber-800 border-none">Acconto</Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-emerald-100 text-emerald-800 border-none">Saldato</Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
       </div>
     </div>
   )

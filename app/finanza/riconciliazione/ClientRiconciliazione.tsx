@@ -38,12 +38,12 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
 
   // Gestione Matching AI (Architettura a Chunk dal Client per evitare Timeout Vercel e Rate Limits)
   const handleAiAnalysis = async () => {
-    const daAnalizzare = movimentiLocali.filter(m => !m.ai_suggerimento)
+    const daAnalizzare = movimentiLocali.filter(m => !m.ai_motivo)
     if (daAnalizzare.length === 0) return;
 
     setIsAnalyzing(true)
     
-    // FIX 0.3: Chunk da 20. 81 movimenti = 5 chiamate API.
+    // STEP 6: Chunk da 20. 81 movimenti = 5 chiamate API.
     const CHUNK_SIZE = 20; 
     setProgress({ current: 0, total: daAnalizzare.length });
 
@@ -64,12 +64,14 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
           setMovimentiLocali((prevMovimenti) => 
             prevMovimenti.map((mov) => {
               const match = data.risultati.find((r: any) => r.movimento_id === mov.id);
-              if (match && match.scadenza_id) {
+              // STEP 3A: Mostrare tutti i risultati AI (anche quelli senza scadenza_id)
+              if (match) {
                 return { 
                   ...mov, 
-                  ai_suggerimento: match.scadenza_id, 
-                  ai_confidence: match.confidence, 
-                  ai_motivo: match.motivo 
+                  ai_suggerimento: match.scadenza_id || null, 
+                  soggetto_id: match.soggetto_id || null,
+                  ai_confidence: match.confidence || 0, 
+                  ai_motivo: match.motivo || "Analisi completata"
                 };
               }
               return mov;
@@ -83,9 +85,9 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
       const processed = Math.min(i + CHUNK_SIZE, daAnalizzare.length);
       setProgress({ current: processed, total: daAnalizzare.length });
       
-      // FIX 0.1 C: Nessun router.refresh() qui. La UI si aggiorna tramite setMovimentiLocali.
+      // STEP 6: Nessun router.refresh() qui dentro.
       
-      // FIX 0.3: Delay di 15 secondi tra chunk per stare sereni sotto i 10 RPM del Free Tier
+      // STEP 6: Delay di 15 secondi tra chunk
       if (processed < daAnalizzare.length) {
         await new Promise(resolve => setTimeout(resolve, 15000));
       }
@@ -94,17 +96,24 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
     setIsAnalyzing(false)
     setProgress({ current: 0, total: 0 })
     
-    // Unico refresh finale
+    // STEP 6: Unico refresh finale
     router.refresh();
   }
 
-  // Wrapper per le Server Actions
+  // STEP 3B: Rimuovere il movimento dallo state locale istantaneamente
   const handleConferma = async (formData: FormData) => {
-    await confermaMatch(formData)
+    const movId = formData.get('movimento_id') as string;
+    setMovimentiLocali(prev => prev.filter(m => m.id !== movId));
+    await confermaMatch(formData);
   }
 
+  // STEP 3C: Azzerare i campi AI nello state locale istantaneamente
   const handleRifiuto = async (formData: FormData) => {
-    await rifiutaMatch(formData)
+    const movId = formData.get('movimento_id') as string;
+    setMovimentiLocali(prev => prev.map(m => 
+      m.id === movId ? { ...m, ai_suggerimento: null, soggetto_id: null, ai_confidence: 0, ai_motivo: null } : m
+    ));
+    await rifiutaMatch(formData);
   }
 
   return (
@@ -127,8 +136,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
           <CardHeader className="pb-3"><CardTitle className="text-sm">2. Analisi Intelligente</CardTitle></CardHeader>
           <CardContent className="flex items-center justify-between">
             <span className="text-sm text-zinc-500">
-              {/* Usa movimentiLocali qui */}
-              {movimentiLocali.filter(m => !m.ai_suggerimento).length} movimenti in attesa di analisi.
+              {movimentiLocali.filter(m => !m.ai_motivo).length} movimenti in attesa di analisi.
             </span>
             <Button onClick={handleAiAnalysis} disabled={isAnalyzing || movimentiLocali.length === 0} className="bg-indigo-600 hover:bg-indigo-700 w-full md:w-auto">
               {isAnalyzing ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <BrainCircuit className="h-4 w-4 mr-2" />}
@@ -151,16 +159,16 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
               </TableRow>
             </TableHeader>
             <TableBody>
-              {/* USA movimentiLocali nel loop */}
               {movimentiLocali.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-12 text-zinc-400">Nessun movimento da riconciliare.</TableCell>
                 </TableRow>
               ) : (
                 movimentiLocali.map((m) => {
-                  const suggestedScadenza = scadenzeAperte.find(s => s.id === m.ai_suggerimento)
-                  const conf = m.ai_confidence || 0
-                  const badgeColor = conf > 0.8 ? 'bg-emerald-100 text-emerald-800' : conf > 0.5 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
+                  const suggestedScadenza = scadenzeAperte.find(s => s.id === m.ai_suggerimento);
+                  const conf = m.ai_confidence || 0;
+                  const isAcconto = m.soggetto_id && !m.ai_suggerimento;
+                  const hasAiRun = !!m.ai_motivo;
 
                   return (
                     <TableRow key={m.id} className="hover:bg-zinc-50/50">
@@ -173,28 +181,37 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
                       <TableCell className={`text-right font-bold ${m.importo > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                         {formatEuro(m.importo)}
                       </TableCell>
+                      
                       <TableCell>
-                        {m.ai_suggerimento ? (
+                        {/* STEP 3D: Mostrare motivo AI sempre se l'analisi è stata fatta */}
+                        {hasAiRun ? (
                           <div className="flex flex-col gap-1">
-                            <span className="text-sm font-semibold">{suggestedScadenza?.soggetto?.ragione_sociale || 'Soggetto Ignoto'}</span>
+                            {(m.ai_suggerimento || isAcconto) ? (
+                              <span className="text-sm font-semibold">{suggestedScadenza?.soggetto?.ragione_sociale || 'Soggetto Identificato'}</span>
+                            ) : (
+                              <span className="text-sm font-semibold text-zinc-400">Nessun Match</span>
+                            )}
+                            
                             <div className="flex items-center gap-2 text-xs">
-                              <Badge variant="outline" className={`${badgeColor} border-none`}>
-                                {(conf * 100).toFixed(0)}% Match
+                              <Badge variant="outline" className={`${conf > 0.8 ? 'bg-emerald-100 text-emerald-800' : conf > 0 ? 'bg-amber-100 text-amber-800' : 'bg-zinc-100 text-zinc-600'} border-none`}>
+                                {isAcconto ? 'Acconto' : `${(conf * 100).toFixed(0)}% Match`}
                               </Badge>
-                              <span className="text-zinc-500 truncate max-w-[150px]" title={m.ai_motivo}>{m.ai_motivo}</span>
+                              <span className="text-zinc-500 truncate max-w-[200px]" title={m.ai_motivo}>{m.ai_motivo}</span>
                             </div>
                           </div>
                         ) : (
-                          <span className="text-xs text-zinc-400 italic">Nessun suggerimento. Clicca su "Avvia Matching AI".</span>
+                          <span className="text-xs text-zinc-400 italic">In attesa di analisi...</span>
                         )}
                       </TableCell>
+                      
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          {m.ai_suggerimento ? (
+                          {(m.ai_suggerimento || isAcconto) ? (
                             <>
                               <form action={handleConferma}>
                                 <input type="hidden" name="movimento_id" value={m.id} />
-                                <input type="hidden" name="scadenza_id" value={m.ai_suggerimento} />
+                                {m.ai_suggerimento && <input type="hidden" name="scadenza_id" value={m.ai_suggerimento} />}
+                                {m.soggetto_id && <input type="hidden" name="soggetto_id" value={m.soggetto_id} />}
                                 <input type="hidden" name="importo" value={Math.abs(m.importo)} />
                                 <Button size="sm" type="submit" className="bg-emerald-600 hover:bg-emerald-700 h-8 px-2" title="Conferma">
                                   <Check className="h-4 w-4" />
