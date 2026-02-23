@@ -39,7 +39,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
 
   // FIX 4: Gestione Matching AI con Retry e Robustezza
   const handleAiAnalysis = async () => {
-    const daAnalizzare = movimentiLocali.filter(m => !m.ai_suggerimento && !m.soggetto_id)
+    const daAnalizzare = movimentiLocali.filter(m => !m.ai_suggerimento && !m.soggetto_id && !m.ai_motivo)
     if (daAnalizzare.length === 0) return;
 
     setIsAnalyzing(true)
@@ -77,7 +77,8 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
                     ai_suggerimento: match.scadenza_id || null, 
                     soggetto_id: match.soggetto_id || null,
                     ai_confidence: match.confidence || 0, 
-                    ai_motivo: match.motivo || "Analisi completata"
+                    ai_motivo: match.motivo || "Analisi completata",
+                    ragione_sociale: match.ragione_sociale || null // FIX 5: Salviamo la ragione sociale
                   };
                 }
                 if (chunk.some(c => c.id === mov.id) && !receivedIds.has(mov.id)) {
@@ -126,7 +127,8 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
     const movId = formData.get('movimento_id') as string;
     await rifiutaMatch(formData);
     setMovimentiLocali(prev => prev.map(m => 
-      m.id === movId ? { ...m, ai_suggerimento: null, soggetto_id: null, ai_confidence: null, ai_motivo: null } : m
+      // FIX 5: Puliamo anche la ragione_sociale in caso di rifiuto
+      m.id === movId ? { ...m, ai_suggerimento: null, soggetto_id: null, ai_confidence: null, ai_motivo: null, ragione_sociale: null } : m
     ));
   }
 
@@ -150,9 +152,9 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
           <CardHeader className="pb-3"><CardTitle className="text-sm">2. Analisi Intelligente</CardTitle></CardHeader>
           <CardContent className="flex items-center justify-between">
             <span className="text-sm text-zinc-500">
-              {movimentiLocali.filter(m => !m.ai_suggerimento && !m.soggetto_id).length} movimenti pronti per analisi AI.
+              {movimentiLocali.filter(m => !m.ai_suggerimento && !m.soggetto_id && !m.ai_motivo).length} movimenti pronti per analisi AI.
             </span>
-            <Button onClick={handleAiAnalysis} disabled={isAnalyzing || movimentiLocali.filter(m => !m.ai_suggerimento && !m.soggetto_id).length === 0} className="bg-indigo-600 hover:bg-indigo-700 w-full md:w-auto">
+            <Button onClick={handleAiAnalysis} disabled={isAnalyzing || movimentiLocali.filter(m => !m.ai_suggerimento && !m.soggetto_id && !m.ai_motivo).length === 0} className="bg-indigo-600 hover:bg-indigo-700 w-full md:w-auto">
               {isAnalyzing ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <BrainCircuit className="h-4 w-4 mr-2" />}
               {isAnalyzing ? `Analisi: ${progress.current} / ${progress.total}` : "Avvia Matching AI"}
             </Button>
@@ -183,7 +185,6 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
                   const suggestedSoggetto = scadenzeAperte.find(s => s.soggetto_id === m.soggetto_id);
                   const conf = m.ai_confidence || 0;
                   const isAcconto = m.soggetto_id && !m.ai_suggerimento;
-                  const hasAiRun = !!m.ai_motivo;
 
                   return (
                     <TableRow key={m.id} className="hover:bg-zinc-50/50">
@@ -200,7 +201,10 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
                       <TableCell>
                         {m.ai_suggerimento ? (
                           <div className="flex flex-col gap-1">
-                            <span className="text-sm font-semibold">{suggestedScadenza?.soggetto?.ragione_sociale || 'Match Trovato'}</span>
+                            {/* FIX 5: Usa m.ragione_sociale se disponibile */}
+                            <span className="text-sm font-semibold">
+                              {m.ragione_sociale || suggestedScadenza?.soggetto?.ragione_sociale || suggestedScadenza?.anagrafica_soggetti?.ragione_sociale || 'Match Trovato'}
+                            </span>
                             <div className="flex items-center gap-2 text-xs">
                               <Badge variant="outline" className={`${conf > 0.8 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} border-none`}>
                                 {(conf * 100).toFixed(0)}% Match
@@ -210,8 +214,11 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
                           </div>
                         ) : m.ai_motivo ? (
                           <div className="flex flex-col gap-1">
-                            {isAcconto && suggestedSoggetto && (
-                              <span className="text-sm font-semibold">{suggestedSoggetto.soggetto?.ragione_sociale}</span>
+                            {/* FIX 5: Usa m.ragione_sociale per gli acconti se non c'è in scadenzeAperte */}
+                            {isAcconto && (m.ragione_sociale || suggestedSoggetto) && (
+                              <span className="text-sm font-semibold">
+                                {m.ragione_sociale || suggestedSoggetto?.soggetto?.ragione_sociale || suggestedSoggetto?.anagrafica_soggetti?.ragione_sociale}
+                              </span>
                             )}
                             <span className="text-xs text-amber-600 italic truncate max-w-[200px]" title={m.ai_motivo}>{m.ai_motivo}</span>
                             <Badge variant="outline" className="bg-amber-50 text-amber-700 border-none w-fit">

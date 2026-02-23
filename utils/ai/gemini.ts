@@ -608,6 +608,9 @@ DIZIONARIO CAUSALI BANCARIE ITALIANE:
 - "IBAN" seguito da codice = IBAN del beneficiario/ordinante
 - "CRO" o "TRN" = Codice riferimento operazione
 
+ISTRUZIONE CRUCIALE PER I NUMERI FATTURA:
+Cerca SEMPRE numeri isolati, o numeri vicini a "FATT", "FT", "FATTURA", "N.", "NR". Se trovi "FT 123/25", il numero fattura è "123" o "123/25". Confrontalo sempre con il campo 'fatt' delle scadenze aperte.
+
 MOVIMENTI BANCA DA ANALIZZARE:
 ${JSON.stringify(movimenti.map(m => ({ id: m.id, data: m.data_operazione, importo: m.importo, causale: m.descrizione })), null, 2)}
 
@@ -625,14 +628,14 @@ ${JSON.stringify(scadenzeAperte.map(s => ({
 
 STRATEGIA DI MATCHING (in ordine di priorità tassativo):
 1. IBAN: Cerca un IBAN nella causale (formato ITxx...) e confrontalo con gli IBAN dei soggetti. Questo garantisce il "soggetto_id".
-2. NOME: Cerca il nome/ragione sociale nella causale (fuzzy, ignora Srl/SpA/suffissi).
-3. P.IVA: Cerca la Partita IVA nella causale (11 cifre).
-4. FATTURA: Se hai trovato il soggetto, cerca un numero fattura nella causale e confrontalo con i riferimenti fattura aperti di quel soggetto.
+2. FATTURA (ISTRUZIONE ESPLICITA): Cerca attivamente un numero fattura nella causale (es. "Fatt. 123", "FT 45/A", o anche solo "123" se l'importo coincide). Se trovi un match con il campo 'fatt', usalo per identificare la scadenza.
+3. NOME: Cerca il nome/ragione sociale nella causale (fuzzy, ignora Srl/SpA/suffissi).
+4. P.IVA: Cerca la Partita IVA nella causale (11 cifre).
 5. IMPORTO: Se il soggetto è trovato, confronta l'importo assoluto del movimento con gli importi residui delle sue scadenze (stai attento al SEGNO: importo<0 è uscita per fornitore, importo>0 è entrata da cliente).
 
 REGOLE DI RISPOSTA (Confidence):
-- MATCH ESATTO (0.95 - 0.99): Importo coincide con la fattura E soggetto trovato, OPPURE numero fattura esatto trovato. (Fornisci soggetto_id E scadenza_id).
-- MATCH ACCONTO (0.70 - 0.94): Soggetto identificato con certezza, MA l'importo non combacia con nessuna fattura. (Fornisci soggetto_id, MA scadenza_id: null).
+- MATCH ESATTO (0.95 - 0.99): Trovato numero fattura esatto OPPURE (Importo coincide con la fattura E soggetto trovato tramite IBAN o Nome). (Fornisci soggetto_id E scadenza_id).
+- MATCH ACCONTO (0.70 - 0.94): Soggetto identificato con certezza (es. tramite IBAN), MA l'importo non combacia con nessuna fattura e non ci sono riferimenti di fattura chiari. (Fornisci soggetto_id, MA scadenza_id: null).
 - MATCH DEBOLE (0.40 - 0.69): Soggetto forse menzionato ma confuso.
 - NESSUN MATCH (< 0.40): Non riesci a identificare niente. Metti entrambi null.
 
@@ -642,7 +645,7 @@ RISPONDI con un array JSON. Per OGNI movimento DEVI restituire ESATTAMENTE un og
   "scadenza_id": "uuid_fattura_o_null",
   "soggetto_id": "uuid_soggetto_o_null",
   "confidence": 0.95,
-  "motivo": "Spiegazione breve e tecnica in italiano (es. Trovato IBAN e importo esatto fattura 12)"
+  "motivo": "Spiegazione breve e tecnica in italiano (es. Trovato numero fattura 123 e importo coincidente)"
 }]
 `;
 

@@ -1510,6 +1510,153 @@ export async function getScadenzeApertePerMatch(tipo: 'entrata' | 'uscita') {
   return data || [];
 }
 
+// ============================================================
+// PRE-MATCH DETERMINISTICO (Nuova Architettura Ibrida)
+// Gira prima dell'AI. Trova i match esatti tramite Text Search.
+// ============================================================
+
+function normalizzaNome(nome: string): string {
+  if (!nome) return '';
+  return nome
+    .toLowerCase()
+    .replace(/\b(s\.?r\.?l\.?|s\.?p\.?a\.?|s\.?n\.?c\.?|s\.?a\.?s\.?|s\.?c\.?r\.?l\.?|di|e|&)\b/gi, '')
+    .replace(/[^a-z0-9\s]/g, '')  // rimuovi punteggiatura
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export async function preMatchMovimenti(movimenti: any[]) {
+  const matchati: any[] = [];
+  const nonMatchati: any[] = [];
+  const supabase = getSupabaseAdmin();
+
+  // 1. Carica tutte le scadenze aperte con i dati del soggetto
+  const { data: scadenzeAperte } = await supabase
+    .from('scadenze_pagamento')
+    .select('id, fattura_riferimento, importo_totale, importo_pagato, data_scadenza, tipo, soggetto_id, descrizione, anagrafica_soggetti(ragione_sociale, partita_iva, iban)')
+    .neq('stato', 'pagato');
+
+  const scadenze = scadenzeAperte || [];
+
+  // Pre-calcolo mappa soggetti per ricerca veloce
+  const soggettiMap = new Map();
+  for (const s of scadenze) {
+    if (s.soggetto_id && s.anagrafica_soggetti && !soggettiMap.has(s.soggetto_id)) {
+      soggettiMap.set(s.soggetto_id, s.anagrafica_soggetti);
+    }
+  }
+  const soggetti = Array.from(soggettiMap.entries()).map(([id, data]) => ({ id, ...data }));
+
+  // 2. Analizza ogni movimento
+  for (const m of movimenti) {
+    let trovato = false;
+    let matchScadenzaId = null;
+    let matchSoggettoId = null;
+    let confidence = 0;
+    let motivo = "";
+    let matchRagioneSociale = "";
+
+    const causaleRaw = m.descrizione || "";
+    const causale = causaleRaw.toUpperCase();
+    const causaleNorm = normalizzaNome(causale);
+
+    // A) Ricerca ESATTA numero fattura (infallibile)
+    for (const s of scadenze) {
+      if (!s.fattura_riferimento) continue;
+      const fatturaStr = s.fattura_riferimento.toUpperCase();
+      
+      // Se il numero fattura è lungo almeno 4 caratteri e la causale lo contiene esattamente
+      if (fatturaStr.length >= 4 && causale.includes(fatturaStr)) {
+        trovato = true;
+        matchScadenzaId = s.id;
+        matchSoggettoId = s.soggetto_id;
+        confidence = 0.99;
+        motivo = `Pre-match: Trovata fattura esatta ${fatturaStr}`;
+        matchRagioneSociale = s.anagrafica_soggetti?.ragione_sociale || "";
+        break;
+      }
+    }
+
+    // B) Ricerca per IBAN (se non ha trovato la fattura)
+    if (!trovato) {
+      const ibanRegex = /(IT[0-9]{2}[A-Z][0-9]{10}[A-Z0-9]{12})/i;
+      const ibanMatch = causale.match(ibanRegex);
+      if (ibanMatch) {
+        const ibanTrovato = ibanMatch[1].replace(/\s/g, '');
+        const soggettoTrovato = soggetti.find(s => s.iban && s.iban.replace(/\s/g, '') === ibanTrovato);
+        if (soggettoTrovato) {
+          trovato = true;
+          matchSoggettoId = soggettoTrovato.id;
+          confidence = 0.90;
+          motivo = `Pre-match: IBAN corrispondente a ${soggettoTrovato.ragione_sociale}`;
+          matchRagioneSociale = soggettoTrovato.ragione_sociale;
+        }
+      }
+    }
+
+    // C) Ricerca P.IVA (11 cifre)
+    if (!trovato) {
+      const pivaRegex = /\b(\d{11})\b/;
+      const pivaMatch = causale.match(pivaRegex);
+      if (pivaMatch) {
+        const pivaTrovata = pivaMatch[1];
+        const soggettoTrovato = soggetti.find(s => s.partita_iva === pivaTrovata);
+        if (soggettoTrovato) {
+          trovato = true;
+          matchSoggettoId = soggettoTrovato.id;
+          confidence = 0.85;
+          motivo = `Pre-match: Trovata P.IVA ${pivaTrovata}`;
+          matchRagioneSociale = soggettoTrovato.ragione_sociale;
+        }
+      }
+    }
+
+    // D) Text Search Ragione Sociale
+    if (!trovato) {
+      for (const soggetto of soggetti) {
+        const nomeNorm = normalizzaNome(soggetto.ragione_sociale);
+        if (nomeNorm.length >= 4 && causaleNorm.includes(nomeNorm)) {
+          trovato = true;
+          matchSoggettoId = soggetto.id;
+          confidence = 0.80;
+          motivo = `Pre-match: Trovata ragione sociale '${soggetto.ragione_sociale}'`;
+          matchRagioneSociale = soggetto.ragione_sociale;
+          break; 
+        }
+      }
+    }
+
+    // 3. Smistamento
+    if (trovato) {
+      const risultato = {
+        movimento_id: m.id,
+        scadenza_id: matchScadenzaId,
+        soggetto_id: matchSoggettoId,
+        confidence: confidence,
+        motivo: motivo,
+        ragione_sociale: matchRagioneSociale
+      };
+      
+      // Salvataggio istantaneo su DB
+      await supabase
+        .from('movimenti_banca')
+        .update({
+          ai_suggerimento: matchScadenzaId,
+          soggetto_id: matchSoggettoId,
+          ai_confidence: confidence,
+          ai_motivo: motivo
+        })
+        .eq('id', m.id);
+
+      matchati.push(risultato);
+    } else {
+      nonMatchati.push(m);
+    }
+  }
+
+  return { matchati, nonMatchati };
+}
+
 export async function confermaRiconciliazione(
   movimento_id: string, 
   scadenza_id: string, 
