@@ -1673,3 +1673,14 @@ export async function getEsposizioneSoggetto(soggetto_id: string) {
 
   return info;
 }
+
+export async function getFattureAperteSoggetto(soggetto_id: string) {
+  const supabase = getSupabaseAdmin();
+  const { data } = await supabase
+    .from('scadenze_pagamento')
+    .select('*')
+    .eq('soggetto_id', soggetto_id)
+    .neq('stato', 'pagato')
+    .order('data_scadenza', { ascending: true });
+  return data || [];
+}
