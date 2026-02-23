@@ -110,11 +110,11 @@ export async function matchManuale(formData: FormData) {
 }
 
 // ============================================================================
-// MOTORE DI ALLOCAZIONE INTELLIGENTE (Subset Sum + FIFO)
+// MOTORE DI ALLOCAZIONE INTELLIGENTE (Subset Sum Sicuro + FIFO)
 // ============================================================================
 
 async function allocaPagamentoIntelligente(supabaseAdmin: any, soggetto_id: string, importo_pagato: number) {
-  // 1. Recupera tutte le scadenze aperte del soggetto (dal più vecchio al più nuovo)
+  // 1. Recupera tutte le scadenze aperte
   const { data: scadenzeAperte } = await supabaseAdmin
     .from('scadenze_pagamento')
     .select('id, importo_totale, importo_pagato, stato')
@@ -122,33 +122,34 @@ async function allocaPagamentoIntelligente(supabaseAdmin: any, soggetto_id: stri
     .neq('stato', 'pagato')
     .order('data_scadenza', { ascending: true });
 
-  if (!scadenzeAperte || scadenzeAperte.length === 0) return; // Niente da saldare, resta come acconto libero
+  if (!scadenzeAperte || scadenzeAperte.length === 0) return;
 
-  // Arrotonda in centesimi per evitare errori di virgola mobile in Javascript
   const targetCents = Math.round(importo_pagato * 100);
   const items = scadenzeAperte.map((s: any) => ({
     ...s,
     residuoCents: Math.round((Number(s.importo_totale) - Number(s.importo_pagato || 0)) * 100)
   }));
 
-  // 2. FASE 1: Ricerca di una combinazione esatta (Subset Sum)
-  function trovaCombinazioneEsatta(index: number, sum: number, subset: any[]): any[] | null {
-    if (sum === targetCents) return subset;
-    if (sum > targetCents || index >= items.length) return null;
-    
-    // Includi l'elemento corrente
-    const include = trovaCombinazioneEsatta(index + 1, sum + items[index].residuoCents, [...subset, items[index]]);
-    if (include) return include;
-    
-    // Escludi l'elemento corrente
-    return trovaCombinazioneEsatta(index + 1, sum, subset);
+  let combinazioneEsatta = null;
+
+  // 2. FASE 1: Combinazione Esatta (Limite di sicurezza: 20 fatture = ~1 milione di iterazioni = <50ms)
+  if (items.length <= 20) {
+    function trovaCombinazioneEsatta(index: number, sum: number, subset: any[]): any[] | null {
+      if (sum === targetCents) return subset;
+      if (sum > targetCents || index >= items.length) return null;
+      
+      const include = trovaCombinazioneEsatta(index + 1, sum + items[index].residuoCents, [...subset, items[index]]);
+      if (include) return include;
+      
+      return trovaCombinazioneEsatta(index + 1, sum, subset);
+    }
+    combinazioneEsatta = trovaCombinazioneEsatta(0, 0, []);
+  } else {
+    console.log(`⚠️ Troppe fatture (${items.length}), fallback su FIFO per evitare Timeout.`);
   }
 
-  const combinazioneEsatta = trovaCombinazioneEsatta(0, 0, []);
-
+  // Se trova l'esatta combinazione, chiude quelle
   if (combinazioneEsatta) {
-    // Trovata somma esatta! Chiudiamo queste specifiche fatture.
-    console.log(`🎯 Trovata combinazione esatta per ${importo_pagato}€. Chiudo ${combinazioneEsatta.length} fatture.`);
     for (const scadenza of combinazioneEsatta) {
       await supabaseAdmin
         .from('scadenze_pagamento')
@@ -159,8 +160,6 @@ async function allocaPagamentoIntelligente(supabaseAdmin: any, soggetto_id: stri
   }
 
   // 3. FASE 2: Logica FIFO (First In, First Out)
-  // Nessuna combinazione esatta. Spalmiamo i soldi dalle fatture più vecchie a scendere.
-  console.log(`💧 Nessuna somma esatta. Spalmo ${importo_pagato}€ col metodo FIFO.`);
   let budgetResiduoCents = targetCents;
 
   for (const scadenza of items) {
@@ -169,12 +168,10 @@ async function allocaPagamentoIntelligente(supabaseAdmin: any, soggetto_id: stri
     const daPagareCents = Math.min(scadenza.residuoCents, budgetResiduoCents);
     budgetResiduoCents -= daPagareCents;
 
-    // Calcola i nuovi valori in Euro
     const vecchioPagatoEuro = Number(scadenza.importo_pagato || 0);
-    const quotaAggiuntaEuro = daPagareCents / 100;
-    const nuovoPagatoEuro = vecchioPagatoEuro + quotaAggiuntaEuro;
+    const nuovoPagatoEuro = vecchioPagatoEuro + (daPagareCents / 100);
     
-    // Tolleranza di 1 centesimo per il cambio stato
+    // Tolleranza di 1 centesimo
     const nuovoStato = (nuovoPagatoEuro >= Number(scadenza.importo_totale) - 0.01) ? 'pagato' : 'parziale';
 
     await supabaseAdmin
