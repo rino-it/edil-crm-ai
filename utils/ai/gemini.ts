@@ -589,52 +589,46 @@ export async function matchBatchRiconciliazioneBancaria(movimenti: any[], scaden
 
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({ 
-    model: "gemini-2.5-flash", // RIGORE: Usiamo esclusivamente 2.5-flash (Tier 1 abilitato)
+    model: "gemini-2.5-flash", 
     generationConfig: { responseMimeType: "application/json" } 
   });
 
   const prompt = `
-Sei un software avanzato di riconciliazione bancaria per un'impresa edile.
-Devi trovare la fattura/scadenza corretta per ogni movimento bancario fornito nell'elenco.
+Sei il capo contabile di un'impresa edile. Devi analizzare un elenco di movimenti bancari e associarli ai fornitori o clienti corretti.
 
-ELENCO MOVIMENTI BANCA DA RICONCILIARE:
+ELENCO MOVIMENTI BANCA:
 ${JSON.stringify(movimenti.map(m => ({ id: m.id, data: m.data_operazione, importo: m.importo, causale: m.descrizione })), null, 2)}
 
-SCADENZE APERTE DISPONIBILI (Fatture attive e passive):
+FATTURE/SCADENZE APERTE DISPONIBILI:
 ${JSON.stringify(scadenzeAperte.map(s => ({
     id: s.id,
     soggetto_id: s.soggetto_id, 
     soggetto: s.anagrafica_soggetti?.ragione_sociale || 'N/D',
     importo_residuo: Number(s.importo_totale) - Number(s.importo_pagato || 0),
     data_scadenza: s.data_scadenza,
-    riferimento: s.fattura_riferimento,
-    descrizione: s.descrizione,
-    tipo: s.tipo
+    riferimento: s.fattura_riferimento
 })), null, 2)}
 
-REGOLE DI MATCHING (RISPETTA SCRUPOLOSAMENTE I CONFIDENCE):
-1. MATCH AUTO (>= 0.98): Importo residuo della scadenza ESATTAMENTE IDENTICO all'importo del movimento E nome del soggetto o numero fattura chiaramente citati nella causale. Questa soglia innescherà l'estinzione automatica nel gestionale.
-2. MATCH FORTE (0.80 - 0.97): Importo coincidente ma causale ambigua, oppure nome in causale coincidente ma importo leggermente diverso (spese bancarie).
-3. ACCONTO (0.60 - 0.79): L'importo del movimento è chiaramente una cifra tonda (es. 5000) inferiore al residuo, e il soggetto o fattura sono nominati nella causale. Trattalo come anticipo.
-4. MATCH DEBOLE (< 0.60): Solo l'importo coincide per puro caso, nessuna menzione nella causale.
-5. NESSUN MATCH: Nessuna corrispondenza logica trovata. Restituisci null.
+IL TUO METODO DI LAVORO (RISPETTA RIGOROSAMENTE QUESTO ORDINE):
+1. TROVA IL SOGGETTO: Leggi la "causale" del movimento. Cerca il nome di uno dei soggetti presenti nella lista delle scadenze aperte. Se la causale contiene il nome (o una parte chiara di esso), hai trovato il soggetto! DEVI restituire il suo "soggetto_id".
+2. SALDO FATTURA (Match Diretto): Una volta trovato il soggetto, confronta l'importo del movimento con l'importo residuo delle SUE fatture. Se l'importo coincide perfettamente, compila "scadenza_id" e imposta "confidence" a 0.98.
+3. ACCONTO AL SOGGETTO (Nessuna fattura coincide): Se hai trovato chiaramente il soggetto nella causale, MA l'importo non corrisponde a nessuna delle sue fatture specifiche, compila "soggetto_id" con l'ID del fornitore, MA lascia "scadenza_id" a null. Imposta "confidence" a 0.85. Questo dirà al gestionale: "So chi abbiamo pagato, mettiamolo a decurtazione del suo saldo totale aperto come acconto".
+4. IGNOTO: Se nella causale non c'è alcun riferimento riconducibile ai soggetti in elenco, restituisci null per entrambi gli ID e confidence 0.
 
 Rispondi ESCLUSIVAMENTE con un array di oggetti JSON con questa struttura:
 [{
   "movimento_id": "id_del_movimento",
-  "scadenza_id": "id_scadenza_trovata_o_null",
-  "soggetto_id": "id_del_soggetto_se_trovato_o_null",
+  "scadenza_id": "id_scadenza_trovata_oppure_null",
+  "soggetto_id": "id_soggetto_trovato_oppure_null",
   "confidence": 0.98,
-  "motivo": "Spiegazione breve e tecnica"
+  "motivo": "Es: 'Trovato fornitore Mario Rossi Srl in causale. Importo non coincide con fatture, segnato come acconto.'"
 }]
 `;
 
   try {
     const result = await model.generateContent(prompt);
     let textInfo = result.response.text();
-    
     textInfo = textInfo.replace(/```json/gi, "").replace(/```/g, "").trim();
-    
     return JSON.parse(textInfo);
   } catch (error) {
     console.error("❌ Errore Gemini Batch Matching:", error);
