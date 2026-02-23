@@ -1831,3 +1831,112 @@ export async function getFattureAperteSoggetto(soggetto_id: string) {
     .order('data_scadenza', { ascending: true });
   return data || [];
 }
+
+// ============================================================
+// STEP 1: PRE-MATCHING DETERMINISTICO BANCARIO (V2 Ottimizzata)
+// ============================================================
+
+export function normalizzaNome(nome: string): string {
+  if (!nome) return '';
+  return nome
+    .toLowerCase()
+    .replace(/\b(s\.?r\.?l\.?|s\.?p\.?a\.?|s\.?n\.?c\.?|s\.?a\.?s\.?|s\.?c\.?r\.?l\.?|di|e|&)\b/gi, '')
+    .replace(/[^a-z0-9\s]/g, '')  // rimuovi punteggiatura
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Riceve "soggetti" come array separato, eliminando l'errore TypeScript del join Supabase
+// e risolvendo il problema dei fornitori senza scadenze attive.
+export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[], soggetti: any[]) {
+  const matchati: any[] = [];
+  const nonMatchati: any[] = [];
+
+  for (const m of movimenti) {
+    let matched = false;
+    const causale = m.descrizione || '';
+    const causaleNorm = normalizzaNome(causale);
+
+    let foundSoggetto: any = null;
+    let foundScadenza: any = null;
+
+    // A. Ricerca per Partita IVA (11 cifre consecutive)
+    const pivaMatch = causale.match(/\b\d{11}\b/);
+    if (pivaMatch) {
+      foundSoggetto = soggetti.find(s => s.partita_iva === pivaMatch[0]);
+    }
+
+    // B. Ricerca per IBAN
+    if (!foundSoggetto) {
+      const ibanMatch = causale.match(/\bIT\d{2}[A-Z]\d{10}[A-Z0-9]{12}\b/i);
+      if (ibanMatch) {
+        foundSoggetto = soggetti.find(s => s.iban && s.iban.toUpperCase() === ibanMatch[0].toUpperCase());
+      }
+    }
+
+    // C. Ricerca per Ragione Sociale (testo)
+    if (!foundSoggetto) {
+      for (const s of soggetti) {
+        const nomeNorm = normalizzaNome(s.ragione_sociale);
+        if (nomeNorm.length >= 4 && causaleNorm.includes(nomeNorm)) {
+          foundSoggetto = s;
+          break;
+        }
+      }
+    }
+
+    // D. Se abbiamo il soggetto, cerchiamo la fattura esatta
+    if (foundSoggetto) {
+      // Regex affidabile che evita falsi positivi: "FT 123", "FATT VE/2025/13532", "FAT. 45"
+      const regexFattura = /(?:FATT\.?|FT\.?|FATTURA|FAT)\s*(?:N\.?\s*)?([A-Z]{0,3}\/?(?:\d{4}\/)?[\d]+)/gi;
+      let fatturaMatch = regexFattura.exec(causale);
+      let numeroFattura = fatturaMatch ? fatturaMatch[1] : null;
+
+      const scadenzeSoggetto = scadenzeAperte.filter(s => s.soggetto_id === foundSoggetto.id);
+
+      if (numeroFattura) {
+        foundScadenza = scadenzeSoggetto.find(s => 
+          s.fattura_riferimento && s.fattura_riferimento.toLowerCase().includes(numeroFattura!.toLowerCase())
+        );
+      }
+
+      // Fallback: se non c'è numero fattura ma l'importo coincide perfettamente
+      if (!foundScadenza) {
+        const importoAssoluto = Math.abs(m.importo);
+        foundScadenza = scadenzeSoggetto.find(s => {
+          const residuo = Number(s.importo_totale) - Number(s.importo_pagato || 0);
+          return Math.abs(residuo - importoAssoluto) < 0.01;
+        });
+      }
+    }
+
+    // E. Preparazione Risultato (Senza await DB qui per non far crashare Vercel)
+    if (foundScadenza && foundSoggetto) {
+      matchati.push({
+        movimento_id: m.id,
+        scadenza_id: foundScadenza.id,
+        soggetto_id: foundSoggetto.id,
+        confidence: 0.99,
+        motivo: `Pre-match Veloce: Trovato '${foundSoggetto.ragione_sociale}' tramite importo o riferimento esatto`,
+        ragione_sociale: foundSoggetto.ragione_sociale
+      });
+      matched = true;
+    } else if (foundSoggetto) {
+      matchati.push({
+        movimento_id: m.id,
+        scadenza_id: null,
+        soggetto_id: foundSoggetto.id,
+        confidence: 0.80,
+        motivo: `Pre-match Veloce: Soggetto '${foundSoggetto.ragione_sociale}' identificato, ma nessuna fattura chiara`,
+        ragione_sociale: foundSoggetto.ragione_sociale
+      });
+      matched = true;
+    }
+
+    if (!matched) {
+      nonMatchati.push(m);
+    }
+  }
+
+  return { matchati, nonMatchati };
+}
