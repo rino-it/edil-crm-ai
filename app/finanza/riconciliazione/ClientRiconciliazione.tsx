@@ -148,7 +148,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
           <CardHeader className="pb-3"><CardTitle className="text-sm">2. Analisi Intelligente</CardTitle></CardHeader>
           <CardContent className="flex items-center justify-between">
             <span className="text-sm text-zinc-500">
-              {movimentiLocali.filter(m => !m.ai_motivo).length} movimenti in attesa di analisi.
+              {movimentiLocali.filter(m => !m.ai_suggerimento && !m.soggetto_id).length} movimenti pronti per analisi AI.
             </span>
             <Button onClick={handleAiAnalysis} disabled={isAnalyzing || movimentiLocali.length === 0} className="bg-indigo-600 hover:bg-indigo-700 w-full md:w-auto">
               {isAnalyzing ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <BrainCircuit className="h-4 w-4 mr-2" />}
