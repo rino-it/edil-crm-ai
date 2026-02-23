@@ -16,17 +16,18 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [progress, setProgress] = useState({ current: 0, total: 0 })
   
-  // Stato reattivo locale
+  // Stato reattivo locale per i movimenti
   const [movimentiLocali, setMovimentiLocali] = useState(movimenti);
 
-  // Sincronizza lo stato locale quando il server aggiorna i dati (es. dopo una Conferma o un Upload)
+  // FIX 6: Stato per tracciare la selezione manuale del soggetto per ogni movimento
+  const [manualSelections, setManualSelections] = useState<Record<string, string>>({});
+
   useEffect(() => {
     setMovimentiLocali(movimenti);
   }, [movimenti]);
 
   const formatEuro = (val: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val)
 
-  // Gestione Upload CSV
   const handleUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setIsUploading(true)
@@ -42,8 +43,6 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
     if (daAnalizzare.length === 0) return;
 
     setIsAnalyzing(true)
-    
-    // Prompt più gestibili: ridotto a 15
     const CHUNK_SIZE = 15; 
     setProgress({ current: 0, total: daAnalizzare.length });
 
@@ -52,7 +51,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
       let success = false;
       let retries = 0;
       
-      while (!success && retries < 2) { // Massimo 2 tentativi per blocco
+      while (!success && retries < 2) {
         try {
           const response = await fetch('/api/finanza/riconcilia-banca', {
             method: 'POST',
@@ -79,8 +78,6 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
                     ai_motivo: match.motivo || "Analisi completata"
                   };
                 }
-                
-                // Se il movimento era nel blocco ma l'AI non ha risposto, lo segno per evitare loop
                 if (chunk.some(c => c.id === mov.id) && !receivedIds.has(mov.id)) {
                   return { ...mov, ai_motivo: "AI non ha fornito risposta", ai_confidence: 0 };
                 }
@@ -91,10 +88,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
           }
         } catch (error) {
           retries++;
-          console.error(`❌ Errore blocco ${Math.floor(i/CHUNK_SIZE) + 1}, tentativo ${retries}:`, error);
-          
           if (retries >= 2) {
-            // Segna errore definitivo per questo blocco
             setMovimentiLocali((prev) => prev.map((mov) => {
               if (chunk.some(c => c.id === mov.id) && !mov.ai_motivo) {
                 return { ...mov, ai_motivo: "Errore analisi AI - riprovare", ai_confidence: 0 };
@@ -102,7 +96,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
               return mov;
             }));
           } else {
-            await new Promise(resolve => setTimeout(resolve, 5000)); // Aspetta 5s prima del retry
+            await new Promise(resolve => setTimeout(resolve, 5000));
           }
         }
       }
@@ -110,7 +104,6 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
       const processed = Math.min(i + CHUNK_SIZE, daAnalizzare.length);
       setProgress({ current: processed, total: daAnalizzare.length });
       
-      // Delay ridotto a 3 secondi per maggiore velocità
       if (processed < daAnalizzare.length) {
         await new Promise(resolve => setTimeout(resolve, 3000));
       }
@@ -127,7 +120,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
     setMovimentiLocali(prev => prev.filter(m => m.id !== movId));
   }
 
-  const handleRifiuto = async (formData: FormData) => {
+  const handleRifiuta = async (formData: FormData) => {
     const movId = formData.get('movimento_id') as string;
     await rifiutaMatch(formData);
     setMovimentiLocali(prev => prev.map(m => 
@@ -241,7 +234,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
                                   <Check className="h-4 w-4" />
                                 </Button>
                               </form>
-                              <form action={handleRifiuto}>
+                              <form action={handleRifiuta}>
                                 <input type="hidden" name="movimento_id" value={m.id} />
                                 <Button size="sm" type="submit" variant="outline" className="text-rose-600 hover:bg-rose-50 h-8 px-2" title="Rifiuta">
                                   <X className="h-4 w-4" />
@@ -252,12 +245,30 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
                             <form action={handleConferma} className="flex gap-2 items-center">
                               <input type="hidden" name="movimento_id" value={m.id} />
                               <input type="hidden" name="importo" value={Math.abs(m.importo)} />
-                              <select name="scadenza_id" required className="h-8 text-xs border border-zinc-200 rounded px-2 w-[150px] outline-none">
+                              
+                              {/* FIX 6: Select controllata per estrarre il soggetto_id */}
+                              <select 
+                                name="scadenza_id" 
+                                required 
+                                className="h-8 text-xs border border-zinc-200 rounded px-2 w-[150px] outline-none"
+                                onChange={(e) => {
+                                  const selected = scadenzeAperte.find(s => s.id === e.target.value);
+                                  if (selected) {
+                                    setManualSelections(prev => ({ ...prev, [m.id]: selected.soggetto_id || '' }));
+                                  }
+                                }}
+                              >
                                 <option value="">Seleziona manuale...</option>
-                                {scadenzeAperte.filter(s => (m.importo > 0 ? s.tipo === 'entrata' : s.tipo === 'uscita')).map(s => (
-                                  <option key={s.id} value={s.id}>{s.soggetto?.ragione_sociale} - {formatEuro(s.importo_totale)}</option>
-                                ))}
+                                {scadenzeAperte
+                                  .filter(s => (m.importo > 0 ? s.tipo === 'entrata' : s.tipo === 'uscita'))
+                                  .map(s => (
+                                    <option key={s.id} value={s.id}>
+                                      {s.soggetto?.ragione_sociale || s.anagrafica_soggetti?.ragione_sociale} - {formatEuro(s.importo_totale)}
+                                    </option>
+                                  ))}
                               </select>
+                              <input type="hidden" name="soggetto_id" value={manualSelections[m.id] || ''} />
+
                               <Button size="sm" type="submit" variant="secondary" className="h-8 px-2" title="Collega">
                                 <Search className="h-4 w-4" />
                               </Button>
