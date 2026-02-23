@@ -589,7 +589,7 @@ export async function matchBatchRiconciliazioneBancaria(movimenti: any[], scaden
 
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({ 
-    model: "gemini-2.0-flash-001",
+    model: "gemini-2.5-flash", // RIGORE: Usiamo esclusivamente 2.5-flash (Tier 1 abilitato)
     generationConfig: { responseMimeType: "application/json" } 
   });
 
@@ -603,7 +603,7 @@ ${JSON.stringify(movimenti.map(m => ({ id: m.id, data: m.data_operazione, import
 SCADENZE APERTE DISPONIBILI (Fatture attive e passive):
 ${JSON.stringify(scadenzeAperte.map(s => ({
     id: s.id,
-    soggetto_id: s.soggetto_id, // Fondamentale per le foreign key a DB
+    soggetto_id: s.soggetto_id, 
     soggetto: s.anagrafica_soggetti?.ragione_sociale || 'N/D',
     importo_residuo: Number(s.importo_totale) - Number(s.importo_pagato || 0),
     data_scadenza: s.data_scadenza,
@@ -633,7 +633,6 @@ Rispondi ESCLUSIVAMENTE con un array di oggetti JSON con questa struttura:
     const result = await model.generateContent(prompt);
     let textInfo = result.response.text();
     
-    // Pulizia rigorosa Markdown
     textInfo = textInfo.replace(/```json/gi, "").replace(/```/g, "").trim();
     
     return JSON.parse(textInfo);
@@ -661,7 +660,6 @@ export async function estraiSaldoPDFEstrattoConto(pdfBase64: string, mimeType: s
   const apiKey = process.env.GOOGLE_API_KEY;
   if (!apiKey) throw new Error("GOOGLE_API_KEY mancante");
 
-  // Per documenti formattati in modo complesso (tabelle, saldi), il modello 2.0-flash visivo è eccellente
   const prompt = `Analizza questo documento che rappresenta un estratto conto bancario.
 Il tuo unico obiettivo è estrarre due dati cruciali per allineare la liquidità aziendale:
 1. "saldo_finale": Cerca diciture come "Saldo Contabile Finale", "Saldo al", "Nuovo Saldo". Estrai l'importo numerico (es. 15400.50).
@@ -679,7 +677,8 @@ Rispondi SOLO in JSON valido senza markdown, con la struttura:
     { inline_data: { mime_type: mimeType, data: pdfBase64 } }
   ];
   
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+  // RIGORE: Anche qui standardizziamo su gemini-2.5-flash
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   try {
     const response = await fetch(url, {
