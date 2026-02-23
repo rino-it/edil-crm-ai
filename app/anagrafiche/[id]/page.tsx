@@ -26,13 +26,15 @@ export default async function SoggettoDetailPage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // --- Recupero Dati Aggregati e Storico (STEP 5A) ---
   const soggetto = await getSoggettoById(id)
   if (!soggetto) notFound()
 
-  const esposizione = await getEsposizioneSoggetto(id)
-  const storicoPagamenti = await getStoricoPaymentsSoggetto(id)
-  const fattureAperte = await getFattureAperteSoggetto(id)
+  // STEP 5B e 5C: Chiamate parallele per i dati della Scheda Fornitore
+  const [esposizione, storicoPagamenti, fattureAperte] = await Promise.all([
+    getEsposizioneSoggetto(id),
+    getStoricoPaymentsSoggetto(id),
+    getFattureAperteSoggetto(id)
+  ])
 
   const formatEuro = (val: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val)
 
@@ -165,13 +167,16 @@ export default async function SoggettoDetailPage({
 
           {/* Colonna Destra: Stats e Pericolo (STEP 5B) */}
           <div className="space-y-6">
-            <Card className="bg-zinc-900 text-white">
+            <Card className="bg-zinc-900 text-white shadow-xl">
               <CardHeader>
-                <CardTitle className="text-sm font-medium text-zinc-400 uppercase tracking-wider">Status Finanziario</CardTitle>
+                <CardTitle className="text-sm font-medium text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+                  <Wallet className="h-4 w-4" />
+                  Status Finanziario
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div>
-                  <p className="text-zinc-400 text-xs">Aperto da {soggetto.tipo === 'cliente' ? 'incassare' : 'pagare'}</p>
+                  <p className="text-zinc-400 text-xs">Da pagare</p>
                   <p className="text-3xl font-bold text-rose-400">{formatEuro(esposizione.totale_da_pagare)}</p>
                 </div>
                 
@@ -210,7 +215,7 @@ export default async function SoggettoDetailPage({
         </div>
 
         {/* STEP 5C: Sezione Fatture Aperte */}
-        <Card className="mt-8">
+        <Card className="mt-8 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div className="space-y-1">
               <CardTitle className="flex items-center gap-2">
@@ -234,14 +239,14 @@ export default async function SoggettoDetailPage({
               </TableHeader>
               <TableBody>
                 {fattureAperte.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-6 text-zinc-400">Nessuna fattura aperta.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-zinc-400">Nessuna fattura aperta al momento.</TableCell></TableRow>
                 ) : (
                   fattureAperte.map((f) => {
                     const residuo = Number(f.importo_totale) - Number(f.importo_pagato || 0);
                     const isScaduta = new Date(f.data_scadenza) < new Date();
                     
                     return (
-                      <TableRow key={f.id}>
+                      <TableRow key={f.id} className="hover:bg-zinc-50/50">
                         <TableCell className="text-sm">
                           {new Date(f.data_scadenza).toLocaleDateString('it-IT')}
                         </TableCell>
@@ -268,14 +273,14 @@ export default async function SoggettoDetailPage({
         </Card>
 
         {/* STEP 5B: Sezione Storico Pagamenti */}
-        <Card>
+        <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div className="space-y-1">
               <CardTitle className="flex items-center gap-2">
                 <History className="h-5 w-5 text-zinc-500" />
-                Storico Riconciliazioni Bancarie
+                Storico Pagamenti Riconciliati
               </CardTitle>
-              <CardDescription>Ultimi pagamenti e acconti registrati e verificati in banca.</CardDescription>
+              <CardDescription>Ultimi pagamenti e acconti registrati e verificati tramite la banca.</CardDescription>
             </div>
           </CardHeader>
           <CardContent>
@@ -284,22 +289,22 @@ export default async function SoggettoDetailPage({
                 <TableRow>
                   <TableHead>Data Op.</TableHead>
                   <TableHead>Causale Bancaria</TableHead>
-                  <TableHead>Riferimento Fattura</TableHead>
+                  <TableHead>Fattura Associata</TableHead>
                   <TableHead className="text-right">Importo Banca</TableHead>
-                  <TableHead>Tipo</TableHead>
+                  <TableHead>Stato</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {storicoPagamenti.length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="text-center py-6 text-zinc-400">Nessun pagamento registrato nello storico.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={5} className="text-center py-8 text-zinc-400">Nessun pagamento registrato nello storico.</TableCell></TableRow>
                 ) : (
                   storicoPagamenti.map((m: any) => {
                     const isAcconto = !m.scadenza_id;
                     const fattura = m.scadenze_pagamento ? m.scadenze_pagamento.fattura_riferimento : 'Nessuna';
                     
                     return (
-                      <TableRow key={m.id}>
-                        <TableCell className="text-sm">
+                      <TableRow key={m.id} className="hover:bg-zinc-50/50">
+                        <TableCell className="text-sm whitespace-nowrap">
                           {new Date(m.data_operazione).toLocaleDateString('it-IT')}
                         </TableCell>
                         <TableCell className="text-xs font-mono truncate max-w-[250px]" title={m.descrizione}>

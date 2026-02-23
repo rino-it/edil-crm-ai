@@ -103,17 +103,17 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
   // STEP 3B: Rimuovere il movimento dallo state locale istantaneamente
   const handleConferma = async (formData: FormData) => {
     const movId = formData.get('movimento_id') as string;
-    setMovimentiLocali(prev => prev.filter(m => m.id !== movId));
     await confermaMatch(formData);
+    setMovimentiLocali(prev => prev.filter(m => m.id !== movId));
   }
 
   // STEP 3C: Azzerare i campi AI nello state locale istantaneamente
   const handleRifiuto = async (formData: FormData) => {
     const movId = formData.get('movimento_id') as string;
-    setMovimentiLocali(prev => prev.map(m => 
-      m.id === movId ? { ...m, ai_suggerimento: null, soggetto_id: null, ai_confidence: 0, ai_motivo: null } : m
-    ));
     await rifiutaMatch(formData);
+    setMovimentiLocali(prev => prev.map(m => 
+      m.id === movId ? { ...m, ai_suggerimento: null, soggetto_id: null, ai_confidence: null, ai_motivo: null } : m
+    ));
   }
 
   return (
@@ -166,6 +166,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
               ) : (
                 movimentiLocali.map((m) => {
                   const suggestedScadenza = scadenzeAperte.find(s => s.id === m.ai_suggerimento);
+                  const suggestedSoggetto = scadenzeAperte.find(s => s.soggetto_id === m.soggetto_id);
                   const conf = m.ai_confidence || 0;
                   const isAcconto = m.soggetto_id && !m.ai_suggerimento;
                   const hasAiRun = !!m.ai_motivo;
@@ -184,23 +185,28 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
                       
                       <TableCell>
                         {/* STEP 3D: Mostrare motivo AI sempre se l'analisi è stata fatta */}
-                        {hasAiRun ? (
+                        {m.ai_suggerimento ? (
                           <div className="flex flex-col gap-1">
-                            {(m.ai_suggerimento || isAcconto) ? (
-                              <span className="text-sm font-semibold">{suggestedScadenza?.soggetto?.ragione_sociale || 'Soggetto Identificato'}</span>
-                            ) : (
-                              <span className="text-sm font-semibold text-zinc-400">Nessun Match</span>
-                            )}
-                            
+                            <span className="text-sm font-semibold">{suggestedScadenza?.soggetto?.ragione_sociale || 'Match Trovato'}</span>
                             <div className="flex items-center gap-2 text-xs">
-                              <Badge variant="outline" className={`${conf > 0.8 ? 'bg-emerald-100 text-emerald-800' : conf > 0 ? 'bg-amber-100 text-amber-800' : 'bg-zinc-100 text-zinc-600'} border-none`}>
-                                {isAcconto ? 'Acconto' : `${(conf * 100).toFixed(0)}% Match`}
+                              <Badge variant="outline" className={`${conf > 0.8 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} border-none`}>
+                                {(conf * 100).toFixed(0)}% Match
                               </Badge>
-                              <span className="text-zinc-500 truncate max-w-[200px]" title={m.ai_motivo}>{m.ai_motivo}</span>
+                              <span className="text-zinc-500 truncate max-w-[150px]" title={m.ai_motivo}>{m.ai_motivo}</span>
                             </div>
                           </div>
+                        ) : m.ai_motivo ? (
+                          <div className="flex flex-col gap-1">
+                            {isAcconto && suggestedSoggetto && (
+                              <span className="text-sm font-semibold">{suggestedSoggetto.soggetto?.ragione_sociale}</span>
+                            )}
+                            <span className="text-xs text-amber-600 italic truncate max-w-[200px]" title={m.ai_motivo}>{m.ai_motivo}</span>
+                            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-none w-fit">
+                              {isAcconto ? 'Acconto Rilevato' : 'Nessun Match'} ({(conf * 100).toFixed(0)}%)
+                            </Badge>
+                          </div>
                         ) : (
-                          <span className="text-xs text-zinc-400 italic">In attesa di analisi...</span>
+                          <span className="text-xs text-zinc-400 italic">In attesa di analisi AI.</span>
                         )}
                       </TableCell>
                       

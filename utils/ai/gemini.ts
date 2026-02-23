@@ -580,48 +580,65 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export async function matchBatchRiconciliazioneBancaria(movimenti: any[], scadenzeAperte: any[]) {
   const apiKey = process.env.GOOGLE_API_KEY;
-  if (!apiKey) return movimenti.map(m => ({ movimento_id: m.id, scadenza_id: null, soggetto_id: null, confidence: 0, motivo: "API Key mancante" }));
+  if (!apiKey) {
+    console.warn("⚠️ GOOGLE_API_KEY mancante.");
+    return movimenti.map(m => ({ movimento_id: m.id, scadenza_id: null, soggetto_id: null, confidence: 0, motivo: "API Key mancante" }));
+  }
 
-  // 1A - Modello corretto (Tier 1 Free - 250 RPD)
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ 
+  const model = genAI.getGenerativeModel({
     model: "gemini-2.5-flash",
-    generationConfig: { responseMimeType: "application/json" } 
+    generationConfig: { responseMimeType: "application/json" }
   });
 
-  // 1B / 1C - Prompt più intelligente e con meno token
   const prompt = `
-Sei il capo contabile di un'impresa edile. Devi analizzare un elenco di movimenti bancari e associarli ai fornitori o clienti corretti.
+Sei un contabile esperto di un'impresa edile italiana. Devi associare movimenti bancari (da CSV) ai fornitori/clienti e alle loro fatture aperte.
 
-ELENCO MOVIMENTI BANCA (CSV):
+ATTENZIONE: Le descrizioni bancarie sono SPORCHE. Le banche troncano i nomi, rimuovono "Srl/SpA/Snc", usano MAIUSCOLE, accorciano parole. Devi essere ELASTICO nel riconoscere i nomi.
+
+MOVIMENTI BANCA DA ANALIZZARE:
 ${JSON.stringify(movimenti.map(m => ({ id: m.id, data: m.data_operazione, importo: m.importo, causale: m.descrizione })), null, 2)}
 
-FATTURE/SCADENZE APERTE DISPONIBILI:
+FATTURE/SCADENZE APERTE:
 ${JSON.stringify(scadenzeAperte.map(s => ({
     id: s.id,
-    soggetto_id: s.soggetto_id, 
+    soggetto_id: s.soggetto_id,
     ragione_sociale: s.anagrafica_soggetti?.ragione_sociale || '',
     partita_iva: s.anagrafica_soggetti?.partita_iva || '',
     importo_residuo: Number(s.importo_totale) - Number(s.importo_pagato || 0),
-    fattura_riferimento: s.fattura_riferimento
+    fattura: s.fattura_riferimento,
+    tipo: s.tipo
 })), null, 2)}
 
-METODO DI LAVORO (ORDINE TASSATIVO):
-1. TROVA IL FORNITORE/CLIENTE: Cerca nella "causale" del movimento la "ragione_sociale" o "partita_iva". Considera anche abbreviazioni (es. "Srl", "SpA") o nomi parziali. Se lo trovi, annota "soggetto_id".
-2. ASSOCIA LA FATTURA: Se hai trovato il soggetto, cerca nella causale riferimenti come "FT", "FATT", "Fattura" seguiti dal numero "fattura_riferimento". In alternativa, se l'importo coincide perfettamente con l'"importo_residuo", hai un match!
-3. REGOLE DI MATCHING (Confidence):
-   - 0.98 (Match Diretto): Fornitore trovato + Importo esatto OPPURE Fornitore trovato + Numero Fattura esatto. Restituisci "soggetto_id" E "scadenza_id".
-   - 0.85 (Acconto): Fornitore trovato chiaramente nella causale, MA l'importo non combacia e non c'è numero fattura. Restituisci "soggetto_id" MA lascia "scadenza_id" a null.
-   - 0.00 (Ignoto): Nessun fornitore identificato e importo non combacia. Restituisci null per entrambi.
+METODO DI LAVORO TASSATIVO (segui in ordine):
 
-Rispondi ESCLUSIVAMENTE con un array JSON:
+1. TROVA IL SOGGETTO (FUZZY MATCHING sulla causale):
+   - Cerca somiglianze con "ragione_sociale". IGNORA suffissi: Srl, S.r.l., SpA, S.p.A., Snc, S.n.c., Sas, S.a.s., di, e, &
+   - Esempio: causale "BON A FAV EDILIZIA ROSSI" → matcha con "Edilizia Rossi Srl"
+   - Esempio: causale "PAGO FATT MARIO BIANCHI" → matcha con "Mario Bianchi & C. Snc"
+   - Cerca anche la Partita IVA nella causale (11 cifre consecutive)
+   - Se trovi il soggetto, hai il "soggetto_id"
+
+2. CONTROLLA IL SEGNO:
+   - Movimento NEGATIVO (importo < 0) = USCITA = cerca solo scadenze tipo "uscita" (pagamenti a fornitori)
+   - Movimento POSITIVO (importo > 0) = ENTRATA = cerca solo scadenze tipo "entrata" (incassi da clienti)
+
+3. ASSOCIA LA FATTURA:
+   - MATCH ESATTO (confidence >= 0.95): importo del movimento (valore assoluto) = importo_residuo della fattura E soggetto trovato. Cerca anche numeri fattura nella causale (es. "FT 123", "FATT. 2025/45", "N. 12")
+   - MATCH ACCONTO (confidence 0.70-0.94): soggetto trovato ma importo diverso (pagamento parziale o cumulativo). Scegli la fattura con importo_residuo piu' vicino
+   - MATCH SOLO SOGGETTO (confidence 0.40-0.69): soggetto trovato ma nessuna fattura corrisponde. Metti scadenza_id = null ma soggetto_id corretto
+   - NESSUN MATCH (confidence < 0.40): non riesci a identificare il soggetto. Metti entrambi null
+
+4. RISPONDI con un array JSON. Per OGNI movimento DEVI restituire un oggetto:
 [{
-  "movimento_id": "id_movimento",
-  "scadenza_id": "id_scadenza_o_null",
-  "soggetto_id": "id_soggetto_o_null",
-  "confidence": 0.98,
-  "motivo": "Spiegazione breve e chiara"
+  "movimento_id": "uuid_del_movimento",
+  "scadenza_id": "uuid_fattura_o_null",
+  "soggetto_id": "uuid_soggetto_o_null",
+  "confidence": 0.95,
+  "motivo": "Spiegazione breve in italiano"
 }]
+
+IMPORTANTE: Restituisci ESATTAMENTE un risultato per ogni movimento, anche se non trovi match.
 `;
 
   try {
@@ -630,8 +647,11 @@ Rispondi ESCLUSIVAMENTE con un array JSON:
     textInfo = textInfo.replace(/```json/gi, "").replace(/```/g, "").trim();
     return JSON.parse(textInfo);
   } catch (error) {
-    console.error("❌ Errore Gemini Batch:", error);
-    return movimenti.map(m => ({ movimento_id: m.id, scadenza_id: null, soggetto_id: null, confidence: 0, motivo: "Errore AI" }));
+    console.error("❌ Errore Gemini Batch Matching:", error);
+    return movimenti.map(m => ({
+      movimento_id: m.id, scadenza_id: null, soggetto_id: null,
+      confidence: 0, motivo: "Errore AI: " + (error as any)?.message?.substring(0, 100)
+    }));
   }
 }
 
