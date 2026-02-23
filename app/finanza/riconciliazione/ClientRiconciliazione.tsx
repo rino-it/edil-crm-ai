@@ -43,7 +43,9 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
     if (daAnalizzare.length === 0) return;
 
     setIsAnalyzing(true)
-    const CHUNK_SIZE = 15; 
+    
+    // FIX B: Chunk size ridotto a 10 per prevenire timeout Vercel
+    const CHUNK_SIZE = 10; 
     setProgress({ current: 0, total: daAnalizzare.length });
 
     for (let i = 0; i < daAnalizzare.length; i += CHUNK_SIZE) {
@@ -150,7 +152,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
             <span className="text-sm text-zinc-500">
               {movimentiLocali.filter(m => !m.ai_suggerimento && !m.soggetto_id).length} movimenti pronti per analisi AI.
             </span>
-            <Button onClick={handleAiAnalysis} disabled={isAnalyzing || movimentiLocali.length === 0} className="bg-indigo-600 hover:bg-indigo-700 w-full md:w-auto">
+            <Button onClick={handleAiAnalysis} disabled={isAnalyzing || movimentiLocali.filter(m => !m.ai_suggerimento && !m.soggetto_id).length === 0} className="bg-indigo-600 hover:bg-indigo-700 w-full md:w-auto">
               {isAnalyzing ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <BrainCircuit className="h-4 w-4 mr-2" />}
               {isAnalyzing ? `Analisi: ${progress.current} / ${progress.total}` : "Avvia Matching AI"}
             </Button>
@@ -246,7 +248,6 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
                               <input type="hidden" name="movimento_id" value={m.id} />
                               <input type="hidden" name="importo" value={Math.abs(m.importo)} />
                               
-                              {/* FIX 6: Select controllata per estrarre il soggetto_id */}
                               <select 
                                 name="scadenza_id" 
                                 required 
