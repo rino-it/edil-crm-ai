@@ -36,14 +36,14 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
     router.refresh()
   }
 
-  // Gestione Matching AI (Architettura a Chunk dal Client per evitare Timeout Vercel)
+  // Gestione Matching AI (Architettura a Chunk dal Client per evitare Timeout Vercel e Rate Limits)
   const handleAiAnalysis = async () => {
     const daAnalizzare = movimentiLocali.filter(m => !m.ai_suggerimento)
     if (daAnalizzare.length === 0) return;
 
     setIsAnalyzing(true)
     
-    // FIX 0.3: Chunk da 20 per minimizzare chiamate API (1500 RPD su gemini-2.0-flash-001)
+    // FIX 0.3: Chunk da 20. 81 movimenti = 5 chiamate API.
     const CHUNK_SIZE = 20; 
     setProgress({ current: 0, total: daAnalizzare.length });
 
@@ -83,17 +83,18 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
       const processed = Math.min(i + CHUNK_SIZE, daAnalizzare.length);
       setProgress({ current: processed, total: daAnalizzare.length });
       
-      // FIX 0.1 C: router.refresh() rimosso dal ciclo per evitare lag UI
+      // FIX 0.1 C: Nessun router.refresh() qui. La UI si aggiorna tramite setMovimentiLocali.
       
+      // FIX 0.3: Delay di 15 secondi tra chunk per stare sereni sotto i 10 RPM del Free Tier
       if (processed < daAnalizzare.length) {
-        await new Promise(resolve => setTimeout(resolve, 12000));
+        await new Promise(resolve => setTimeout(resolve, 15000));
       }
     }
 
     setIsAnalyzing(false)
     setProgress({ current: 0, total: 0 })
     
-    // Unico refresh alla fine
+    // Unico refresh finale
     router.refresh();
   }
 

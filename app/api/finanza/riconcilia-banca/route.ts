@@ -24,9 +24,9 @@ export async function POST(request: Request) {
       .select('id, fattura_riferimento, importo_totale, importo_pagato, data_scadenza, tipo, soggetto_id, descrizione, anagrafica_soggetti(ragione_sociale)')
       .neq('stato', 'pagato')
       .order('data_scadenza', { ascending: true })
-      .limit(30); // Limite per alleggerire il prompt
+      .limit(30);
 
-    // Se il blocco ha solo uscite, cerca solo debiti. Se solo entrate, cerca solo crediti.
+    // Filtro dinamico per non sovraccaricare Gemini con scadenze inutili
     if (haUscite && !haEntrate) query = query.eq('tipo', 'uscita');
     if (haEntrate && !haUscite) query = query.eq('tipo', 'entrata');
 
@@ -38,11 +38,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ risultati: [] });
     }
 
-    // Chiamata a Gemini con payload ottimizzato
     const risultatiChunk = await matchBatchRiconciliazioneBancaria(movimenti, scadenzeAperte);
     const risultatiDaSalvare = Array.isArray(risultatiChunk) ? risultatiChunk : [];
 
-    // Salvataggio DB
+    // Salvataggio nel DB
     for (const res of risultatiDaSalvare) {
       if (res.scadenza_id) {
         await supabase
