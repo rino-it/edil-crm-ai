@@ -39,7 +39,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
 
   // FIX 4: Gestione Matching AI con Retry e Robustezza
   const handleAiAnalysis = async () => {
-    const daAnalizzare = movimentiLocali.filter(m => !m.ai_motivo)
+    const daAnalizzare = movimentiLocali.filter(m => !m.ai_suggerimento && !m.soggetto_id)
     if (daAnalizzare.length === 0) return;
 
     setIsAnalyzing(true)
