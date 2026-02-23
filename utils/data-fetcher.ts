@@ -1686,21 +1686,22 @@ export async function getFattureAperteSoggetto(soggetto_id: string) {
 }
 
 // ============================================================
-// STEP 1: PRE-MATCHING DETERMINISTICO BANCARIO (V2 Ottimizzata)
+// STEP 1: PRE-MATCHING DETERMINISTICO BANCARIO (V3 Ottimizzata)
 // ============================================================
 
 export function normalizzaNome(nome: string): string {
   if (!nome) return '';
   return nome
     .toLowerCase()
-    .replace(/\b(s\.?r\.?l\.?|s\.?p\.?a\.?|s\.?n\.?c\.?|s\.?a\.?s\.?|s\.?c\.?r\.?l\.?|di|e|&)\b/gi, '')
-    .replace(/[^a-z0-9\s]/g, '')  // rimuovi punteggiatura
+    // Rimuove i suffissi aziendali sostituendoli con uno spazio
+    .replace(/\b(s\.?r\.?l\.?|s\.?p\.?a\.?|s\.?n\.?c\.?|s\.?a\.?s\.?|s\.?c\.?r\.?l\.?|di|e|&)\b/gi, ' ')
+    // FIX: Sostituisce qualsiasi cosa non sia lettera o numero con uno SPAZIO (evita parole appiccicate)
+    .replace(/[^a-z0-9]/g, ' ')  
+    // Collassa spazi multipli creati dai replace precedenti
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-// Riceve "soggetti" come array separato, eliminando l'errore TypeScript del join Supabase
-// e risolvendo il problema dei fornitori senza scadenze attive.
 export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[], soggetti: any[]) {
   const matchati: any[] = [];
   const nonMatchati: any[] = [];
@@ -1709,6 +1710,22 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
     let matched = false;
     const causale = m.descrizione || '';
     const causaleNorm = normalizzaNome(causale);
+
+    // --------------------------------------------------------
+    // ZERO. Pre-Filtro Costi Bancari e Tasse (Bypass AI)
+    // --------------------------------------------------------
+    const regexBanca = /\b(bollo|commissioni?|canone|tenuta conto|spese liquidazione|competenz[ea]|imposta|f24)\b/i;
+    if (regexBanca.test(causale)) {
+      matchati.push({
+        movimento_id: m.id,
+        scadenza_id: null,
+        soggetto_id: null,
+        confidence: 0.99,
+        motivo: `Pre-match Veloce: Rilevata Spesa Bancaria/Imposta`,
+        ragione_sociale: "Banca / Imposte (Spesa Interna)"
+      });
+      continue; // Passa direttamente al prossimo movimento
+    }
 
     let foundSoggetto: any = null;
     let foundScadenza: any = null;
@@ -1731,6 +1748,7 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
     if (!foundSoggetto) {
       for (const s of soggetti) {
         const nomeNorm = normalizzaNome(s.ragione_sociale);
+        // Assicuriamoci che il nome cercato sia una parola intera all'interno della causale normalizzata
         if (nomeNorm.length >= 4 && causaleNorm.includes(nomeNorm)) {
           foundSoggetto = s;
           break;
@@ -1740,7 +1758,6 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
 
     // D. Se abbiamo il soggetto, cerchiamo la fattura esatta
     if (foundSoggetto) {
-      // Regex affidabile che evita falsi positivi: "FT 123", "FATT VE/2025/13532", "FAT. 45"
       const regexFattura = /(?:FATT\.?|FT\.?|FATTURA|FAT)\s*(?:N\.?\s*)?([A-Z]{0,3}\/?(?:\d{4}\/)?[\d]+)/gi;
       let fatturaMatch = regexFattura.exec(causale);
       let numeroFattura = fatturaMatch ? fatturaMatch[1] : null;
@@ -1753,7 +1770,6 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
         );
       }
 
-      // Fallback: se non c'è numero fattura ma l'importo coincide perfettamente
       if (!foundScadenza) {
         const importoAssoluto = Math.abs(m.importo);
         foundScadenza = scadenzeSoggetto.find(s => {
@@ -1763,7 +1779,7 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
       }
     }
 
-    // E. Preparazione Risultato (Senza await DB qui per non far crashare Vercel)
+    // E. Preparazione Risultato
     if (foundScadenza && foundSoggetto) {
       matchati.push({
         movimento_id: m.id,
