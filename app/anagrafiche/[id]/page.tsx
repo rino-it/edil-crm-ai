@@ -13,7 +13,8 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ArrowLeft, Save, Trash2, Receipt, History } from "lucide-react"
+// FIX: Aggiunto Wallet agli import di lucide-react
+import { ArrowLeft, Save, Trash2, Receipt, History, Wallet } from "lucide-react"
 import Link from 'next/link'
 
 export default async function SoggettoDetailPage({ 
@@ -165,7 +166,7 @@ export default async function SoggettoDetailPage({
             </Card>
           </div>
 
-          {/* Colonna Destra: Stats e Pericolo (STEP 5B) */}
+          {/* Colonna Destra: Stats e Pericolo */}
           <div className="space-y-6">
             <Card className="bg-zinc-900 text-white shadow-xl">
               <CardHeader>
@@ -214,7 +215,7 @@ export default async function SoggettoDetailPage({
           </div>
         </div>
 
-        {/* STEP 5C: Sezione Fatture Aperte */}
+        {/* Sezione Fatture Aperte */}
         <Card className="mt-8 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div className="space-y-1">
@@ -272,7 +273,7 @@ export default async function SoggettoDetailPage({
           </CardContent>
         </Card>
 
-        {/* STEP 5B: Sezione Storico Pagamenti */}
+        {/* Sezione Storico Pagamenti */}
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div className="space-y-1">
