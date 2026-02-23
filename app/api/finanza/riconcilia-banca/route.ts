@@ -24,7 +24,7 @@ export async function POST(request: Request) {
       
     if (errorScadenze) throw new Error(`Errore DB Scadenze: ${errorScadenze.message}`);
     
-    // 2. Estrai l'Anagrafica completa (Risolve errore TypeScript e Soggetti Fantasma)
+    // 2. Estrai l'Anagrafica completa
     const { data: soggetti, error: errorSoggetti } = await supabase
       .from('anagrafica_soggetti')
       .select('id, ragione_sociale, partita_iva, iban');
@@ -38,17 +38,22 @@ export async function POST(request: Request) {
     // FASE A: Pre-Match Deterministico Veloce
     // ==========================================
     const { matchati, nonMatchati } = await preMatchMovimenti(movimenti, scadenzeSafe, soggettiSafe);
-    console.log(`🔍 Pre-match ha risolto ${matchati.length} movimenti. Ne rimangono ${nonMatchati.length} per l'AI.`);
-
+    
     // ==========================================
     // FASE B: AI Fallback (Gemini) solo sui residui
     // ==========================================
     let risultatiAI: any[] = [];
     if (nonMatchati.length > 0) {
+      console.log(`🤖 Invio di ${nonMatchati.length} movimenti a Gemini...`);
+      const startTime = Date.now();
+      
       const risultatiChunk = await matchBatchRiconciliazioneBancaria(nonMatchati, scadenzeSafe);
       risultatiAI = Array.isArray(risultatiChunk) ? risultatiChunk : [];
 
-      // Aggiungiamo la ragione sociale anche ai risultati di Gemini per la UI (Fix Step 5)
+      const tempoImpiegato = ((Date.now() - startTime) / 1000).toFixed(1);
+      console.log(`🤖 Risposta Gemini ricevuta in ${tempoImpiegato} secondi.`);
+
+      // Aggiungiamo la ragione sociale anche ai risultati di Gemini
       risultatiAI = risultatiAI.map(res => {
         if (res.soggetto_id && !res.ragione_sociale) {
           const s = soggettiSafe.find(sog => sog.id === res.soggetto_id);
@@ -56,12 +61,14 @@ export async function POST(request: Request) {
         }
         return res;
       });
+    } else {
+      console.log(`⏭️ Nessun movimento per l'AI. Salto chiamata Gemini.`);
     }
 
     // Combiniamo i risultati veloci con quelli dell'AI
     const risultatiDaSalvare = [...matchati, ...risultatiAI];
     
-    // Salviamo tutto nel database in PARALLELO (Fondamentale per evitare Timeout su Vercel)
+    // Salviamo tutto nel database in PARALLELO
     await Promise.all(
       risultatiDaSalvare.map((res) => 
         supabase

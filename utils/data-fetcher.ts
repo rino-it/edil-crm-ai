@@ -1686,7 +1686,7 @@ export async function getFattureAperteSoggetto(soggetto_id: string) {
 }
 
 // ============================================================
-// STEP 1: PRE-MATCHING DETERMINISTICO BANCARIO (V3 Ottimizzata)
+// STEP 1: PRE-MATCHING DETERMINISTICO BANCARIO (V4 Definitiva)
 // ============================================================
 
 export function normalizzaNome(nome: string): string {
@@ -1706,87 +1706,112 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
   const matchati: any[] = [];
   const nonMatchati: any[] = [];
 
+  console.log(`\n🔍 INIZIO PRE-MATCH DETERMINISTICO su ${movimenti.length} movimenti.`);
+  console.log(`📊 STATO DB: ${soggetti.length} soggetti, ${scadenzeAperte.length} scadenze aperte.\n`);
+
   for (const m of movimenti) {
     let matched = false;
-    const causale = m.descrizione || '';
+    const causaleRaw = m.descrizione || '';
+    const causale = causaleRaw.toUpperCase();
     const causaleNorm = normalizzaNome(causale);
 
-    // --------------------------------------------------------
-    // ZERO. Pre-Filtro Costi Bancari e Tasse (Bypass AI)
-    // --------------------------------------------------------
-    const regexBanca = /\b(bollo|commissioni?|canone|tenuta conto|spese liquidazione|competenz[ea]|imposta|f24)\b/i;
-    if (regexBanca.test(causale)) {
-      matchati.push({
-        movimento_id: m.id,
-        scadenza_id: null,
-        soggetto_id: null,
-        confidence: 0.99,
-        motivo: `Pre-match Veloce: Rilevata Spesa Bancaria/Imposta`,
-        ragione_sociale: "Banca / Imposte (Spesa Interna)"
-      });
-      continue; // Passa direttamente al prossimo movimento
-    }
+    console.log(`---- Analisi: "${causaleRaw.substring(0, 80)}..." (Importo: €${m.importo})`);
 
     let foundSoggetto: any = null;
     let foundScadenza: any = null;
 
-    // A. Ricerca per Partita IVA (11 cifre consecutive)
-    const pivaMatch = causale.match(/\b\d{11}\b/);
-    if (pivaMatch) {
-      foundSoggetto = soggetti.find(s => s.partita_iva === pivaMatch[0]);
-    }
-
-    // B. Ricerca per IBAN
-    if (!foundSoggetto) {
-      const ibanMatch = causale.match(/\bIT\d{2}[A-Z]\d{10}[A-Z0-9]{12}\b/i);
-      if (ibanMatch) {
-        foundSoggetto = soggetti.find(s => s.iban && s.iban.toUpperCase() === ibanMatch[0].toUpperCase());
+    // ==========================================
+    // STEP 0: NINJA MATCH GLOBALE FATTURA
+    // ==========================================
+    for (const s of scadenzeAperte) {
+      if (!s.fattura_riferimento || s.fattura_riferimento.trim().length < 4) continue;
+      
+      const fatturaRif = s.fattura_riferimento.toUpperCase();
+      if (causale.includes(fatturaRif)) {
+        foundScadenza = s;
+        foundSoggetto = soggetti.find(sog => sog.id === s.soggetto_id) || null;
+        console.log(`   🥷 NINJA MATCH! Trovata fattura esatta: ${fatturaRif}`);
+        break;
       }
     }
 
-    // C. Ricerca per Ragione Sociale (testo)
-    if (!foundSoggetto) {
-      for (const s of soggetti) {
-        const nomeNorm = normalizzaNome(s.ragione_sociale);
-        // Assicuriamoci che il nome cercato sia una parola intera all'interno della causale normalizzata
-        if (nomeNorm.length >= 4 && causaleNorm.includes(nomeNorm)) {
-          foundSoggetto = s;
-          break;
+    if (!foundScadenza) {
+      // ==========================================
+      // STEP 1: PARTITA IVA
+      // ==========================================
+      const pivaMatch = causale.match(/\b\d{11}\b/);
+      if (pivaMatch) {
+        console.log(`   📌 P.IVA trovata in causale: ${pivaMatch[0]}`);
+        foundSoggetto = soggetti.find(s => s.partita_iva === pivaMatch[0]);
+        if (foundSoggetto) console.log(`   ✅ Match P.IVA con: ${foundSoggetto.ragione_sociale}`);
+      }
+
+      // ==========================================
+      // STEP 2: IBAN
+      // ==========================================
+      if (!foundSoggetto) {
+        const ibanMatch = causale.match(/\bIT\d{2}[A-Z]\d{10}[A-Z0-9]{12}\b/i);
+        if (ibanMatch) {
+          console.log(`   📌 IBAN trovato in causale: ${ibanMatch[0]}`);
+          foundSoggetto = soggetti.find(s => s.iban && s.iban.toUpperCase() === ibanMatch[0].toUpperCase());
+          if (foundSoggetto) console.log(`   ✅ Match IBAN con: ${foundSoggetto.ragione_sociale}`);
+        }
+      }
+
+      // ==========================================
+      // STEP 3: RAGIONE SOCIALE (Testo)
+      // ==========================================
+      if (!foundSoggetto) {
+        for (const s of soggetti) {
+          const nomeNorm = normalizzaNome(s.ragione_sociale);
+          if (nomeNorm.length >= 4 && causaleNorm.includes(nomeNorm)) {
+            foundSoggetto = s;
+            console.log(`   ✅ Match Ragione Sociale: Trovato "${nomeNorm}" nella causale`);
+            break;
+          }
+        }
+      }
+
+      // ==========================================
+      // STEP 4: RICERCA SCADENZA SUL SOGGETTO TROVATO
+      // ==========================================
+      if (foundSoggetto && !foundScadenza) {
+        const scadenzeSoggetto = scadenzeAperte.filter(s => s.soggetto_id === foundSoggetto.id);
+
+        // a) Prova regex standard fattura
+        const regexFattura = /(?:FATT\.?|FT\.?|FATTURA|FAT)\s*(?:N\.?\s*)?([A-Z]{0,3}\/?(?:\d{4}\/)?[\d]+)/gi;
+        let fatturaMatch = regexFattura.exec(causale);
+        let numeroFatturaEstratto = fatturaMatch ? fatturaMatch[1] : null;
+
+        if (numeroFatturaEstratto) {
+          foundScadenza = scadenzeSoggetto.find(s => 
+            s.fattura_riferimento && s.fattura_riferimento.toUpperCase().includes(numeroFatturaEstratto!.toUpperCase())
+          );
+          if (foundScadenza) console.log(`   ✅ Match Scadenza tramite Regex FATT: ${numeroFatturaEstratto}`);
+        }
+
+        // b) Fallback importo esatto
+        if (!foundScadenza) {
+          const importoAssoluto = Math.abs(m.importo);
+          foundScadenza = scadenzeSoggetto.find(s => {
+            const residuo = Number(s.importo_totale) - Number(s.importo_pagato || 0);
+            return Math.abs(residuo - importoAssoluto) < 0.01;
+          });
+          if (foundScadenza) console.log(`   ✅ Match Scadenza tramite Importo Esatto: €${importoAssoluto}`);
         }
       }
     }
 
-    // D. Se abbiamo il soggetto, cerchiamo la fattura esatta
-    if (foundSoggetto) {
-      const regexFattura = /(?:FATT\.?|FT\.?|FATTURA|FAT)\s*(?:N\.?\s*)?([A-Z]{0,3}\/?(?:\d{4}\/)?[\d]+)/gi;
-      let fatturaMatch = regexFattura.exec(causale);
-      let numeroFattura = fatturaMatch ? fatturaMatch[1] : null;
-
-      const scadenzeSoggetto = scadenzeAperte.filter(s => s.soggetto_id === foundSoggetto.id);
-
-      if (numeroFattura) {
-        foundScadenza = scadenzeSoggetto.find(s => 
-          s.fattura_riferimento && s.fattura_riferimento.toLowerCase().includes(numeroFattura!.toLowerCase())
-        );
-      }
-
-      if (!foundScadenza) {
-        const importoAssoluto = Math.abs(m.importo);
-        foundScadenza = scadenzeSoggetto.find(s => {
-          const residuo = Number(s.importo_totale) - Number(s.importo_pagato || 0);
-          return Math.abs(residuo - importoAssoluto) < 0.01;
-        });
-      }
-    }
-
-    // E. Preparazione Risultato
+    // ==========================================
+    // PREPARAZIONE RISULTATO E FILTRO SPESE BANCARIE
+    // ==========================================
     if (foundScadenza && foundSoggetto) {
       matchati.push({
         movimento_id: m.id,
         scadenza_id: foundScadenza.id,
         soggetto_id: foundSoggetto.id,
         confidence: 0.99,
-        motivo: `Pre-match Veloce: Trovato '${foundSoggetto.ragione_sociale}' tramite importo o riferimento esatto`,
+        motivo: `Pre-match: Fattura/Importo per '${foundSoggetto.ragione_sociale}'`,
         ragione_sociale: foundSoggetto.ragione_sociale
       });
       matched = true;
@@ -1796,16 +1821,47 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
         scadenza_id: null,
         soggetto_id: foundSoggetto.id,
         confidence: 0.80,
-        motivo: `Pre-match Veloce: Soggetto '${foundSoggetto.ragione_sociale}' identificato, ma nessuna fattura chiara`,
+        motivo: `Pre-match: Trovato soggetto '${foundSoggetto.ragione_sociale}' ma senza scadenze chiare`,
         ragione_sociale: foundSoggetto.ragione_sociale
       });
       matched = true;
     }
 
+    // ==========================================
+    // STEP 5: FILTRO RUMORE BANCARIO (Se nessun match)
+    // ==========================================
     if (!matched) {
-      nonMatchati.push(m);
+      const PATTERN_BANCARI_INTERNI = [
+        /\bIMP\.?\s*BOLLO\b/i,
+        /\bCOMP\.?\s*N[S]\.?\s*TENUTA\b/i,
+        /\bCOMPETENZE\b/i,
+        /\bCOMMISSIONI?\b/i,
+        /\bCANONE\s*(MENSILE|CONTO|CC)\b/i,
+        /\bINTERESSI\s*(CREDITOR|DEBITOR|MATURATI)\b/i,
+        /\bRITEN\.?\s*FISCALE\b/i,
+        /\bGIROCONTO\b/i,
+        /\bBONIFICO\s+INTERNO\b/i,
+      ];
+
+      const isBancarioInterno = PATTERN_BANCARI_INTERNI.some(re => re.test(causale));
+      
+      if (isBancarioInterno) {
+        console.log(`   🛑 Filtro Bancario: Ignorato (Costi Interni / Giroconti)`);
+        matchati.push({
+          movimento_id: m.id,
+          scadenza_id: null,
+          soggetto_id: null,
+          confidence: 0,
+          motivo: 'Ignorato: Movimento bancario interno',
+          ragione_sociale: null
+        });
+      } else {
+        console.log(`   ⏳ Nessun match trovato. Aggiunto alla coda AI.`);
+        nonMatchati.push(m);
+      }
     }
   }
 
+  console.log(`\n✅ RISULTATI PRE-MATCH: ${matchati.length} Risolti/Scartati, ${nonMatchati.length} da mandare all'AI.\n`);
   return { matchati, nonMatchati };
 }
