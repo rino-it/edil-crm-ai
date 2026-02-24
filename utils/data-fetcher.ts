@@ -8,6 +8,7 @@
 // ============================================================
 
 import { createClient } from "@supabase/supabase-js";
+import { XMLParser } from "fast-xml-parser";
 
 // Client Admin (Service Role bypassa RLS)
 function getSupabaseAdmin() {
@@ -43,12 +44,11 @@ export interface MovimentoInput {
   data_movimento: string;
   fornitore?: string;
   file_url?: string | null; 
-  numero_documento?: string | null; // <--- MODIFICA 1: Campo aggiunto
+  numero_documento?: string | null; 
 }
 
 // ============================================================
 // RICERCA CANTIERE PER NOME (match parziale con ILIKE)
-// Legge dalla vista che ha già speso e rimanente pre-calcolati
 // ============================================================
 
 export async function getCantiereData(
@@ -107,10 +107,6 @@ export async function getCantiereData(
   }
 }
 
-// ============================================================
-// LISTA TUTTI I CANTIERI APERTI (per domande generiche)
-// ============================================================
-
 export async function getCantieriAttivi(): Promise<CantiereData[]> {
   const supabase = getSupabaseAdmin();
 
@@ -152,10 +148,6 @@ export async function getCantieriAttivi(): Promise<CantiereData[]> {
   }
 }
 
-// ============================================================
-// INSERISCI MOVIMENTO (DDT confermato → scrivi in movimenti)
-// ============================================================
-
 export async function inserisciMovimento(
   movimento: MovimentoInput
 ): Promise<{ success: boolean; error?: string }> {
@@ -170,7 +162,7 @@ export async function inserisciMovimento(
       data_movimento: movimento.data_movimento,
       fornitore: movimento.fornitore || null,
       file_url: movimento.file_url || null, 
-      numero_documento: movimento.numero_documento || null, // <--- MODIFICA 2: Passaggio al DB
+      numero_documento: movimento.numero_documento || null, 
     });
 
     if (error) {
@@ -187,10 +179,6 @@ export async function inserisciMovimento(
     return { success: false, error: "Errore imprevisto" };
   }
 }
-
-// ============================================================
-// PERSONALE: Cerca dipendente per nome (match parziale)
-// ============================================================
 
 export interface PersonaleData {
   id: string;
@@ -229,10 +217,6 @@ export async function getPersonaleByNome(
   };
 }
 
-// ============================================================
-// PERSONALE: Cerca dipendente per numero telefono (per "Io")
-// ============================================================
-
 export async function getPersonaleByTelefono(
   telefono: string
 ): Promise<PersonaleData | null> {
@@ -262,14 +246,9 @@ export async function getPersonaleByTelefono(
   };
 }
 
-// ============================================================
-// PRESENZE: Risolvi lista nomi → lista PersonaleData
-// "ME_STESSO" viene risolto con il numero del mittente
-// ============================================================
-
 export interface PersonaRisolta {
   personale: PersonaleData;
-  nome_originale: string; // Il nome come scritto dall'utente
+  nome_originale: string; 
 }
 
 export async function risolviPersonale(
@@ -301,10 +280,6 @@ export async function risolviPersonale(
 
   return { trovati, nonTrovati };
 }
-
-// ============================================================
-// PRESENZE: Inserisci presenze per più persone
-// ============================================================
 
 export interface PresenzaInput {
   cantiere_id: string;
@@ -345,10 +320,6 @@ export async function inserisciPresenze(
   }
 }
 
-// ============================================================
-// HELPER: Formatta i dati cantiere in testo leggibile per Gemini
-// ============================================================
-
 export function formatCantiereForAI(cantiere: CantiereData): string {
   let text = `DATI REALI DAL DATABASE:
 - Cantiere: ${cantiere.nome}
@@ -385,10 +356,6 @@ export function formatCantieriListForAI(cantieri: CantiereData[]): string {
   return `${header}\n${rows}`;
 }
 
-// ============================================================
-// PARAMETRI GLOBALI: Legge Knowledge Base (aliquote CCNL, ecc.)
-// ============================================================
-
 export interface ParametriGlobali {
   id: number;
   aliquote_ccnl: {
@@ -420,11 +387,6 @@ export async function getParametriGlobali(): Promise<ParametriGlobali | null> {
   return data as ParametriGlobali;
 }
 
-// ============================================================
-// COSTO ORARIO REALE: Formula completa con aliquote CCNL
-// costo_reale = paga_base × (1 + INPS + INAIL + Edilcassa + TFR + Ferie)
-// ============================================================
-
 export function calcolaCostoOrario(
   pagaBase: number,
   aliquote: {
@@ -445,10 +407,6 @@ export function calcolaCostoOrario(
   return Math.round(pagaBase * moltiplicatore * 100) / 100;
 }
 
-// ============================================================
-// DISTANZA KM: Formula Haversine tra due coordinate GPS
-// ============================================================
-
 export function calcolaDistanzaKm(
   lat1: number,
   lng1: number,
@@ -468,10 +426,6 @@ export function calcolaDistanzaKm(
   return Math.round(R * c * 10) / 10; // arrotonda a 1 decimale
 }
 
-// ============================================================
-// DOCUMENTI PERSONALE: Interfacce
-// ============================================================
-
 export interface DocumentoPersonale {
   id: string;
   personale_id: string;
@@ -486,10 +440,6 @@ export interface DocumentoPersonale {
   stato: "bozza" | "validato" | "rifiutato";
   created_at: string;
 }
-
-// ============================================================
-// DOCUMENTI PERSONALE: Salva bozza dopo analisi AI
-// ============================================================
 
 export async function salvaDocumentoBozza(params: {
   personale_id: string;
@@ -527,11 +477,6 @@ export async function salvaDocumentoBozza(params: {
   return { success: true, id: data.id };
 }
 
-// ============================================================
-// DOCUMENTI PERSONALE: Valida e conferma (supervisione umana)
-// Aggiorna costo_config su personale se è un contratto
-// ============================================================
-
 export async function validaEConfermaDocumento(params: {
   documento_id: string;
   personale_id: string;
@@ -541,7 +486,6 @@ export async function validaEConfermaDocumento(params: {
 }): Promise<{ success: boolean; error?: string }> {
   const supabase = getSupabaseAdmin();
 
-  // 1. Aggiorna il documento come validato
   const { error: docError } = await supabase
     .from("personale_documenti")
     .update({
@@ -556,7 +500,6 @@ export async function validaEConfermaDocumento(params: {
     return { success: false, error: docError.message };
   }
 
-  // 2. Se c'è un costo orario reale calcolato, aggiorna personale
   if (params.costo_orario_reale && params.costo_orario_reale > 0) {
     const { error: personaleError } = await supabase
       .from("personale")
@@ -576,10 +519,6 @@ export async function validaEConfermaDocumento(params: {
   return { success: true };
 }
 
-// ============================================================
-// DOCUMENTI PERSONALE: Lista documenti per persona
-// ============================================================
-
 export async function getDocumentiPersonale(
   personale_id: string
 ): Promise<DocumentoPersonale[]> {
@@ -598,10 +537,6 @@ export async function getDocumentiPersonale(
 
   return data as DocumentoPersonale[];
 }
-
-// ============================================================
-// DOCUMENTI PERSONALE: Scadenziario (prossimi 30 giorni)
-// ============================================================
 
 export interface DocumentoInScadenza {
   id: string;
@@ -659,18 +594,13 @@ export async function getDocumentiInScadenza(
     };
   });
 }
-// ============================================================
-// PREVENTIVAZIONE INTELLIGENCE: Lettura DB per RAG
-// ============================================================
 
 export async function getPrezziarioForRAG(descrizione: string): Promise<string> {
   const supabase = getSupabaseAdmin();
   
-  // Estraiamo la parola più lunga come chiave di ricerca per il fallback
   const parole = descrizione.split(/[\s,.'-]+/).filter(w => w.length > 3);
   const fallbackWord = parole.length > 0 ? parole[0] : descrizione.trim();
 
-  // Cerchiamo le voci che contengono in parte la descrizione
   const { data, error } = await supabase
     .from("prezziario_ufficiale_2025")
     .select("id, codice_tariffa, descrizione, unita_misura, prezzo_unitario")
@@ -682,7 +612,6 @@ export async function getPrezziarioForRAG(descrizione: string): Promise<string> 
     return "";
   }
 
-  // Formattazione per Gemini
   return data
     .map(
       (i) =>
@@ -708,7 +637,6 @@ export async function getStoricoForRAG(descrizione: string): Promise<string> {
     return "";
   }
 
-  // Formattazione per Gemini
   return data
     .map(
       (i) =>
@@ -716,11 +644,6 @@ export async function getStoricoForRAG(descrizione: string): Promise<string> {
     )
     .join("\n");
 }
-
-// ============================================================
-// ARCHIVIO CANTIERE: Gestione Documentale e CRUD
-// Lettura/Scrittura della vista e tabella cantiere_documenti
-// ============================================================
 
 export interface DocumentoCantiere {
   id: string;
@@ -733,11 +656,9 @@ export interface DocumentoCantiere {
   note: string | null;
   scadenza_notificata: boolean;
   created_at: string;
-  // Join fittizio se vogliamo il nome del cantiere in alcune viste
   cantieri?: { nome: string };
 }
 
-// 1. Lettura Documenti (Usa la vista per avere lo stato aggiornato)
 export async function getDocumentiCantiere(cantiereId: string): Promise<DocumentoCantiere[]> {
   const supabase = getSupabaseAdmin();
   
@@ -755,7 +676,6 @@ export async function getDocumentiCantiere(cantiereId: string): Promise<Document
   return data as DocumentoCantiere[];
 }
 
-// 2. Inserimento Nuovo Documento
 export async function salvaDocumentoCantiere(params: {
   cantiere_id: string;
   nome_file: string;
@@ -790,7 +710,6 @@ export async function salvaDocumentoCantiere(params: {
   return { success: true, id: data.id };
 }
 
-// 3. Eliminazione Documento (Gestirà anche la cancellazione dal Bucket nel Frontend/Actions)
 export async function eliminaDocumentoCantiereRecord(id: string): Promise<{ success: boolean; error?: string }> {
   const supabase = getSupabaseAdmin();
 
@@ -807,7 +726,6 @@ export async function eliminaDocumentoCantiereRecord(id: string): Promise<{ succ
   return { success: true };
 }
 
-// 4. Per il Cron Job: Trova i documenti in scadenza di tutti i cantieri
 export async function getDocumentiCantiereInScadenza(giorniAvviso = 30): Promise<DocumentoCantiere[]> {
   const supabase = getSupabaseAdmin();
 
@@ -835,10 +753,6 @@ export async function getDocumentiCantiereInScadenza(giorniAvviso = 30): Promise
   return data as DocumentoCantiere[];
 }
 
-// ============================================================
-// ANAGRAFICHE: Soggetti (Fornitori e Clienti)
-// ============================================================
-
 export interface Soggetto {
   id: string;
   tipo: "fornitore" | "cliente";
@@ -856,7 +770,6 @@ export interface Soggetto {
   created_at: string;
 }
 
-// 1. Lista soggetti con filtro opzionale per tipo
 export async function getSoggetti(tipo?: string): Promise<Soggetto[]> {
   const supabase = getSupabaseAdmin();
   let query = supabase
@@ -878,7 +791,6 @@ export async function getSoggetti(tipo?: string): Promise<Soggetto[]> {
   return data as Soggetto[];
 }
 
-// 2. Dettaglio singolo soggetto
 export async function getSoggettoById(id: string): Promise<Soggetto | null> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
@@ -895,7 +807,6 @@ export async function getSoggettoById(id: string): Promise<Soggetto | null> {
   return data as Soggetto;
 }
 
-// 3. Upsert per import automatico (usato da riconciliazione XML)
 export async function upsertSoggettoDaPIVA(
   piva: string,
   ragione_sociale: string,
@@ -920,7 +831,6 @@ export async function upsertSoggettoDaPIVA(
   return { success: true, id: data.id };
 }
 
-// 4. KPI Anagrafiche (Totale Fornitori, Totale Clienti)
 export async function getKPIAnagrafiche(): Promise<{ fornitori: number; clienti: number }> {
   const supabase = getSupabaseAdmin();
   
@@ -935,10 +845,6 @@ export async function getKPIAnagrafiche(): Promise<{ fornitori: number; clienti:
 
   return { fornitori, clienti };
 }
-
-// ============================================================
-// SCADENZIARIO E FINANZA: Interfacce
-// ============================================================
 
 export interface Scadenza {
   id: string;
@@ -967,11 +873,6 @@ export interface KPIScadenze {
   dso: number;
 }
 
-// ============================================================
-// SCADENZIARIO E FINANZA: Query
-// ============================================================
-
-// 1. Lista scadenze con filtri e join
 export async function getScadenze(filtri?: { 
   tipo?: string; 
   stato?: string; 
@@ -997,7 +898,6 @@ export async function getScadenze(filtri?: {
   }
   if (filtri?.cantiere_id) query = query.eq('cantiere_id', filtri.cantiere_id);
 
-  // Default: prima le scadute, poi per data scadenza
   const { data, error } = await query.order('data_scadenza', { ascending: true });
 
   if (error) {
@@ -1011,7 +911,6 @@ export async function getScadenze(filtri?: {
   })) as Scadenza[];
 }
 
-// 2. Calcolo KPI Finanziari (Priorità Crediti)
 export async function getKPIScadenze(): Promise<KPIScadenze> {
   const supabase = getSupabaseAdmin();
   
@@ -1039,7 +938,6 @@ export async function getKPIScadenze(): Promise<KPIScadenze> {
   return { da_incassare, da_pagare, scaduto, dso };
 }
 
-// 3. Formula DSO: Media giorni incasso ultimi 90gg
 export async function calcolaDSO(): Promise<number> {
   const supabase = getSupabaseAdmin();
   const novantaGiorniFa = new Date();
@@ -1064,7 +962,6 @@ export async function calcolaDSO(): Promise<number> {
   return Math.round(media);
 }
 
-// 4. Aging Analysis Crediti
 export async function getAgingAnalysis() {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
@@ -1076,7 +973,7 @@ export async function getAgingAnalysis() {
   if (error || !data) return { f1: 0, f2: 0, f3: 0, f4: 0 };
 
   const oggi = new Date();
-  const fasce = { f1: 0, f2: 0, f3: 0, f4: 0 }; // 0-30, 31-60, 61-90, >90
+  const fasce = { f1: 0, f2: 0, f3: 0, f4: 0 }; 
 
   data.forEach(s => {
     const scadenza = new Date(s.data_scadenza);
@@ -1091,10 +988,6 @@ export async function getAgingAnalysis() {
 
   return fasce;
 }
-
-// ============================================================
-// STEP 4: DASHBOARD FINANZIARIA (MOTORE EVOLUTO)
-// ============================================================
 
 export async function getKPIFinanziariGlob() {
   const supabase = createClient(
@@ -1134,12 +1027,11 @@ export async function getKPIFinanziariGlob() {
   }
 
   const margine = fatturato - costi;
-  const dso = 30; // Placeholder per DSO (implementeremo formula complessa in seguito)
+  const dso = 30; 
 
   return { cassa_attuale, fatturato, costi, margine, dso, soglia_alert };
 }
 
-// Modificata: accetta il tipo (entrata o uscita) per analizzare sia crediti che debiti
 export async function getAgingAnalysisData(tipo: 'entrata' | 'uscita' = 'entrata') {
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -1200,7 +1092,6 @@ export async function getFinanzaPerCantiere() {
   });
 }
 
-// Modificata: Il Cashflow ora considera il "peso" immediato di tutte le fatture già scadute
 export async function getCashflowPrevisionale(giorni: number = 90) {
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -1213,7 +1104,6 @@ export async function getCashflowPrevisionale(giorni: number = 90) {
   const limite = new Date();
   limite.setDate(limite.getDate() + giorni);
 
-  // Scarica TUTTO lo scaduto e il futuro non pagato
   const { data: scadenze } = await supabase
     .from('scadenze_pagamento')
     .select('tipo, importo_totale, importo_pagato, data_scadenza')
@@ -1229,12 +1119,10 @@ export async function getCashflowPrevisionale(giorni: number = 90) {
       const residuo = (Number(s.importo_totale) || 0) - (Number(s.importo_pagato) || 0);
       const dataScad = new Date(s.data_scadenza);
 
-      // Se è nel passato, lo accumuliamo nel "Giorno 0" (impatto immediato)
       if (dataScad < oggi) {
         if (s.tipo === 'entrata') creditiScaduti += residuo;
         if (s.tipo === 'uscita') debitiScaduti += residuo;
       } else {
-        // Altrimenti lo mettiamo nella timeline futura
         const dataStr = s.data_scadenza;
         if (!timeline[dataStr]) timeline[dataStr] = { entrate: 0, uscite: 0 };
         if (s.tipo === 'entrata') timeline[dataStr].entrate += residuo;
@@ -1243,7 +1131,6 @@ export async function getCashflowPrevisionale(giorni: number = 90) {
     });
   }
 
-  // Applichiamo l'urto dello scaduto sulla cassa di partenza
   cassaProgressiva = cassaProgressiva + creditiScaduti - debitiScaduti;
 
   const proiezioni: Array<{ data: string, saldo: number, entrate_giorno: number, uscite_giorno: number }> = [];
@@ -1251,7 +1138,7 @@ export async function getCashflowPrevisionale(giorni: number = 90) {
   proiezioni.push({
     data: oggi.toISOString().split('T')[0],
     saldo: cassaProgressiva,
-    entrate_giorno: creditiScaduti, // Mostriamo sul grafico quanto scaduto c'è da sistemare subito
+    entrate_giorno: creditiScaduti,
     uscite_giorno: debitiScaduti
   });
 
@@ -1287,7 +1174,7 @@ export async function getCashflowPrevisionale(giorni: number = 90) {
 }
 
 // ============================================================
-// STEP 5: RICONCILIAZIONE BANCARIA (PARSER E DB) - FASE 2
+// STEP 5: RICONCILIAZIONE BANCARIA (PARSER CSV/XML E DB) 
 // ============================================================
 
 export function parseCSVBanca(csvText: string) {
@@ -1296,7 +1183,6 @@ export function parseCSVBanca(csvText: string) {
 
   console.log("📊 DEBUG CSV: Prime 3 righe rilevate:", lines.slice(0, 3));
 
-  // Parser CSV che rispetta le virgolette
   function parseCSVLine(line: string): string[] {
     const result: string[] = [];
     let current = '';
@@ -1324,7 +1210,6 @@ export function parseCSVBanca(csvText: string) {
       continue;
     }
 
-    // Data: DD/MM/YYYY → YYYY-MM-DD
     const dataRaw = cols[0];
     let data_operazione = dataRaw;
     const sep = dataRaw.includes('/') ? '/' : '-';
@@ -1333,7 +1218,6 @@ export function parseCSVBanca(csvText: string) {
       data_operazione = `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
     }
 
-    // Importo: campo singolo, formato europeo "-16.000,00" → -16000.00
     const importoRaw = cols[2] || '0';
     const importoPulito = importoRaw.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.');
     const importo = parseFloat(importoPulito) || 0;
@@ -1350,11 +1234,92 @@ export function parseCSVBanca(csvText: string) {
     }
   }
 
-  console.log(`✅ Analisi completata: ${movimenti.length} movimenti validi trovati.`);
+  console.log(`✅ Analisi completata: ${movimenti.length} movimenti validi trovati nel CSV.`);
   return movimenti;
 }
 
-// --- GESTIONE CONTI BANCARI ---
+export function parseXMLBanca(xmlText: string) {
+  // 1. Pulisci namespace per semplificare la vita al parser XML
+  const cleanXml = xmlText
+    .replace(/<\/?ns\d+:/g, (match) => match.replace(/ns\d+:/, ''))
+    .replace(/\sxmlns[^"]*"[^"]*"/g, '');
+
+  const parser = new XMLParser({ ignoreAttributes: false, parseTagValue: false });
+  const jsonObj = parser.parse(cleanXml);
+  const movimenti: any[] = [];
+
+  // Navigazione dell'albero XML CBI
+  const msg = jsonObj.CBIBdyBkToCstmrStmtReq?.CBIEnvelBkToCstmrStmtReqLogMsg?.CBIBkToCstmrStmtReqLogMsg?.CBIDlyStmtReqLogMsg || jsonObj.CBIDlyStmtReqLogMsg;
+  if (!msg) return movimenti;
+
+  let statements = msg.Stmt;
+  if (!statements) return movimenti;
+  if (!Array.isArray(statements)) statements = [statements];
+
+  for (const stmt of statements) {
+    let entries = stmt.Ntry;
+    if (!entries) continue;
+    if (!Array.isArray(entries)) entries = [entries];
+
+    for (const entry of entries) {
+      // Estrazione Importo e Segno
+      const amtStr = entry.Amt?.['#text'] || entry.Amt;
+      const amt = parseFloat(amtStr);
+      if (isNaN(amt)) continue;
+
+      const cdtDbtInd = entry.CdtDbtInd;
+      const importo = cdtDbtInd === 'DBIT' ? -amt : amt;
+
+      // Estrazione Data (BookgDt)
+      const bookgDt = entry.BookgDt?.Dt;
+      const data_operazione = bookgDt ? bookgDt.substring(0, 10) : new Date().toISOString().substring(0, 10);
+
+      // Estrazione Info Dettagliate
+      const txDtls = entry.NtryDtls?.TxDtls;
+      let nm = '';
+      let addtlTxInf = '';
+      
+      if (txDtls) {
+          const dtlsArray = Array.isArray(txDtls) ? txDtls : [txDtls];
+          for (const dtl of dtlsArray) {
+              const cdtrNm = dtl.RltdPties?.Cdtr?.Nm;
+              const dbtrNm = dtl.RltdPties?.Dbtr?.Nm;
+              if (cdtrNm) nm = cdtrNm;
+              else if (dbtrNm) nm = dbtrNm;
+              
+              if (dtl.AddtlTxInf) {
+                  addtlTxInf = dtl.AddtlTxInf;
+              }
+          }
+      }
+
+      const descrizione = addtlTxInf || nm || "Movimento senza descrizione";
+
+      // 4. ESTRAZIONE CAMPI STRUTTURATI da addtlTxInf (Metodo Robusto tramite Regex)
+      const ibanMatch = addtlTxInf.match(/Iban beneficiario:([A-Z]{2}\d{2}[A-Z0-9]{11,30})/i) || addtlTxInf.match(/Iban ordinante:([A-Z]{2}\d{2}[A-Z0-9]{11,30})/i);
+      const nomeMatch = addtlTxInf.match(/Nominativo beneficiario:([^C][^\n]+?)(?=Codice|Data|Indica|$)/i) || addtlTxInf.match(/Ragione sociale ordinante:([^C][^\n]+?)(?=Indirizzo|Identificativo|$)/i);
+      const pivaMatch = addtlTxInf.match(/Partita Iva[^:]*:(\d{11})/i) || addtlTxInf.match(/Codice Fiscale[^:]*:(\d{11})/i);
+      const causaleMatch = addtlTxInf.match(/Causale:([^\n]+?)(?=Esito|Importo|$)/i);
+      const codeCBI = entry.BkTxCd?.Prtry?.Cd;
+
+      movimenti.push({
+        data_operazione,
+        descrizione: descrizione.trim(),
+        importo,
+        stato: 'non_riconciliato',
+        // Nuovi campi strutturati per l'AI
+        xml_iban_controparte: ibanMatch ? ibanMatch[1].trim() : null,
+        xml_nome_controparte: nomeMatch ? nomeMatch[1].trim() : (nm ? nm.trim() : null),
+        xml_piva_controparte: pivaMatch ? pivaMatch[1].trim() : null,
+        xml_causale: causaleMatch ? causaleMatch[1].trim() : null,
+        xml_codice_cbi: codeCBI || null
+      });
+    }
+  }
+
+  console.log(`📦 XML CBI Parsato con successo: ${movimenti.length} movimenti trovati.`);
+  return movimenti;
+}
 
 export async function getContiBanca() {
   const supabase = getSupabaseAdmin();
@@ -1394,8 +1359,6 @@ export async function creaContoBanca(params: { nome_banca: string, nome_conto: s
   if (error) throw new Error(error.message);
   return data.id;
 }
-
-// --- GESTIONE UPLOADS E LOGS ---
 
 export async function getUploadsBanca(contoId?: string) {
   const supabase = getSupabaseAdmin();
@@ -1462,16 +1425,22 @@ export async function creaLogRiconciliazione(params: {
   if (error) console.error("❌ Errore creaLogRiconciliazione:", error);
 }
 
-// --- GESTIONE MOVIMENTI ---
-
 export async function importMovimentiBanca(movimenti: any[], conto_banca_id?: string, upload_id?: string) {
   const supabase = getSupabaseAdmin();
   
-  // Aggiungiamo il riferimento al conto e all'upload per tracciabilità
   const righe = movimenti.map(m => ({ 
-    ...m, 
+    data_operazione: m.data_operazione,
+    descrizione: m.descrizione,
+    importo: m.importo,
+    stato: m.stato || 'non_riconciliato',
     conto_banca_id: conto_banca_id || null, 
-    upload_id: upload_id || null 
+    upload_id: upload_id || null,
+    // Gestione campi XML CBI
+    xml_iban_controparte: m.xml_iban_controparte || null,
+    xml_nome_controparte: m.xml_nome_controparte || null,
+    xml_piva_controparte: m.xml_piva_controparte || null,
+    xml_causale: m.xml_causale || null,
+    xml_codice_cbi: m.xml_codice_cbi || null
   }));
   
   const { data, error } = await supabase
@@ -1521,7 +1490,6 @@ export async function confermaRiconciliazione(
 ) {
   const supabase = getSupabaseAdmin();
   
-  // 1. Prepara i dati per l'aggiornamento del movimento
   const updateData: any = { 
     stato: 'riconciliato', 
     scadenza_id: scadenza_id 
@@ -1530,13 +1498,11 @@ export async function confermaRiconciliazione(
   if (soggetto_id) updateData.soggetto_id = soggetto_id;
   if (tipo_match === 'auto_ai') updateData.auto_riconciliato = true;
   
-  // 2. Segna il movimento come riconciliato
   await supabase
     .from('movimenti_banca')
     .update(updateData)
     .eq('id', movimento_id);
 
-  // 3. Recupera la scadenza attuale per sommare il pagato
   const { data: scadenza } = await supabase
     .from('scadenze_pagamento')
     .select('importo_totale, importo_pagato')
@@ -1547,7 +1513,6 @@ export async function confermaRiconciliazione(
     const nuovoPagato = (Number(scadenza.importo_pagato) || 0) + Math.abs(importo_movimento);
     const nuovoStato = nuovoPagato >= Number(scadenza.importo_totale) ? 'pagato' : 'parziale';
     
-    // 4. Aggiorna la scadenza
     await supabase
       .from('scadenze_pagamento')
       .update({
@@ -1557,7 +1522,6 @@ export async function confermaRiconciliazione(
       })
       .eq('id', scadenza_id);
       
-    // 5. Crea log dell'operazione per audit (SPLIT, AUTO_AI, MANUALE)
     await creaLogRiconciliazione({
       movimento_id,
       scadenza_id,
@@ -1569,18 +1533,14 @@ export async function confermaRiconciliazione(
   }
 }
 
-// --- NUOVA AUTO-RICONCILIAZIONE ---
-
 export async function autoRiconciliaMovimenti(risultatiAI: any[]) {
   const autoRiconciliati: string[] = [];
   const daMostrare: any[] = [];
   const supabase = getSupabaseAdmin();
   
   for (const res of risultatiAI) {
-    // Seleziona solo i match con precisione "Bancaria" (> 0.98)
     if (res.scadenza_id && res.confidence >= 0.98) {
       
-      // Recupera importo del movimento per la riconciliazione esatta
       const { data: mov } = await supabase
         .from('movimenti_banca')
         .select('importo')
@@ -1603,16 +1563,12 @@ export async function autoRiconciliaMovimenti(risultatiAI: any[]) {
         daMostrare.push(res);
       }
     } else {
-      daMostrare.push(res); // Quelli da far decidere all'utente
+      daMostrare.push(res); 
     }
   }
   
   return { autoRiconciliati, daMostrare };
 }
-
-// ============================================================
-// STEP 5A: STORICO PAGAMENTI E ESPOSIZIONE SOGGETTO
-// ============================================================
 
 export async function getStoricoPaymentsSoggetto(soggetto_id: string) {
   const supabase = getSupabaseAdmin();
@@ -1632,7 +1588,6 @@ export async function getStoricoPaymentsSoggetto(soggetto_id: string) {
       )
     `)
     .eq('stato', 'riconciliato')
-    // Usiamo il soggetto_id direttamente sul movimento (che copre sia i match esatti che gli acconti)
     .eq('soggetto_id', soggetto_id)
     .order('data_operazione', { ascending: false });
 
@@ -1685,19 +1640,12 @@ export async function getFattureAperteSoggetto(soggetto_id: string) {
   return data || [];
 }
 
-// ============================================================
-// STEP 1: PRE-MATCHING DETERMINISTICO BANCARIO (V4 Definitiva)
-// ============================================================
-
 export function normalizzaNome(nome: string): string {
   if (!nome) return '';
   return nome
     .toLowerCase()
-    // Rimuove i suffissi aziendali sostituendoli con uno spazio
     .replace(/\b(s\.?r\.?l\.?|s\.?p\.?a\.?|s\.?n\.?c\.?|s\.?a\.?s\.?|s\.?c\.?r\.?l\.?|di|e|&)\b/gi, ' ')
-    // FIX: Sostituisce qualsiasi cosa non sia lettera o numero con uno SPAZIO (evita parole appiccicate)
     .replace(/[^a-z0-9]/g, ' ')  
-    // Collassa spazi multipli creati dai replace precedenti
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -1707,7 +1655,6 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
   const nonMatchati: any[] = [];
 
   console.log(`\n🔍 INIZIO PRE-MATCH DETERMINISTICO su ${movimenti.length} movimenti.`);
-  console.log(`📊 STATO DB: ${soggetti.length} soggetti, ${scadenzeAperte.length} scadenze aperte.\n`);
 
   for (const m of movimenti) {
     let matched = false;
@@ -1715,95 +1662,137 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
     const causale = causaleRaw.toUpperCase();
     const causaleNorm = normalizzaNome(causale);
 
-    console.log(`---- Analisi: "${causaleRaw.substring(0, 80)}..." (Importo: €${m.importo})`);
+    // ==========================================
+    // ZERO. Pre-Filtro Costi Bancari e Tasse
+    // ==========================================
+    const regexBanca = /\b(bollo|commissioni?|canone|tenuta conto|spese liquidazione|competenz[ea]|imposta|f24)\b/i;
+    if (regexBanca.test(causale)) {
+      matchati.push({
+        movimento_id: m.id,
+        scadenza_id: null,
+        soggetto_id: null,
+        confidence: 0.99,
+        motivo: `Pre-match Veloce: Rilevata Spesa Bancaria/Imposta`,
+        ragione_sociale: "Banca / Imposte (Spesa Interna)"
+      });
+      continue;
+    }
 
     let foundSoggetto: any = null;
     let foundScadenza: any = null;
 
     // ==========================================
-    // STEP 0: NINJA MATCH GLOBALE FATTURA
+    // STEP XML: MATCH DAI CAMPI STRUTTURATI XML
     // ==========================================
-    for (const s of scadenzeAperte) {
-      if (!s.fattura_riferimento || s.fattura_riferimento.trim().length < 4) continue;
-      
-      const fatturaRif = s.fattura_riferimento.toUpperCase();
-      if (causale.includes(fatturaRif)) {
-        foundScadenza = s;
-        foundSoggetto = soggetti.find(sog => sog.id === s.soggetto_id) || null;
-        console.log(`   🥷 NINJA MATCH! Trovata fattura esatta: ${fatturaRif}`);
-        break;
+    if (m.xml_iban_controparte) {
+      const ibanCercato = m.xml_iban_controparte.replace(/\s/g, '').toUpperCase();
+      const soggettoTrovato = soggetti.find(s =>
+        s.iban && s.iban.replace(/\s/g, '').toUpperCase() === ibanCercato
+      );
+      if (soggettoTrovato) {
+        foundSoggetto = soggettoTrovato;
+        console.log(`   💎 XML Match: IBAN ${ibanCercato} → ${soggettoTrovato.ragione_sociale}`);
       }
     }
 
+    if (!foundSoggetto && m.xml_piva_controparte) {
+      const pivaCercata = m.xml_piva_controparte.trim();
+      const soggettoTrovato = soggetti.find(s => s.partita_iva === pivaCercata);
+      if (soggettoTrovato) {
+        foundSoggetto = soggettoTrovato;
+        console.log(`   💎 XML Match: P.IVA ${pivaCercata} → ${soggettoTrovato.ragione_sociale}`);
+      }
+    }
+
+    if (!foundSoggetto && m.xml_nome_controparte) {
+      const nomeXml = normalizzaNome(m.xml_nome_controparte);
+      for (const s of soggetti) {
+        const nomeDb = normalizzaNome(s.ragione_sociale);
+        if (nomeDb.length >= 4 && (nomeXml.includes(nomeDb) || nomeDb.includes(nomeXml))) {
+          foundSoggetto = s;
+          console.log(`   💎 XML Match: Nome '${m.xml_nome_controparte}' → ${s.ragione_sociale}`);
+          break;
+        }
+      }
+    }
+
+    // ==========================================
+    // STEP 0: NINJA MATCH GLOBALE FATTURA
+    // ==========================================
     if (!foundScadenza) {
+      for (const s of scadenzeAperte) {
+        if (!s.fattura_riferimento || s.fattura_riferimento.trim().length < 4) continue;
+        
+        const fatturaRif = s.fattura_riferimento.toUpperCase();
+        if (causale.includes(fatturaRif) || (m.xml_causale && m.xml_causale.toUpperCase().includes(fatturaRif))) {
+          foundScadenza = s;
+          foundSoggetto = soggetti.find(sog => sog.id === s.soggetto_id) || null;
+          console.log(`   🥷 NINJA MATCH! Trovata fattura esatta: ${fatturaRif}`);
+          break;
+        }
+      }
+    }
+
+    if (!foundScadenza && !foundSoggetto) {
       // ==========================================
-      // STEP 1: PARTITA IVA
+      // STEP 1: PARTITA IVA (Testo Grezzo)
       // ==========================================
       const pivaMatch = causale.match(/\b\d{11}\b/);
       if (pivaMatch) {
-        console.log(`   📌 P.IVA trovata in causale: ${pivaMatch[0]}`);
         foundSoggetto = soggetti.find(s => s.partita_iva === pivaMatch[0]);
-        if (foundSoggetto) console.log(`   ✅ Match P.IVA con: ${foundSoggetto.ragione_sociale}`);
       }
 
       // ==========================================
-      // STEP 2: IBAN
+      // STEP 2: IBAN (Testo Grezzo)
       // ==========================================
       if (!foundSoggetto) {
         const ibanMatch = causale.match(/\bIT\d{2}[A-Z]\d{10}[A-Z0-9]{12}\b/i);
         if (ibanMatch) {
-          console.log(`   📌 IBAN trovato in causale: ${ibanMatch[0]}`);
           foundSoggetto = soggetti.find(s => s.iban && s.iban.toUpperCase() === ibanMatch[0].toUpperCase());
-          if (foundSoggetto) console.log(`   ✅ Match IBAN con: ${foundSoggetto.ragione_sociale}`);
         }
       }
 
       // ==========================================
-      // STEP 3: RAGIONE SOCIALE (Testo)
+      // STEP 3: RAGIONE SOCIALE (Testo Grezzo)
       // ==========================================
       if (!foundSoggetto) {
         for (const s of soggetti) {
           const nomeNorm = normalizzaNome(s.ragione_sociale);
           if (nomeNorm.length >= 4 && causaleNorm.includes(nomeNorm)) {
             foundSoggetto = s;
-            console.log(`   ✅ Match Ragione Sociale: Trovato "${nomeNorm}" nella causale`);
             break;
           }
-        }
-      }
-
-      // ==========================================
-      // STEP 4: RICERCA SCADENZA SUL SOGGETTO TROVATO
-      // ==========================================
-      if (foundSoggetto && !foundScadenza) {
-        const scadenzeSoggetto = scadenzeAperte.filter(s => s.soggetto_id === foundSoggetto.id);
-
-        // a) Prova regex standard fattura
-        const regexFattura = /(?:FATT\.?|FT\.?|FATTURA|FAT)\s*(?:N\.?\s*)?([A-Z]{0,3}\/?(?:\d{4}\/)?[\d]+)/gi;
-        let fatturaMatch = regexFattura.exec(causale);
-        let numeroFatturaEstratto = fatturaMatch ? fatturaMatch[1] : null;
-
-        if (numeroFatturaEstratto) {
-          foundScadenza = scadenzeSoggetto.find(s => 
-            s.fattura_riferimento && s.fattura_riferimento.toUpperCase().includes(numeroFatturaEstratto!.toUpperCase())
-          );
-          if (foundScadenza) console.log(`   ✅ Match Scadenza tramite Regex FATT: ${numeroFatturaEstratto}`);
-        }
-
-        // b) Fallback importo esatto
-        if (!foundScadenza) {
-          const importoAssoluto = Math.abs(m.importo);
-          foundScadenza = scadenzeSoggetto.find(s => {
-            const residuo = Number(s.importo_totale) - Number(s.importo_pagato || 0);
-            return Math.abs(residuo - importoAssoluto) < 0.01;
-          });
-          if (foundScadenza) console.log(`   ✅ Match Scadenza tramite Importo Esatto: €${importoAssoluto}`);
         }
       }
     }
 
     // ==========================================
-    // PREPARAZIONE RISULTATO E FILTRO SPESE BANCARIE
+    // STEP 4: RICERCA SCADENZA SUL SOGGETTO TROVATO
+    // ==========================================
+    if (foundSoggetto && !foundScadenza) {
+      const scadenzeSoggetto = scadenzeAperte.filter(s => s.soggetto_id === foundSoggetto.id);
+
+      const regexFattura = /(?:FATT\.?|FT\.?|FATTURA|FAT)\s*(?:N\.?\s*)?([A-Z]{0,3}\/?(?:\d{4}\/)?[\d]+)/gi;
+      let fatturaMatch = regexFattura.exec(causale);
+      let numeroFatturaEstratto = fatturaMatch ? fatturaMatch[1] : null;
+
+      if (numeroFatturaEstratto) {
+        foundScadenza = scadenzeSoggetto.find(s => 
+          s.fattura_riferimento && s.fattura_riferimento.toUpperCase().includes(numeroFatturaEstratto!.toUpperCase())
+        );
+      }
+
+      if (!foundScadenza) {
+        const importoAssoluto = Math.abs(m.importo);
+        foundScadenza = scadenzeSoggetto.find(s => {
+          const residuo = Number(s.importo_totale) - Number(s.importo_pagato || 0);
+          return Math.abs(residuo - importoAssoluto) < 0.01;
+        });
+      }
+    }
+
+    // ==========================================
+    // PREPARAZIONE RISULTATO
     // ==========================================
     if (foundScadenza && foundSoggetto) {
       matchati.push({
@@ -1827,41 +1816,11 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
       matched = true;
     }
 
-    // ==========================================
-    // STEP 5: FILTRO RUMORE BANCARIO (Se nessun match)
-    // ==========================================
     if (!matched) {
-      const PATTERN_BANCARI_INTERNI = [
-        /\bIMP\.?\s*BOLLO\b/i,
-        /\bCOMP\.?\s*N[S]\.?\s*TENUTA\b/i,
-        /\bCOMPETENZE\b/i,
-        /\bCOMMISSIONI?\b/i,
-        /\bCANONE\s*(MENSILE|CONTO|CC)\b/i,
-        /\bINTERESSI\s*(CREDITOR|DEBITOR|MATURATI)\b/i,
-        /\bRITEN\.?\s*FISCALE\b/i,
-        /\bGIROCONTO\b/i,
-        /\bBONIFICO\s+INTERNO\b/i,
-      ];
-
-      const isBancarioInterno = PATTERN_BANCARI_INTERNI.some(re => re.test(causale));
-      
-      if (isBancarioInterno) {
-        console.log(`   🛑 Filtro Bancario: Ignorato (Costi Interni / Giroconti)`);
-        matchati.push({
-          movimento_id: m.id,
-          scadenza_id: null,
-          soggetto_id: null,
-          confidence: 0,
-          motivo: 'Ignorato: Movimento bancario interno',
-          ragione_sociale: null
-        });
-      } else {
-        console.log(`   ⏳ Nessun match trovato. Aggiunto alla coda AI.`);
-        nonMatchati.push(m);
-      }
+      nonMatchati.push(m);
     }
   }
 
-  console.log(`\n✅ RISULTATI PRE-MATCH: ${matchati.length} Risolti/Scartati, ${nonMatchati.length} da mandare all'AI.\n`);
+  console.log(`\n✅ RISULTATI PRE-MATCH: ${matchati.length} Risolti/Scartati, ${nonMatchati.length} all'AI.\n`);
   return { matchati, nonMatchati };
 }
