@@ -1701,165 +1701,13 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
     }
 
     // ==========================================
-    // 2. STEP GIROCONTI: Bonifici tra i tuoi conti
+    // 2. STEP GIROCONTI: Trasferimenti interni
     // ==========================================
     const regexGiroconto = /\b(giroconto|giro\s*(da|a|per|su))\b/i;
     if (regexGiroconto.test(causale) || (m.xml_causale && /giroconto/i.test(m.xml_causale))) {
       matchati.push({
         movimento_id: m.id, scadenza_id: null, soggetto_id: null, confidence: 0.99,
-        motivo: `Giroconto interno rilevato`,
-        ragione_sociale: "Giroconto Aziendale", categoria: 'giroconto'
-      });
-      continue;
-    }
-
-    // ==========================================
-    // 3. RICERCA SOGGETTO (IBAN, P.IVA, NOME)
-    // ==========================================
-    let foundSoggetto: any = null;
-    let foundScadenza: any = null;
-
-    // A. Match IBAN
-    const ibanMatch = causale.match(/IT\d{2}[A-Z]\d{22}/);
-    if (ibanMatch) {
-      foundSoggetto = soggetti.find(s => s.iban && s.iban.replace(/\s/g, '') === ibanMatch[0]);
-    }
-
-    // B. Match P.IVA
-    if (!foundSoggetto) {
-      const pivaMatch = causale.match(/\b\d{11}\b/);
-      if (pivaMatch) {
-        foundSoggetto = soggetti.find(s => s.partita_iva === pivaMatch[0]);
-      }
-    }
-
-    // C. Match NOME Elastico (FIX 4A / 4B)
-    if (!foundSoggetto) {
-      for (const s of soggetti) {
-        const nomeNorm = normalizzaNome(s.ragione_sociale || '');
-        if (nomeNorm.length < 4) continue; // Evita falsi positivi su nomi troppo corti
-        
-        const nomeNoSpazi = nomeNorm.replace(/\s/g, ''); 
-        
-        // Verifica sia sulla stringa normata che su quella senza spazi (es per TELECOMITALIA o RIBA)
-        if (causaleNorm.includes(nomeNorm) || causaleNoSpazi.includes(nomeNoSpazi)) {
-          foundSoggetto = s;
-          break;
-        }
-      }
-    }
-
-    // ==========================================
-    // 4. RICERCA FATTURA (FIX 4C - Pattern CBI Esteso)
-    // ==========================================
-    // Intercetta "FT 123", "FATT. 45", ma anche "FATTURA_0000202511152268"
-    const regexFattura = /(?:FATT\.?|FT\.?|FATTURA[_]?|FAT)\s*(?:N\.?\s*)?([A-Z]{0,3}\/?(?:\d{4}\/)?[\d]+)/gi;
-    let matchFattura;
-    let numeriFatturaTrovati: string[] = [];
-    
-    while ((matchFattura = regexFattura.exec(causale)) !== null) {
-      numeriFatturaTrovati.push(matchFattura[1].replace(/^0+/, '')); // rimuove zeri iniziali per facilitare il match
-    }
-
-    // ==========================================
-    // 5. INCROCIO E DECISIONE (Taglia fuori l'AI se possibile)
-    // ==========================================
-    if (foundSoggetto) {
-      const scadenzeSoggetto = scadenzeAperte.filter(s => s.soggetto_id === foundSoggetto.id);
-      const importoMovimento = Math.abs(m.importo);
-
-      // Cerca per Numero Fattura
-      if (numeriFatturaTrovati.length > 0) {
-         for(const num of numeriFatturaTrovati) {
-            const scad = scadenzeSoggetto.find(s => s.fattura_riferimento && s.fattura_riferimento.includes(num));
-            if(scad) { foundScadenza = scad; break; }
-         }
-      }
-
-      // Se non trovata per numero, cerca per Importo Coincidente
-      if (!foundScadenza) {
-        foundScadenza = scadenzeSoggetto.find(s => {
-          const residuo = Number(s.importo_totale) - Number(s.importo_pagato || 0);
-          return Math.abs(residuo - importoMovimento) < 0.05; // tolleranza centesimi
-        });
-      }
-
-      if (foundScadenza) {
-         matchati.push({
-            movimento_id: m.id, scadenza_id: foundScadenza.id, soggetto_id: foundSoggetto.id,
-            confidence: 0.98, motivo: `Pre-match: Trovata corrispondenza esatta (Fornitore + Fattura/Importo)`,
-            ragione_sociale: foundSoggetto.ragione_sociale, categoria: 'fattura'
-         });
-         matched = true;
-      } else {
-         // Novità: il fornitore è noto, ma non ci sono fatture ovvie.
-         // Lo teniamo fuori dall'AI! È un addebito SEPA/RIBA generico.
-         matchati.push({
-            movimento_id: m.id, scadenza_id: null, soggetto_id: foundSoggetto.id,
-            confidence: 0.85, motivo: `Pre-match: Identificato fornitore '${foundSoggetto.ragione_sociale}' ma senza scadenze/importi chiari.`,
-            ragione_sociale: foundSoggetto.ragione_sociale, categoria: 'fattura' 
-         });
-         matched = true;
-      }
-    }
-
-    // Se non abbiamo capito nulla, passa all'AI
-    if (!matched) {
-      nonMatchati.push(m);
-    }
-  }
-
-  console.log(`✅ RISULTATI PRE-MATCH: ${matchati.length} Risolti/Scartati, ${nonMatchati.length} inviati all'AI.`);
-  return { matchati, nonMatchati };
-}
-
-// ==========================================
-    // STEP STIPENDI: Match con tabella personale (Logica Potenziata)
-    // ==========================================
-    const regexStipendio = /\b(stipendio|emolument[i]?|uniemens)\b/i;
-    if (regexStipendio.test(causale) || (m.xml_causale && regexStipendio.test(m.xml_causale))) {
-      let foundPersona = null;
-      
-      for (const p of personale) {
-        const nomeNorm = normalizzaNome(p.nome || '');
-        // Dividiamo il nome in parole (es. ["fabrizio", "rodigari"])
-        const paroleNome = nomeNorm.split(' ').filter(w => w.length > 2);
-        
-        // Verifichiamo se OGNI parola del nome è presente nella causale (ordine indifferente)
-        const matchPersona = paroleNome.length > 0 && paroleNome.every(parola => causaleNorm.includes(parola));
-
-        if (matchPersona) {
-          foundPersona = p;
-          break;
-        }
-      }
-      
-      matchati.push({
-        movimento_id: m.id,
-        scadenza_id: null,
-        soggetto_id: null,
-        confidence: foundPersona ? 0.98 : 0.90,
-        motivo: foundPersona ? `Stipendio: ${foundPersona.nome}` : `Stipendio (dipendente non identificato)`,
-        ragione_sociale: foundPersona ? foundPersona.nome : "Dipendente",
-        categoria: 'stipendio',
-        personale_id: foundPersona?.id || null
-      });
-      continue;
-    }
-
-    // ==========================================
-    // STEP GIROCONTI: Trasferimenti interni
-    // ==========================================
-    const regexGiroconto = /\b(giroconto|giro\s*(da|a|per|su))\b/i;
-    if (regexGiroconto.test(causale) || (m.xml_causale && /giroconto/i.test(m.xml_causale))) {
-      matchati.push({
-        movimento_id: m.id,
-        scadenza_id: null,
-        soggetto_id: null,
-        confidence: 0.99,
-        motivo: `Giroconto interno`,
-        ragione_sociale: "Giroconto",
-        categoria: 'giroconto'
+        motivo: `Giroconto interno`, ragione_sociale: "Giroconto", categoria: 'giroconto'
       });
       continue;
     }
@@ -1872,9 +1720,7 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
     // ==========================================
     if (m.xml_iban_controparte) {
       const ibanCercato = m.xml_iban_controparte.replace(/\s/g, '').toUpperCase();
-      const soggettoTrovato = soggetti.find(s =>
-        s.iban && s.iban.replace(/\s/g, '').toUpperCase() === ibanCercato
-      );
+      const soggettoTrovato = soggetti.find(s => s.iban && s.iban.replace(/\s/g, '').toUpperCase() === ibanCercato);
       if (soggettoTrovato) {
         foundSoggetto = soggettoTrovato;
         console.log(`   💎 XML Match: IBAN ${ibanCercato} → ${soggettoTrovato.ragione_sociale}`);
@@ -1908,7 +1754,6 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
     if (!foundScadenza) {
       for (const s of scadenzeAperte) {
         if (!s.fattura_riferimento || s.fattura_riferimento.trim().length < 4) continue;
-        
         const fatturaRif = s.fattura_riferimento.toUpperCase();
         if (causale.includes(fatturaRif) || (m.xml_causale && m.xml_causale.toUpperCase().includes(fatturaRif))) {
           foundScadenza = s;
@@ -1939,14 +1784,18 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
       }
 
       // ==========================================
-      // STEP 3: RAGIONE SOCIALE (Testo Grezzo)
+      // STEP 3: RAGIONE SOCIALE (Testo Grezzo) - FIX 4A/4B IMPLEMENTATO
       // ==========================================
       if (!foundSoggetto) {
         for (const s of soggetti) {
           const nomeNorm = normalizzaNome(s.ragione_sociale);
-          if (nomeNorm.length >= 4 && causaleNorm.includes(nomeNorm)) {
-            foundSoggetto = s;
-            break;
+          if (nomeNorm.length >= 4) {
+            const nomeNoSpazi = nomeNorm.replace(/\s/g, ''); 
+            // Controllo elastico: cerca sia la stringa normata sia quella collassata senza spazi
+            if (causaleNorm.includes(nomeNorm) || causaleNoSpazi.includes(nomeNoSpazi)) {
+              foundSoggetto = s;
+              break;
+            }
           }
         }
       }
@@ -1958,9 +1807,11 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
     if (foundSoggetto && !foundScadenza) {
       const scadenzeSoggetto = scadenzeAperte.filter(s => s.soggetto_id === foundSoggetto.id);
 
-      const regexFattura = /(?:FATT\.?|FT\.?|FATTURA|FAT)\s*(?:N\.?\s*)?([A-Z]{0,3}\/?(?:\d{4}\/)?[\d]+)/gi;
+      // FIX 4C: Regex Fattura Potenziata per tracciati CBI (es. FATTURA_0000...)
+      const regexFattura = /(?:FATT\.?|FT\.?|FATTURA[_]?|FAT)\s*(?:N\.?\s*)?([A-Z]{0,3}\/?(?:\d{4}\/)?[\d]+)/gi;
       let fatturaMatch = regexFattura.exec(causale);
-      let numeroFatturaEstratto = fatturaMatch ? fatturaMatch[1] : null;
+      // Rimuove gli zero iniziali estratti per matchare più facilmente (es. 000215 -> 215)
+      let numeroFatturaEstratto = fatturaMatch ? fatturaMatch[1].replace(/^0+/, '') : null;
 
       if (numeroFatturaEstratto) {
         foundScadenza = scadenzeSoggetto.find(s => 
@@ -1977,39 +1828,33 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
       }
     }
 
-// ==========================================
-    // PREPARAZIONE RISULTATO (Con categorie SEPA/Entrata/Fattura)
+    // ==========================================
+    // PREPARAZIONE RISULTATO (Con categorie SEPA/Entrata/Fattura originali)
     // ==========================================
     const isSepa = /\b(SDD|RID|SEPA|Richiesta Incasso)\b/i.test(causale) || (m.xml_causale && /\b(SDD|RID|SEPA)\b/i.test(m.xml_causale));
 
     if (foundScadenza && foundSoggetto) {
       matchati.push({
-        movimento_id: m.id,
-        scadenza_id: foundScadenza.id,
-        soggetto_id: foundSoggetto.id,
-        confidence: 0.99,
-        motivo: `Pre-match: Fattura/Importo per '${foundSoggetto.ragione_sociale}'`,
-        ragione_sociale: foundSoggetto.ragione_sociale,
-        categoria: m.importo > 0 ? 'entrata' : 'fattura'  // <--- AGGIUNTO
+        movimento_id: m.id, scadenza_id: foundScadenza.id, soggetto_id: foundSoggetto.id,
+        confidence: 0.99, motivo: `Pre-match: Fattura/Importo per '${foundSoggetto.ragione_sociale}'`,
+        ragione_sociale: foundSoggetto.ragione_sociale, categoria: m.importo > 0 ? 'entrata' : 'fattura'
       });
       matched = true;
     } else if (foundSoggetto) {
+      // NON MANDIAMO PIU ALL'AI I SOGGETTI TROVATI, LI SALVIAMO DIRETTAMENTE!
       matchati.push({
-        movimento_id: m.id,
-        scadenza_id: null,
-        soggetto_id: foundSoggetto.id,
-        confidence: 0.80,
-        motivo: `Pre-match: Trovato soggetto '${foundSoggetto.ragione_sociale}' ma senza scadenze chiare`,
-        ragione_sociale: foundSoggetto.ragione_sociale,
-        categoria: isSepa ? 'sepa' : (m.importo > 0 ? 'entrata' : 'fattura') // <--- AGGIUNTO
+        movimento_id: m.id, scadenza_id: null, soggetto_id: foundSoggetto.id,
+        confidence: 0.85, motivo: `Pre-match: Trovato soggetto '${foundSoggetto.ragione_sociale}' ma senza scadenze chiare`,
+        ragione_sociale: foundSoggetto.ragione_sociale, categoria: isSepa ? 'sepa' : (m.importo > 0 ? 'entrata' : 'fattura')
       });
       matched = true;
     }
 
+    // Se alla fine di tutto non abbiamo matchato, va all'AI
     if (!matched) {
       nonMatchati.push(m);
     }
-  }
+  } // <-- FINE DEL CICLO FOR
 
   console.log(`\n✅ RISULTATI PRE-MATCH: ${matchati.length} Risolti/Scartati, ${nonMatchati.length} all'AI.\n`);
   return { matchati, nonMatchati };
