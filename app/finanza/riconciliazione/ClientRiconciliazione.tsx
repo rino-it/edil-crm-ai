@@ -46,7 +46,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
     setIsAnalyzing(true)
     
     // Chunk size a 3 per evitare timeout Vercel
-    const CHUNK_SIZE = 3; 
+    const CHUNK_SIZE = 25; 
     setProgress({ current: 0, total: daAnalizzare.length });
 
     for (let i = 0; i < daAnalizzare.length; i += CHUNK_SIZE) {
