@@ -24,41 +24,54 @@ export async function POST(request: Request) {
       
     if (errorScadenze) throw new Error(`Errore DB Scadenze: ${errorScadenze.message}`);
     
-    // 2. Estrai l'Anagrafica completa
+    // 2. Estrai Anagrafica Fornitori/Clienti
     const { data: soggetti, error: errorSoggetti } = await supabase
       .from('anagrafica_soggetti')
       .select('id, ragione_sociale, partita_iva, iban');
 
     if (errorSoggetti) throw new Error(`Errore DB Soggetti: ${errorSoggetti.message}`);
 
+    // 3. Estrai Personale (Per gli Stipendi) - Adattato alla tua tabella
+    const { data: personale, error: errorPersonale } = await supabase
+      .from('personale')
+      .select('id, nome, iban');
+
+    // 4. Estrai Conti Banca Aziendali (Per i Giroconti)
+    const { data: conti_banca, error: errorConti } = await supabase
+      .from('conti_banca')
+      .select('id, nome_banca, iban');
+
     const scadenzeSafe = scadenzeAperte || [];
     const soggettiSafe = soggetti || [];
+    const personaleSafe = personale || [];
+    const contiSafe = conti_banca || [];
 
     // ==========================================
     // FASE A: Pre-Match Deterministico Veloce
     // ==========================================
-    const { matchati, nonMatchati } = await preMatchMovimenti(movimenti, scadenzeSafe, soggettiSafe);
+    const { matchati, nonMatchati } = await preMatchMovimenti(movimenti, scadenzeSafe, soggettiSafe, personaleSafe, contiSafe);
     
     // ==========================================
     // FASE B: AI Fallback (Gemini) solo sui residui
     // ==========================================
     let risultatiAI: any[] = [];
     if (nonMatchati.length > 0) {
-      console.log(`🤖 Invio di ${nonMatchati.length} movimenti a Gemini...`);
+      console.log(`🤖 Invio di ${nonMatchati.length} movimenti all'AI...`);
       const startTime = Date.now();
       
       const risultatiChunk = await matchBatchRiconciliazioneBancaria(nonMatchati, scadenzeSafe);
       risultatiAI = Array.isArray(risultatiChunk) ? risultatiChunk : [];
 
       const tempoImpiegato = ((Date.now() - startTime) / 1000).toFixed(1);
-      console.log(`🤖 Risposta Gemini ricevuta in ${tempoImpiegato} secondi.`);
+      console.log(`🤖 Risposta AI ricevuta in ${tempoImpiegato} secondi.`);
 
-      // Aggiungiamo la ragione sociale anche ai risultati di Gemini
       risultatiAI = risultatiAI.map(res => {
         if (res.soggetto_id && !res.ragione_sociale) {
           const s = soggettiSafe.find(sog => sog.id === res.soggetto_id);
           if (s) res.ragione_sociale = s.ragione_sociale;
         }
+        // I risultati passati dall'AI sono considerati di default fatture/acconti
+        res.categoria = 'fattura';
         return res;
       });
     } else {
@@ -68,7 +81,9 @@ export async function POST(request: Request) {
     // Combiniamo i risultati veloci con quelli dell'AI
     const risultatiDaSalvare = [...matchati, ...risultatiAI];
     
-    // Salviamo tutto nel database in PARALLELO
+    // ==========================================
+    // SALVATAGGIO IN PARALLELO
+    // ==========================================
     await Promise.all(
       risultatiDaSalvare.map((res) => 
         supabase
@@ -76,6 +91,8 @@ export async function POST(request: Request) {
           .update({
             ai_suggerimento: res.scadenza_id || null,
             soggetto_id: res.soggetto_id || null,
+            personale_id: res.personale_id || null,           // Inserimento Stipendio
+            categoria_dedotta: res.categoria || null,         // Inserimento Categoria
             ai_confidence: res.confidence || 0,
             ai_motivo: res.motivo || "Nessun match trovato"
           })

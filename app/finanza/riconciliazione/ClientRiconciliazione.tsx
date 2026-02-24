@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-// FIX 6B: Aggiornato l'import con la nuova action agnostica
 import { importaEstrattoConto, confermaMatch, rifiutaMatch } from './actions'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -11,16 +10,22 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Upload, BrainCircuit, Check, X, Search, Loader2 } from 'lucide-react'
 
+const BADGE_MAP: Record<string, { icon: string; label: string; className: string }> = {
+  fattura:     { icon: '📄', label: 'Fattura',     className: 'bg-blue-100 text-blue-800' },
+  stipendio:   { icon: '💼', label: 'Stipendio',   className: 'bg-purple-100 text-purple-800' },
+  commissione: { icon: '🏦', label: 'Comm. Banca', className: 'bg-zinc-100 text-zinc-700' },
+  giroconto:   { icon: '🔄', label: 'Giroconto',   className: 'bg-cyan-100 text-cyan-800' },
+  sepa:        { icon: '⚡', label: 'SEPA/SDD',    className: 'bg-orange-100 text-orange-800' },
+  entrata:     { icon: '💰', label: 'Entrata',     className: 'bg-emerald-100 text-emerald-800' },
+};
+
 export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { movimenti: any[], scadenzeAperte: any[] }) {
   const router = useRouter()
   const [isUploading, setIsUploading] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [progress, setProgress] = useState({ current: 0, total: 0 })
   
-  // Stato reattivo locale per i movimenti
   const [movimentiLocali, setMovimentiLocali] = useState(movimenti);
-
-  // Stato per tracciare la selezione manuale del soggetto per ogni movimento
   const [manualSelections, setManualSelections] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -33,7 +38,6 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
     e.preventDefault()
     setIsUploading(true)
     const formData = new FormData(e.currentTarget)
-    // FIX 6B: Usiamo la nuova action che supporta sia CSV che XML
     await importaEstrattoConto(formData)
     setIsUploading(false)
     router.refresh()
@@ -44,8 +48,6 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
     if (daAnalizzare.length === 0) return;
 
     setIsAnalyzing(true)
-    
-    // Chunk size a 3 per evitare timeout Vercel
     const CHUNK_SIZE = 25; 
     setProgress({ current: 0, total: daAnalizzare.length });
 
@@ -63,12 +65,10 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
           });
           
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          
           const data = await response.json();
           
           if (data.risultati && Array.isArray(data.risultati)) {
             const receivedIds = new Set(data.risultati.map((r: any) => r.movimento_id));
-            
             setMovimentiLocali((prevMovimenti) => 
               prevMovimenti.map((mov) => {
                 const match = data.risultati.find((r: any) => r.movimento_id === mov.id);
@@ -79,7 +79,9 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
                     soggetto_id: match.soggetto_id || null,
                     ai_confidence: match.confidence || 0, 
                     ai_motivo: match.motivo || "Analisi completata",
-                    ragione_sociale: match.ragione_sociale || null
+                    ragione_sociale: match.ragione_sociale || null,
+                    categoria_dedotta: match.categoria || null,
+                    personale_id: match.personale_id || null
                   };
                 }
                 if (chunk.some(c => c.id === mov.id) && !receivedIds.has(mov.id)) {
@@ -107,10 +109,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
 
       const processed = Math.min(i + CHUNK_SIZE, daAnalizzare.length);
       setProgress({ current: processed, total: daAnalizzare.length });
-      
-      if (processed < daAnalizzare.length) {
-        await new Promise(resolve => setTimeout(resolve, 3000));
-      }
+      if (processed < daAnalizzare.length) await new Promise(resolve => setTimeout(resolve, 3000));
     }
 
     setIsAnalyzing(false)
@@ -128,7 +127,16 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
     const movId = formData.get('movimento_id') as string;
     await rifiutaMatch(formData);
     setMovimentiLocali(prev => prev.map(m => 
-      m.id === movId ? { ...m, ai_suggerimento: null, soggetto_id: null, ai_confidence: null, ai_motivo: null, ragione_sociale: null } : m
+      m.id === movId ? { 
+        ...m, 
+        ai_suggerimento: null, 
+        soggetto_id: null, 
+        ai_confidence: null, 
+        ai_motivo: null, 
+        ragione_sociale: null,
+        categoria_dedotta: null,
+        personale_id: null
+      } : m
     ));
   }
 
@@ -139,11 +147,9 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
           <CardHeader className="pb-3"><CardTitle className="text-sm">1. Importa Estratto Conto</CardTitle></CardHeader>
           <CardContent>
             <form onSubmit={handleUpload} className="flex gap-3">
-              {/* FIX 6A: Aggiunto accept=".xml" */}
               <Input type="file" name="file" accept=".csv,.xml" required className="cursor-pointer" />
               <Button type="submit" disabled={isUploading} className="bg-blue-600 hover:bg-blue-700">
                 {isUploading ? <Loader2 className="animate-spin h-4 w-4" /> : <Upload className="h-4 w-4 mr-2" />}
-                {/* FIX 6C: Testo generico */}
                 Importa File
               </Button>
             </form>
@@ -201,33 +207,31 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
                       </TableCell>
                       
                       <TableCell>
-                        {m.ai_suggerimento ? (
-                          <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-1">
+                          {(m.ragione_sociale || suggestedScadenza?.soggetto?.ragione_sociale || suggestedScadenza?.anagrafica_soggetti?.ragione_sociale || suggestedSoggetto?.ragione_sociale) ? (
                             <span className="text-sm font-semibold">
-                              {m.ragione_sociale || suggestedScadenza?.soggetto?.ragione_sociale || suggestedScadenza?.anagrafica_soggetti?.ragione_sociale || 'Match Trovato'}
+                              {m.ragione_sociale || suggestedScadenza?.soggetto?.ragione_sociale || suggestedScadenza?.anagrafica_soggetti?.ragione_sociale || suggestedSoggetto?.ragione_sociale}
                             </span>
-                            <div className="flex items-center gap-2 text-xs">
-                              <Badge variant="outline" className={`${conf >= 0.95 ? 'bg-emerald-100 text-emerald-800' : conf >= 0.8 ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'} border-none`}>
-                                {(conf * 100).toFixed(0)}% Match
+                          ) : (
+                            m.ai_motivo && <span className="text-sm font-medium text-zinc-600">Soggetto non identificato</span>
+                          )}
+                          
+                          {(m.ai_motivo || m.ai_suggerimento || m.categoria_dedotta) ? (
+                            <div className="flex items-center gap-2 text-xs mt-0.5">
+                              {m.categoria_dedotta && BADGE_MAP[m.categoria_dedotta] && (
+                                <Badge variant="outline" className={`${BADGE_MAP[m.categoria_dedotta].className} border-none py-0 h-5`}>
+                                  {BADGE_MAP[m.categoria_dedotta].icon} {BADGE_MAP[m.categoria_dedotta].label}
+                                </Badge>
+                              )}
+                              <Badge variant="outline" className={`${conf >= 0.95 ? 'bg-emerald-100 text-emerald-800' : conf >= 0.8 ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'} border-none py-0 h-5`}>
+                                {(conf * 100).toFixed(0)}%
                               </Badge>
-                              <span className="text-zinc-500 truncate max-w-[150px]" title={m.ai_motivo}>{m.ai_motivo}</span>
+                              <span className="text-zinc-500 truncate max-w-[200px]" title={m.ai_motivo}>{m.ai_motivo}</span>
                             </div>
-                          </div>
-                        ) : m.ai_motivo ? (
-                          <div className="flex flex-col gap-1">
-                            {isAcconto && (m.ragione_sociale || suggestedSoggetto) && (
-                              <span className="text-sm font-semibold">
-                                {m.ragione_sociale || suggestedSoggetto?.soggetto?.ragione_sociale || suggestedSoggetto?.anagrafica_soggetti?.ragione_sociale}
-                              </span>
-                            )}
-                            <span className="text-xs text-amber-600 italic truncate max-w-[200px]" title={m.ai_motivo}>{m.ai_motivo}</span>
-                            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-none w-fit">
-                              {isAcconto ? 'Acconto Rilevato' : 'Nessun Match'} ({(conf * 100).toFixed(0)}%)
-                            </Badge>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-zinc-400 italic">In attesa di analisi.</span>
-                        )}
+                          ) : (
+                            <span className="text-xs text-zinc-400 italic">In attesa di analisi...</span>
+                          )}
+                        </div>
                       </TableCell>
                       
                       <TableCell className="text-right">

@@ -1650,7 +1650,7 @@ export function normalizzaNome(nome: string): string {
     .trim();
 }
 
-export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[], soggetti: any[]) {
+export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[], soggetti: any[], personale: any[] = [], conti_banca: any[] = []) {
   const matchati: any[] = [];
   const nonMatchati: any[] = [];
 
@@ -1674,6 +1674,52 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
         confidence: 0.99,
         motivo: `Pre-match Veloce: Rilevata Spesa Bancaria/Imposta`,
         ragione_sociale: "Banca / Imposte (Spesa Interna)"
+        categoria: 'commissione'
+      });
+      continue;
+    }
+
+// ==========================================
+    // STEP STIPENDI: Match con tabella personale
+    // ==========================================
+    const regexStipendio = /\b(stipendio|emolument|EMOLUMENTI)\b/i;
+    if (regexStipendio.test(causale) || (m.xml_causale && regexStipendio.test(m.xml_causale))) {
+      let foundPersona = null;
+      for (const p of personale) {
+        // Usiamo solo p.nome perché nel tuo DB nome e cognome sono uniti
+        const nomeNorm = normalizzaNome(p.nome || '');
+        if (nomeNorm.length >= 4 && causaleNorm.includes(nomeNorm)) {
+          foundPersona = p;
+          break;
+        }
+      }
+      
+      matchati.push({
+        movimento_id: m.id,
+        scadenza_id: null,
+        soggetto_id: null,
+        confidence: foundPersona ? 0.98 : 0.90,
+        motivo: foundPersona ? `Stipendio: ${foundPersona.nome}` : `Stipendio (dipendente non identificato)`,
+        ragione_sociale: foundPersona ? foundPersona.nome : "Dipendente",
+        categoria: 'stipendio',
+        personale_id: foundPersona?.id || null
+      });
+      continue;
+    }
+
+    // ==========================================
+    // STEP GIROCONTI: Trasferimenti interni
+    // ==========================================
+    const regexGiroconto = /\b(giroconto|giro\s*(da|a)\s*(bcc|bper|bpm|intesa|unicredit))\b/i;
+    if (regexGiroconto.test(causale) || (m.xml_causale && /giroconto/i.test(m.xml_causale))) {
+      matchati.push({
+        movimento_id: m.id,
+        scadenza_id: null,
+        soggetto_id: null,
+        confidence: 0.99,
+        motivo: `Giroconto interno`,
+        ragione_sociale: "Giroconto",
+        categoria: 'giroconto'
       });
       continue;
     }
@@ -1791,9 +1837,11 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
       }
     }
 
+// ==========================================
+    // PREPARAZIONE RISULTATO (Con categorie SEPA/Entrata/Fattura)
     // ==========================================
-    // PREPARAZIONE RISULTATO
-    // ==========================================
+    const isSepa = /\b(SDD|RID|SEPA|Richiesta Incasso)\b/i.test(causale) || (m.xml_causale && /\b(SDD|RID|SEPA)\b/i.test(m.xml_causale));
+
     if (foundScadenza && foundSoggetto) {
       matchati.push({
         movimento_id: m.id,
@@ -1801,7 +1849,8 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
         soggetto_id: foundSoggetto.id,
         confidence: 0.99,
         motivo: `Pre-match: Fattura/Importo per '${foundSoggetto.ragione_sociale}'`,
-        ragione_sociale: foundSoggetto.ragione_sociale
+        ragione_sociale: foundSoggetto.ragione_sociale,
+        categoria: m.importo > 0 ? 'entrata' : 'fattura'  // <--- AGGIUNTO
       });
       matched = true;
     } else if (foundSoggetto) {
@@ -1811,7 +1860,8 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
         soggetto_id: foundSoggetto.id,
         confidence: 0.80,
         motivo: `Pre-match: Trovato soggetto '${foundSoggetto.ragione_sociale}' ma senza scadenze chiare`,
-        ragione_sociale: foundSoggetto.ragione_sociale
+        ragione_sociale: foundSoggetto.ragione_sociale,
+        categoria: isSepa ? 'sepa' : (m.importo > 0 ? 'entrata' : 'fattura') // <--- AGGIUNTO
       });
       matched = true;
     }
