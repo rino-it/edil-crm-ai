@@ -59,7 +59,7 @@ export async function handleConferma(formData: FormData) {
     // ===============================================
     // CASO SPECIALE: Commissione, Giroconto, Stipendio
     // ===============================================
-    if (['commissione', 'giroconto', 'stipendio'].includes(categoria)) {
+    if (['commissione', 'giroconto', 'stipendio', 'leasing', 'ente_pubblico', 'cassa_edile', 'cessione_quinto', 'utenza', 'assicurazione'].includes(categoria)) {
       // Salviamo il movimento come riconciliato assegnandogli la sua categoria. Non tocca le fatture.
       await supabaseAdmin
         .from('movimenti_banca')

@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-// MODIFICA IMPORT: Ora usiamo i nomi corretti delle actions
 import { importaEstrattoConto, handleConferma as confermaAction, handleRifiuta as rifiutaAction } from './actions'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -11,13 +10,28 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Upload, BrainCircuit, Check, X, Search, Loader2 } from 'lucide-react'
 
+// STEP 5: Mappa estesa con le categorie speciali
 const BADGE_MAP: Record<string, { icon: string; label: string; className: string }> = {
-  fattura:     { icon: '📄', label: 'Fattura',     className: 'bg-blue-100 text-blue-800' },
-  stipendio:   { icon: '💼', label: 'Stipendio',   className: 'bg-purple-100 text-purple-800' },
-  commissione: { icon: '🏦', label: 'Comm. Banca', className: 'bg-zinc-100 text-zinc-700' },
-  giroconto:   { icon: '🔄', label: 'Giroconto',   className: 'bg-cyan-100 text-cyan-800' },
-  sepa:        { icon: '⚡', label: 'SEPA/SDD',    className: 'bg-orange-100 text-orange-800' },
-  entrata:     { icon: '💰', label: 'Entrata',     className: 'bg-emerald-100 text-emerald-800' },
+  fattura:           { icon: '📄', label: 'Fattura',         className: 'bg-blue-100 text-blue-800' },
+  stipendio:         { icon: '💼', label: 'Stipendio',       className: 'bg-purple-100 text-purple-800' },
+  commissione:       { icon: '🏦', label: 'Comm. Banca',     className: 'bg-zinc-100 text-zinc-700' },
+  giroconto:         { icon: '🔄', label: 'Giroconto',       className: 'bg-cyan-100 text-cyan-800' },
+  sepa:              { icon: '⚡', label: 'SEPA/SDD',        className: 'bg-orange-100 text-orange-800' },
+  entrata:           { icon: '💰', label: 'Entrata',         className: 'bg-emerald-100 text-emerald-800' },
+  // NUOVI — Soggetti Speciali
+  leasing:           { icon: '🚗', label: 'Leasing',         className: 'bg-amber-100 text-amber-800' },
+  ente_pubblico:     { icon: '🏛️', label: 'Ente/PagoPA',     className: 'bg-red-100 text-red-800' },
+  cassa_edile:       { icon: '🏗️', label: 'Cassa Edile',     className: 'bg-yellow-100 text-yellow-800' },
+  cessione_quinto:   { icon: '💳', label: 'Cessione Quinto', className: 'bg-pink-100 text-pink-800' },
+  utenza:            { icon: '💡', label: 'Utenza',          className: 'bg-teal-100 text-teal-800' },
+  assicurazione:     { icon: '🛡️', label: 'Assicurazione',   className: 'bg-indigo-100 text-indigo-800' },
+};
+
+// Helper per i colori della confidence
+const getConfidenceStyle = (conf: number) => {
+  if (conf >= 0.95) return 'bg-emerald-100 text-emerald-800';
+  if (conf >= 0.70) return 'bg-amber-100 text-amber-800';
+  return 'bg-rose-100 text-rose-800';
 };
 
 export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { movimenti: any[], scadenzeAperte: any[] }) {
@@ -28,6 +42,9 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
   
   const [movimentiLocali, setMovimentiLocali] = useState(movimenti);
   const [manualSelections, setManualSelections] = useState<Record<string, string>>({});
+
+  // STEP 6: Stato e logica per la barra di ricerca
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     setMovimentiLocali(movimenti);
@@ -118,14 +135,12 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
     router.refresh();
   }
 
-  // MODIFICA: Aggiornato l'uso della action corretta
   const handleConferma = async (formData: FormData) => {
     const movId = formData.get('movimento_id') as string;
     await confermaAction(formData);
     setMovimentiLocali(prev => prev.filter(m => m.id !== movId));
   }
 
-  // MODIFICA: Aggiornato l'uso della action corretta
   const handleRifiuta = async (formData: FormData) => {
     const movId = formData.get('movimento_id') as string;
     await rifiutaAction(formData);
@@ -142,6 +157,20 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
       } : m
     ));
   }
+
+  // STEP 6: Filtro calcolato
+  const movimentiFiltrati = movimentiLocali.filter(m => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      (m.descrizione || '').toLowerCase().includes(term) ||
+      (m.ragione_sociale || '').toLowerCase().includes(term) ||
+      (m.ai_motivo || '').toLowerCase().includes(term) ||
+      (m.categoria_dedotta || '').toLowerCase().includes(term) ||
+      String(m.importo).includes(term) ||
+      new Date(m.data_operazione).toLocaleDateString('it-IT').includes(term)
+    );
+  });
 
   return (
     <div className="space-y-6">
@@ -173,6 +202,22 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
         </Card>
       </div>
 
+      {/* STEP 6: Barra di ricerca in mezzo */}
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+          <Input 
+            placeholder="Cerca per causale, soggetto, importo, data..." 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <Badge variant="outline" className="whitespace-nowrap px-3 py-1">
+          {movimentiFiltrati.length} / {movimentiLocali.length} righe
+        </Badge>
+      </div>
+
       <Card className="shadow-sm">
         <CardContent className="p-0 overflow-x-auto">
           <Table>
@@ -186,12 +231,14 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
               </TableRow>
             </TableHeader>
             <TableBody>
-              {movimentiLocali.length === 0 ? (
+              {movimentiFiltrati.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-12 text-zinc-400">Nessun movimento da riconciliare.</TableCell>
+                  <TableCell colSpan={5} className="text-center py-12 text-zinc-400">
+                    Nessun movimento trovato per questa ricerca.
+                  </TableCell>
                 </TableRow>
               ) : (
-                movimentiLocali.map((m) => {
+                movimentiFiltrati.map((m) => {
                   const suggestedScadenza = scadenzeAperte.find(s => s.id === m.ai_suggerimento);
                   const suggestedSoggetto = scadenzeAperte.find(s => s.soggetto_id === m.soggetto_id);
                   const conf = m.ai_confidence || 0;
@@ -226,9 +273,11 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
                                   {BADGE_MAP[m.categoria_dedotta].icon} {BADGE_MAP[m.categoria_dedotta].label}
                                 </Badge>
                               )}
-                              <Badge variant="outline" className={`${conf >= 0.95 ? 'bg-emerald-100 text-emerald-800' : conf >= 0.8 ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'} border-none py-0 h-5`}>
+                              
+                              <Badge variant="outline" className={`${getConfidenceStyle(conf)} border-none py-0 h-5`}>
                                 {(conf * 100).toFixed(0)}%
                               </Badge>
+                              
                               <span className="text-zinc-500 truncate max-w-[200px]" title={m.ai_motivo}>{m.ai_motivo}</span>
                             </div>
                           ) : (
@@ -239,8 +288,8 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
                       
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          {/* MODIFICA: Ora la condizione include anche le categorie speciali */}
-                          {(m.ai_suggerimento || isAcconto || ['stipendio', 'commissione', 'giroconto', 'sepa'].includes(m.categoria_dedotta)) ? (
+                          {/* STEP 5: Nuova logica operatore ternario dinamico sulla BADGE_MAP */}
+                          {(m.ai_suggerimento || isAcconto || (m.categoria_dedotta && m.categoria_dedotta !== 'fattura')) ? (
                             <>
                               <form action={handleConferma}>
                                 <input type="hidden" name="movimento_id" value={m.id} />
@@ -248,8 +297,8 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
                                 {m.soggetto_id && <input type="hidden" name="soggetto_id" value={m.soggetto_id} />}
                                 {m.personale_id && <input type="hidden" name="personale_id" value={m.personale_id} />}
                                 <input type="hidden" name="importo" value={Math.abs(m.importo)} />
-                                {/* MODIFICA: Passiamo la categoria al backend per il salvataggio */}
                                 <input type="hidden" name="categoria" value={m.categoria_dedotta || 'fattura'} />
+                                
                                 <Button size="sm" type="submit" className="bg-emerald-600 hover:bg-emerald-700 h-8 px-2" title="Conferma">
                                   <Check className="h-4 w-4" />
                                 </Button>
@@ -263,7 +312,6 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
                               </form>
                             </>
                           ) : (
-                            /* MENU TENDINA SELEZIONE MANUALE */
                             <form action={handleConferma} className="flex gap-2 items-center">
                               <input type="hidden" name="movimento_id" value={m.id} />
                               <input type="hidden" name="importo" value={Math.abs(m.importo)} />

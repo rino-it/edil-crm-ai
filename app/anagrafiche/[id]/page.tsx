@@ -13,7 +13,6 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-// FIX: Aggiunto Wallet agli import di lucide-react
 import { ArrowLeft, Save, Trash2, Receipt, History, Wallet } from "lucide-react"
 import Link from 'next/link'
 
@@ -87,6 +86,9 @@ export default async function SoggettoDetailPage({
                       <Label htmlFor="ragione_sociale">Ragione Sociale</Label>
                       <Input name="ragione_sociale" defaultValue={soggetto.ragione_sociale} required />
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="partita_iva">Partita IVA</Label>
                       <Input name="partita_iva" defaultValue={soggetto.partita_iva || ''} />
@@ -95,6 +97,9 @@ export default async function SoggettoDetailPage({
                       <Label htmlFor="codice_fiscale">Codice Fiscale</Label>
                       <Input name="codice_fiscale" defaultValue={soggetto.codice_fiscale || ''} />
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="email">Email</Label>
                       <Input name="email" type="email" defaultValue={soggetto.email || ''} />
@@ -103,6 +108,9 @@ export default async function SoggettoDetailPage({
                       <Label htmlFor="telefono">Telefono</Label>
                       <Input name="telefono" defaultValue={soggetto.telefono || ''} />
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="codice_sdi">Codice SDI</Label>
                       <Input name="codice_sdi" defaultValue={soggetto.codice_sdi || '0000000'} />
@@ -117,6 +125,55 @@ export default async function SoggettoDetailPage({
                     <Label htmlFor="indirizzo">Indirizzo Sede</Label>
                     <Input name="indirizzo" defaultValue={soggetto.indirizzo || ''} />
                   </div>
+
+                  {/* ============================================================== */}
+                  {/* NUOVA SEZIONE: REGOLE RICONCILIAZIONE (STEP 7) */}
+                  {/* ============================================================== */}
+                  <div className="mt-6 pt-6 border-t border-zinc-100">
+                    <h3 className="text-sm font-semibold text-zinc-900 mb-3 flex items-center gap-2">
+                      <BrainCircuit className="h-4 w-4 text-indigo-600" />
+                      Automazione Riconciliazione (Soggetti Speciali)
+                    </h3>
+                    <div className="space-y-4 bg-zinc-50 p-4 rounded-lg border border-zinc-200">
+                      
+                      <div className="flex items-center gap-3">
+                        {/* Checkbox nascosto logicamente che guida il CSS 'peer' */}
+                        <input 
+                          type="checkbox" 
+                          id="auto_riconcilia"
+                          name="auto_riconcilia"
+                          value="true"
+                          defaultChecked={soggetto.auto_riconcilia} 
+                          className="peer h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-600"
+                        />
+                        <Label htmlFor="auto_riconcilia" className="font-medium cursor-pointer">
+                          Auto-riconcilia pagamenti senza cercare fatture
+                        </Label>
+                      </div>
+                      
+                      {/* Questo div appare solo se il checkbox 'peer' è selezionato */}
+                      <div className="hidden peer-checked:block pl-7 space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <Label htmlFor="categoria_riconciliazione" className="text-xs text-zinc-500">
+                          Assegna la categoria per il bilancio:
+                        </Label>
+                        <select 
+                          name="categoria_riconciliazione" 
+                          id="categoria_riconciliazione"
+                          defaultValue={soggetto.categoria_riconciliazione || 'leasing'}
+                          className="flex h-9 w-full md:w-[250px] rounded-md border border-zinc-200 bg-white px-3 py-1 text-sm focus:ring-2 focus:ring-blue-500 shadow-sm"
+                        >
+                          <option value="leasing">🚗 Leasing</option>
+                          <option value="ente_pubblico">🏛️ Ente Pubblico / PagoPA</option>
+                          <option value="cassa_edile">🏗️ Cassa Edile</option>
+                          <option value="cessione_quinto">💳 Cessione del Quinto</option>
+                          <option value="utenza">💡 Utenza</option>
+                          <option value="assicurazione">🛡️ Assicurazione</option>
+                        </select>
+                      </div>
+
+                    </div>
+                  </div>
+                  {/* ============================================================== */}
 
                   <div className="pt-4 flex justify-end">
                     <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
@@ -136,6 +193,8 @@ export default async function SoggettoDetailPage({
                   <input type="hidden" name="id" value={soggetto.id} />
                   <input type="hidden" name="ragione_sociale" value={soggetto.ragione_sociale} />
                   <input type="hidden" name="tipo" value={soggetto.tipo} />
+                  <input type="hidden" name="auto_riconcilia" value={soggetto.auto_riconcilia ? 'true' : 'false'} />
+                  <input type="hidden" name="categoria_riconciliazione" value={soggetto.categoria_riconciliazione || ''} />
 
                   <div className="grid grid-cols-1 gap-4">
                     <div className="space-y-2">

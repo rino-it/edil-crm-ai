@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     // 2. Estrai Anagrafica Fornitori/Clienti
     const { data: soggetti, error: errorSoggetti } = await supabase
       .from('anagrafica_soggetti')
-      .select('id, ragione_sociale, partita_iva, iban');
+      .select('id, ragione_sociale, partita_iva, iban, auto_riconcilia, categoria_riconciliazione');
 
     if (errorSoggetti) throw new Error(`Errore DB Soggetti: ${errorSoggetti.message}`);
 

@@ -1700,7 +1700,7 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
       continue;
     }
 
-    // ==========================================
+// ==========================================
     // 2. STEP GIROCONTI: Trasferimenti interni
     // ==========================================
     const regexGiroconto = /\b(giroconto|giro\s*(da|a|per|su))\b/i;
@@ -1709,6 +1709,54 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
         movimento_id: m.id, scadenza_id: null, soggetto_id: null, confidence: 0.99,
         motivo: `Giroconto interno`, ragione_sociale: "Giroconto", categoria: 'giroconto'
       });
+      continue;
+    }
+
+    // ==========================================
+    // 3. STEP SOGGETTI SPECIALI: Leasing, PagoPA, Casse Edili
+    // Match rapido per chi ha auto_riconcilia = true
+    // ==========================================
+    const soggettiSpeciali = soggetti.filter(s => s.auto_riconcilia === true);
+    let specialMatched = false;
+
+    for (const spec of soggettiSpeciali) {
+      // Controllo IBAN
+      if (spec.iban) {
+        const ibanSpec = spec.iban.replace(/\s/g, '').toUpperCase();
+        const ibanInCausale = causale.replace(/\s/g, '').includes(ibanSpec);
+        const ibanInXml = m.xml_iban_controparte && m.xml_iban_controparte.replace(/\s/g, '').toUpperCase() === ibanSpec;
+        
+        if (ibanInCausale || ibanInXml) {
+          matchati.push({
+            movimento_id: m.id, scadenza_id: null, soggetto_id: spec.id, confidence: 0.99,
+            motivo: `Auto-match Speciale: ${spec.ragione_sociale} via IBAN`,
+            ragione_sociale: spec.ragione_sociale, categoria: spec.categoria_riconciliazione || 'sepa'
+          });
+          specialMatched = true;
+          break;
+        }
+      }
+      
+      // Controllo NOME
+      if (!specialMatched) {
+        const nomeSpec = normalizzaNome(spec.ragione_sociale || '');
+        if (nomeSpec.length >= 4) {
+          const nomeNoSpazi = nomeSpec.replace(/\s/g, '');
+          if (causaleNorm.includes(nomeSpec) || causaleNoSpazi.includes(nomeNoSpazi)) {
+            matchati.push({
+              movimento_id: m.id, scadenza_id: null, soggetto_id: spec.id, confidence: 0.99,
+              motivo: `Auto-match Speciale: ${spec.ragione_sociale} via Nome`,
+              ragione_sociale: spec.ragione_sociale, categoria: spec.categoria_riconciliazione || 'sepa'
+            });
+            specialMatched = true;
+            break;
+          }
+        }
+      }
+    }
+
+    // Se è un soggetto speciale, abbiamo finito con questo movimento
+    if (specialMatched) {
       continue;
     }
 
