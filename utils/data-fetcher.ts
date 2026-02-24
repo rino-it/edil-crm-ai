@@ -1673,7 +1673,7 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
         soggetto_id: null,
         confidence: 0.99,
         motivo: `Pre-match Veloce: Rilevata Spesa Bancaria/Imposta`,
-        ragione_sociale: "Banca / Imposte (Spesa Interna)"
+        ragione_sociale: "Banca / Imposte (Spesa Interna)",
         categoria: 'commissione'
       });
       continue;
