@@ -43,16 +43,17 @@ export async function POST(request: Request) {
       .from('conti_banca')
       .select('id, nome_banca, iban');
 
-    // Definiamo le variabili "Safe" (una sola volta per ciascuna)
     const scadenzeSafe = scadenzeAperte || [];
     const soggettiSafe = soggetti || [];
     const personaleSafe = personale || [];
     const contiSafe = conti_banca || [];
 
+    // Log conteggi (CRITICO per il debug)
+    console.log(`📊 CONTEGGI DB: ${scadenzeSafe.length} scadenze totali, ${soggettiSafe.length} soggetti, ${personaleSafe.length} personale`);
+
     // ==========================================
     // FASE A: Pre-Match Deterministico Veloce
     // ==========================================
-    // FIX: Chiusa correttamente la parentesi );
     const { matchati, nonMatchati } = await preMatchMovimenti(
       movimenti, 
       scadenzeSafe, 
@@ -62,14 +63,36 @@ export async function POST(request: Request) {
     );
     
     // ==========================================
-    // FASE B: AI Fallback (Gemini) solo sui residui
+    // FASE B: AI Fallback (Gemini) con Filtro Aggressivo
     // ==========================================
     let risultatiAI: any[] = [];
     if (nonMatchati.length > 0) {
-      console.log(`🤖 Invio di ${nonMatchati.length} movimenti all'AI...`);
+      
+      const hasUscite = nonMatchati.some(m => m.importo < 0);
+      const hasEntrate = nonMatchati.some(m => m.importo > 0);
+      
+      // FILTRO INTELLIGENTE AGGRESSIVO (Max 20, priorità fatture)
+      const scadenzePerAI = scadenzeSafe
+        .filter(s => {
+          const residuo = Number(s.importo_totale) - Number(s.importo_pagato || 0);
+          if (residuo <= 0) return false;
+          if (hasUscite && !hasEntrate && s.tipo === 'entrata') return false;
+          if (hasEntrate && !hasUscite && s.tipo === 'uscita') return false;
+          return true;
+        })
+        .sort((a, b) => {
+          const aHasFatt = a.fattura_riferimento ? 1 : 0;
+          const bHasFatt = b.fattura_riferimento ? 1 : 0;
+          return bHasFatt - aHasFatt; // fatture con riferimento prima
+        })
+        .slice(0, 20); // Limite drastico per abbattere i token
+      
+      console.log(`🤖 AI: ${nonMatchati.length} mov. da analizzare. Scadenze: ${scadenzePerAI.length}/${scadenzeSafe.length} (filtrate per tipo e priorità fattura)`);
+      
       const startTime = Date.now();
       
-      const risultatiChunk = await matchBatchRiconciliazioneBancaria(nonMatchati, scadenzeSafe);
+      // Chiamata all'AI: passiamo i movimenti non matchati, le scadenze filtrate e l'anagrafica completa
+      const risultatiChunk = await matchBatchRiconciliazioneBancaria(nonMatchati, scadenzePerAI, soggettiSafe);
       risultatiAI = Array.isArray(risultatiChunk) ? risultatiChunk : [];
 
       const tempoImpiegato = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -80,7 +103,6 @@ export async function POST(request: Request) {
           const s = soggettiSafe.find(sog => sog.id === res.soggetto_id);
           if (s) res.ragione_sociale = s.ragione_sociale;
         }
-        // I risultati passati dall'AI sono considerati di default fatture
         res.categoria = 'fattura';
         return res;
       });

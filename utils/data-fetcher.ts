@@ -1660,7 +1660,10 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
     let matched = false;
     const causaleRaw = m.descrizione || '';
     const causale = causaleRaw.toUpperCase();
+    
+    // Normalizzazione standard e rimozione totale spazi (FIX 4B)
     const causaleNorm = normalizzaNome(causale);
+    const causaleNoSpazi = causaleNorm.replace(/\s/g, ''); 
 
     // ==========================================
     // ZERO. Pre-Filtro Costi Bancari e Tasse
@@ -1668,16 +1671,147 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
     const regexBanca = /\b(bollo|comm\.?|commissioni?|canone|tenuta conto|spese|competenz[ea]|imposta|f24)\b/i;
     if (regexBanca.test(causale)) {
       matchati.push({
-        movimento_id: m.id,
-        scadenza_id: null,
-        soggetto_id: null,
-        confidence: 0.99,
+        movimento_id: m.id, scadenza_id: null, soggetto_id: null, confidence: 0.99,
         motivo: `Pre-match Veloce: Rilevata Spesa Bancaria/Imposta`,
-        ragione_sociale: "Banca / Imposte (Spesa Interna)",
-        categoria: 'commissione'
+        ragione_sociale: "Banca / Imposte (Spesa Interna)", categoria: 'commissione'
       });
       continue;
     }
+
+    // ==========================================
+    // 1. STEP STIPENDI: Match con tabella personale 
+    // ==========================================
+    const regexStipendio = /\b(stipendio|emolument[i]?|uniemens)\b/i;
+    if (regexStipendio.test(causale) || (m.xml_causale && regexStipendio.test(m.xml_causale))) {
+      let foundPersona = null;
+      for (const p of personale) {
+        const nomeNorm = normalizzaNome(p.nome || '');
+        const paroleNome = nomeNorm.split(' ').filter(w => w.length > 2);
+        const matchPersona = paroleNome.length > 0 && paroleNome.every(parola => causaleNorm.includes(parola));
+        if (matchPersona) { foundPersona = p; break; }
+      }
+      matchati.push({
+        movimento_id: m.id, scadenza_id: null, soggetto_id: null,
+        confidence: foundPersona ? 0.98 : 0.90,
+        motivo: foundPersona ? `Stipendio identificato: ${foundPersona.nome}` : `Stipendio (dipendente non identificato)`,
+        ragione_sociale: foundPersona ? foundPersona.nome : "Dipendente",
+        categoria: 'stipendio', personale_id: foundPersona?.id || null
+      });
+      continue;
+    }
+
+    // ==========================================
+    // 2. STEP GIROCONTI: Bonifici tra i tuoi conti
+    // ==========================================
+    const regexGiroconto = /\b(giroconto|giro\s*(da|a|per|su))\b/i;
+    if (regexGiroconto.test(causale) || (m.xml_causale && /giroconto/i.test(m.xml_causale))) {
+      matchati.push({
+        movimento_id: m.id, scadenza_id: null, soggetto_id: null, confidence: 0.99,
+        motivo: `Giroconto interno rilevato`,
+        ragione_sociale: "Giroconto Aziendale", categoria: 'giroconto'
+      });
+      continue;
+    }
+
+    // ==========================================
+    // 3. RICERCA SOGGETTO (IBAN, P.IVA, NOME)
+    // ==========================================
+    let foundSoggetto: any = null;
+    let foundScadenza: any = null;
+
+    // A. Match IBAN
+    const ibanMatch = causale.match(/IT\d{2}[A-Z]\d{22}/);
+    if (ibanMatch) {
+      foundSoggetto = soggetti.find(s => s.iban && s.iban.replace(/\s/g, '') === ibanMatch[0]);
+    }
+
+    // B. Match P.IVA
+    if (!foundSoggetto) {
+      const pivaMatch = causale.match(/\b\d{11}\b/);
+      if (pivaMatch) {
+        foundSoggetto = soggetti.find(s => s.partita_iva === pivaMatch[0]);
+      }
+    }
+
+    // C. Match NOME Elastico (FIX 4A / 4B)
+    if (!foundSoggetto) {
+      for (const s of soggetti) {
+        const nomeNorm = normalizzaNome(s.ragione_sociale || '');
+        if (nomeNorm.length < 4) continue; // Evita falsi positivi su nomi troppo corti
+        
+        const nomeNoSpazi = nomeNorm.replace(/\s/g, ''); 
+        
+        // Verifica sia sulla stringa normata che su quella senza spazi (es per TELECOMITALIA o RIBA)
+        if (causaleNorm.includes(nomeNorm) || causaleNoSpazi.includes(nomeNoSpazi)) {
+          foundSoggetto = s;
+          break;
+        }
+      }
+    }
+
+    // ==========================================
+    // 4. RICERCA FATTURA (FIX 4C - Pattern CBI Esteso)
+    // ==========================================
+    // Intercetta "FT 123", "FATT. 45", ma anche "FATTURA_0000202511152268"
+    const regexFattura = /(?:FATT\.?|FT\.?|FATTURA[_]?|FAT)\s*(?:N\.?\s*)?([A-Z]{0,3}\/?(?:\d{4}\/)?[\d]+)/gi;
+    let matchFattura;
+    let numeriFatturaTrovati: string[] = [];
+    
+    while ((matchFattura = regexFattura.exec(causale)) !== null) {
+      numeriFatturaTrovati.push(matchFattura[1].replace(/^0+/, '')); // rimuove zeri iniziali per facilitare il match
+    }
+
+    // ==========================================
+    // 5. INCROCIO E DECISIONE (Taglia fuori l'AI se possibile)
+    // ==========================================
+    if (foundSoggetto) {
+      const scadenzeSoggetto = scadenzeAperte.filter(s => s.soggetto_id === foundSoggetto.id);
+      const importoMovimento = Math.abs(m.importo);
+
+      // Cerca per Numero Fattura
+      if (numeriFatturaTrovati.length > 0) {
+         for(const num of numeriFatturaTrovati) {
+            const scad = scadenzeSoggetto.find(s => s.fattura_riferimento && s.fattura_riferimento.includes(num));
+            if(scad) { foundScadenza = scad; break; }
+         }
+      }
+
+      // Se non trovata per numero, cerca per Importo Coincidente
+      if (!foundScadenza) {
+        foundScadenza = scadenzeSoggetto.find(s => {
+          const residuo = Number(s.importo_totale) - Number(s.importo_pagato || 0);
+          return Math.abs(residuo - importoMovimento) < 0.05; // tolleranza centesimi
+        });
+      }
+
+      if (foundScadenza) {
+         matchati.push({
+            movimento_id: m.id, scadenza_id: foundScadenza.id, soggetto_id: foundSoggetto.id,
+            confidence: 0.98, motivo: `Pre-match: Trovata corrispondenza esatta (Fornitore + Fattura/Importo)`,
+            ragione_sociale: foundSoggetto.ragione_sociale, categoria: 'fattura'
+         });
+         matched = true;
+      } else {
+         // Novità: il fornitore è noto, ma non ci sono fatture ovvie.
+         // Lo teniamo fuori dall'AI! È un addebito SEPA/RIBA generico.
+         matchati.push({
+            movimento_id: m.id, scadenza_id: null, soggetto_id: foundSoggetto.id,
+            confidence: 0.85, motivo: `Pre-match: Identificato fornitore '${foundSoggetto.ragione_sociale}' ma senza scadenze/importi chiari.`,
+            ragione_sociale: foundSoggetto.ragione_sociale, categoria: 'fattura' 
+         });
+         matched = true;
+      }
+    }
+
+    // Se non abbiamo capito nulla, passa all'AI
+    if (!matched) {
+      nonMatchati.push(m);
+    }
+  }
+
+  console.log(`✅ RISULTATI PRE-MATCH: ${matchati.length} Risolti/Scartati, ${nonMatchati.length} inviati all'AI.`);
+  return { matchati, nonMatchati };
+}
 
 // ==========================================
     // STEP STIPENDI: Match con tabella personale (Logica Potenziata)

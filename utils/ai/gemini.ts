@@ -573,12 +573,13 @@ Formato: { "righe": [{ "codice": "string", "descrizione": "string", "unita_misur
 }
 
 // ============================================================================
-// STEP 5 / FIX 3: RICONCILIAZIONE BANCARIA AI (IBAN E PATTERN CAUSALI)
+// STEP 5 / FIX 3: RICONCILIAZIONE BANCARIA AI (COMPATTA E VELOCE)
 // ============================================================================
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-export async function matchBatchRiconciliazioneBancaria(movimenti: any[], scadenzeAperte: any[]) {
+// AGGIUNTO IL PARAMETRO OPZIONALE "soggetti" (come da piano precedente, casomai servisse)
+export async function matchBatchRiconciliazioneBancaria(movimenti: any[], scadenzeAperte: any[], soggetti: any[] = []) {
   const apiKey = process.env.GOOGLE_API_KEY;
   if (!apiKey) {
     console.warn("⚠️ GOOGLE_API_KEY mancante.");
@@ -588,71 +589,78 @@ export async function matchBatchRiconciliazioneBancaria(movimenti: any[], scaden
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({
     model: "gemini-2.5-flash",
-    generationConfig: { responseMimeType: "application/json" }
+    // Fix 5A: Aggiunto thinkingConfig se supportato dalla SDK per limitare il tempo di pensiero
+    generationConfig: { 
+      responseMimeType: "application/json",
+      // @ts-ignore - nel caso i tipi della SDK non siano aggiornatissimi
+      thinkingConfig: { thinkingBudget: 1024 } 
+    }
   });
 
-  const prompt = `
-Sei un contabile esperto di un'impresa edile italiana. Devi associare movimenti bancari (da CSV) ai fornitori/clienti e alle loro fatture aperte.
+  // FIX 1A: Comprimere i dati delle scadenze aperte
+  const scadenzeCompatte = scadenzeAperte.map(s => ({
+    i: s.id,
+    si: s.soggetto_id,
+    n: (s.anagrafica_soggetti as any)?.ragione_sociale || '',
+    r: Math.round((Number(s.importo_totale) - Number(s.importo_pagato || 0)) * 100) / 100,
+    f: s.fattura_riferimento || '',
+    t: s.tipo === 'uscita' ? 'U' : 'E'
+  }));
 
-ATTENZIONE: Le descrizioni bancarie sono SPORCHE. Le banche troncano i nomi, rimuovono "Srl/SpA/Snc", usano MAIUSCOLE, accorciano parole. Devi essere ELASTICO nel riconoscere i nomi.
+  // FIX 1B: Comprimere i dati dei movimenti
+  const movimentiCompatti = movimenti.map(m => ({
+    i: m.id,
+    imp: m.importo,
+    c: (m.descrizione || '').substring(0, 200) // Limita la descrizione a 200 caratteri
+  }));
 
-DIZIONARIO CAUSALI BANCARIE ITALIANE:
-- "BON" o "BONIF" = Bonifico
-- "A FAV" o "A FAVORE" = destinatario del pagamento
-- "DA" o "DISP" = ordinante del pagamento (chi paga)
-- "RID" o "SDD" = Addebito diretto SEPA (utenze, rate)
-- "RIBA" o "RI.BA" = Ricevuta Bancaria (pagamento fornitore)
-- "MAV" = Pagamento mediante avviso
-- "PAGO" o "PAG" = Pagamento
-- "FATT" o "FT" o "FATTURA" = Riferimento fattura
-- "IBAN" seguito da codice = IBAN del beneficiario/ordinante
-- "CRO" o "TRN" = Codice riferimento operazione
+  // FIX 1C e 5B: Comprimere le istruzioni e imporre velocità
+  // NIENTE null, 2 nei JSON.stringify per massimizzare la compressione
+  const prompt = `IMPORTANTE: Rispondi VELOCEMENTE. Non elaborare a lungo. Se non trovi match immediato, metti null.
+Associa movimenti bancari ai fornitori/clienti (estratti da XML CBI). Rispondi SOLO in JSON.
 
-ISTRUZIONE CRUCIALE PER I NUMERI FATTURA:
-Cerca SEMPRE numeri isolati, o numeri vicini a "FATT", "FT", "FATTURA", "N.", "NR". Se trovi "FT 123/25", il numero fattura è "123" o "123/25". Confrontalo sempre con il campo 'fatt' delle scadenze aperte.
+MOVIMENTI:
+${JSON.stringify(movimentiCompatti)}
 
-MOVIMENTI BANCA DA ANALIZZARE:
-${JSON.stringify(movimenti.map(m => ({ id: m.id, data: m.data_operazione, importo: m.importo, causale: m.descrizione })), null, 2)}
+SCADENZE APERTE (i=id, si=soggetto_id, n=nome, r=residuo€, f=fattura, t=U/E):
+${JSON.stringify(scadenzeCompatte)}
 
-FATTURE/SCADENZE APERTE DISPONIBILI:
-${JSON.stringify(scadenzeAperte.map(s => ({
-    id: s.id,
-    soggetto_id: s.soggetto_id,
-    nome: s.anagrafica_soggetti?.ragione_sociale || '',
-    piva: s.anagrafica_soggetti?.partita_iva || '',
-    iban: s.anagrafica_soggetti?.iban || '',
-    residuo: Number(s.importo_totale) - Number(s.importo_pagato || 0),
-    fatt: s.fattura_riferimento,
-    tipo: s.tipo
-})), null, 2)}
+ANAGRAFICA SOGGETTI (id, nome):
+${JSON.stringify(soggetti.map(s => ({ id: s.id, n: s.ragione_sociale })))}
 
-STRATEGIA DI MATCHING (in ordine di priorità tassativo):
-1. IBAN: Cerca un IBAN nella causale (formato ITxx...) e confrontalo con gli IBAN dei soggetti. Questo garantisce il "soggetto_id".
-2. FATTURA (ISTRUZIONE ESPLICITA): Cerca attivamente un numero fattura nella causale (es. "Fatt. 123", "FT 45/A", o anche solo "123" se l'importo coincide). Se trovi un match con il campo 'fatt', usalo per identificare la scadenza.
-3. NOME: Cerca il nome/ragione sociale nella causale (fuzzy, ignora Srl/SpA/suffissi).
-4. P.IVA: Cerca la Partita IVA nella causale (11 cifre).
-5. IMPORTO: Se il soggetto è trovato, confronta l'importo assoluto del movimento con gli importi residui delle sue scadenze (stai attento al SEGNO: importo<0 è uscita per fornitore, importo>0 è entrata da cliente).
+REGOLE:
+- Ignora codici CBI (es. "SDD Core", "CBILL", "2601C240477").
+- Cerca nome fornitore/cliente nella causale (ignora Srl/SpA, case-insensitive). Supera differenze come "Italia" vs "Italy".
+- Cerca numero fattura (FT/FATT + numero).
+- Confronta importo movimento con residuo scadenza.
+- confidence: 0.95+ se fattura/importo esatto, 0.70-0.94 se solo nome, <0.40 se niente.
 
-REGOLE DI RISPOSTA (Confidence):
-- MATCH ESATTO (0.95 - 0.99): Trovato numero fattura esatto OPPURE (Importo coincide con la fattura E soggetto trovato tramite IBAN o Nome). (Fornisci soggetto_id E scadenza_id).
-- MATCH ACCONTO (0.70 - 0.94): Soggetto identificato con certezza (es. tramite IBAN), MA l'importo non combacia con nessuna fattura e non ci sono riferimenti di fattura chiari. (Fornisci soggetto_id, MA scadenza_id: null).
-- MATCH DEBOLE (0.40 - 0.69): Soggetto forse menzionato ma confuso.
-- NESSUN MATCH (< 0.40): Non riesci a identificare niente. Metti entrambi null.
-
-RISPONDI con un array JSON. Per OGNI movimento DEVI restituire ESATTAMENTE un oggetto con questa struttura:
+RISPONDI ESCLUSIVAMENTE con array JSON:
 [{
-  "movimento_id": "uuid_del_movimento",
-  "scadenza_id": "uuid_fattura_o_null",
-  "soggetto_id": "uuid_soggetto_o_null",
+  "movimento_id": "uuid",
+  "scadenza_id": "uuid_o_null",
+  "soggetto_id": "uuid_o_null",
   "confidence": 0.95,
-  "motivo": "Spiegazione breve e tecnica in italiano (es. Trovato numero fattura 123 e importo coincidente)"
-}]
-`;
+  "motivo": "breve"
+}]`;
+
+  // FIX 3: Logging CRITICO per il prompt in andata
+  const promptSize = prompt.length;
+  const tokenEstimate = Math.round(promptSize / 4);
+  console.log(`📏 PROMPT AI: ${promptSize} chars (~${tokenEstimate} token). Movimenti: ${movimenti.length}, Scadenze passate: ${scadenzeCompatte.length}`);
 
   try {
+    const startTime = Date.now();
     const result = await model.generateContent(prompt);
+    const endTime = Date.now();
+    
     let textInfo = result.response.text();
     textInfo = textInfo.replace(/```json/gi, "").replace(/```/g, "").trim();
+    
+    // FIX 3: Logging CRITICO per la risposta
+    const responseSize = textInfo.length;
+    console.log(`📤 RISPOSTA AI: ${responseSize} chars. Parsing completato in ${((endTime - startTime)/1000).toFixed(1)}s.`);
+    
     return JSON.parse(textInfo);
   } catch (error) {
     console.error("❌ Errore Gemini Batch Matching:", error);
