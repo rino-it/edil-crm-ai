@@ -768,6 +768,8 @@ export interface Soggetto {
   condizioni_pagamento?: string;
   note?: string;
   created_at: string;
+  auto_riconcilia?: boolean;
+  categoria_riconciliazione?: string | null;
 }
 
 export async function getSoggetti(tipo?: string): Promise<Soggetto[]> {

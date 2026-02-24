@@ -26,7 +26,7 @@ export default async function SoggettoDetailPage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const soggetto = await getSoggettoById(id)
+  const soggetto = await getSoggettoById(id) as any
   if (!soggetto) notFound()
 
   // STEP 5B e 5C: Chiamate parallele per i dati della Scheda Fornitore
