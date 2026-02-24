@@ -236,17 +236,26 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
                       
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          {(m.ai_suggerimento || isAcconto) ? (
+                          {/* MODIFICA: Ora la condizione include anche le categorie speciali */}
+                          {(m.ai_suggerimento || isAcconto || ['stipendio', 'commissione', 'giroconto', 'sepa'].includes(m.categoria_dedotta)) ? (
                             <>
+                              {/* TASTO CONFERMA */}
                               <form action={handleConferma}>
                                 <input type="hidden" name="movimento_id" value={m.id} />
                                 {m.ai_suggerimento && <input type="hidden" name="scadenza_id" value={m.ai_suggerimento} />}
                                 {m.soggetto_id && <input type="hidden" name="soggetto_id" value={m.soggetto_id} />}
+                                {m.personale_id && <input type="hidden" name="personale_id" value={m.personale_id} />}
                                 <input type="hidden" name="importo" value={Math.abs(m.importo)} />
+                                
+                                {/* MODIFICA: Passiamo la categoria al backend per il salvataggio */}
+                                <input type="hidden" name="categoria" value={m.categoria_dedotta || 'fattura'} />
+                                
                                 <Button size="sm" type="submit" className="bg-emerald-600 hover:bg-emerald-700 h-8 px-2" title="Conferma">
                                   <Check className="h-4 w-4" />
                                 </Button>
                               </form>
+
+                              {/* TASTO RIFIUTA / MODIFICA */}
                               <form action={handleRifiuta}>
                                 <input type="hidden" name="movimento_id" value={m.id} />
                                 <Button size="sm" type="submit" variant="outline" className="text-rose-600 hover:bg-rose-50 h-8 px-2" title="Rifiuta">
@@ -255,9 +264,12 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
                               </form>
                             </>
                           ) : (
+                            /* MENU TENDINA SELEZIONE MANUALE */
                             <form action={handleConferma} className="flex gap-2 items-center">
                               <input type="hidden" name="movimento_id" value={m.id} />
                               <input type="hidden" name="importo" value={Math.abs(m.importo)} />
+                              {/* Se usiamo la tendina, di default è una fattura o pagamento */}
+                              <input type="hidden" name="categoria" value="fattura" />
                               
                               <select 
                                 name="scadenza_id" 

@@ -3,10 +3,8 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/utils/supabase/server'
 import { createClient as createAdminClient } from "@supabase/supabase-js"
-// MODIFICA: Aggiunto parseXMLBanca all'import
 import { parseCSVBanca, parseXMLBanca, importMovimentiBanca, confermaRiconciliazione } from '@/utils/data-fetcher'
 
-// MODIFICA: Rinominata da importaCSVBanca a importaEstrattoConto e aggiunto supporto XML
 export async function importaEstrattoConto(formData: FormData) {
   try {
     const file = formData.get('file') as File;
@@ -41,17 +39,41 @@ export async function importaEstrattoConto(formData: FormData) {
   }
 }
 
-export async function confermaMatch(formData: FormData) {
+export async function handleConferma(formData: FormData) {
   try {
     const movimento_id = formData.get('movimento_id') as string;
-    const scadenza_id = formData.get('scadenza_id') as string;
+    const scadenza_id = formData.get('scadenza_id') as string | null;
     const soggetto_id = formData.get('soggetto_id') as string | null;
+    const personale_id = formData.get('personale_id') as string | null;
+    const categoria = formData.get('categoria') as string;
     const importo = Number(formData.get('importo'));
 
     if (!movimento_id) throw new Error("ID movimento mancante.");
 
-    // CASO A: Match Esatto 1 a 1 (L'AI o l'utente ha scelto una fattura specifica)
-    if (scadenza_id) {
+    const supabaseAdmin = createAdminClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false } }
+    );
+
+    // ===============================================
+    // CASO SPECIALE: Commissione, Giroconto, Stipendio
+    // ===============================================
+    if (['commissione', 'giroconto', 'stipendio'].includes(categoria)) {
+      // Salviamo il movimento come riconciliato assegnandogli la sua categoria. Non tocca le fatture.
+      await supabaseAdmin
+        .from('movimenti_banca')
+        .update({ 
+          stato_riconciliazione: 'riconciliato', 
+          categoria_dedotta: categoria,
+          personale_id: personale_id || null // Se stipendio, lega il dipendente
+        })
+        .eq('id', movimento_id);
+    } 
+    // ===============================================
+    // CASO A: Match Esatto Fattura
+    // ===============================================
+    else if (scadenza_id) {
       await confermaRiconciliazione(
         movimento_id, 
         scadenza_id, 
@@ -60,25 +82,25 @@ export async function confermaMatch(formData: FormData) {
         soggetto_id || undefined
       );
     } 
-    // CASO B: Allocazione Multipla / Acconto (Abbiamo il soggetto, ma non la fattura)
+    // ===============================================
+    // CASO B: Allocazione Multipla / Acconto
+    // ===============================================
     else if (soggetto_id) {
-      const supabaseAdmin = createAdminClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!,
-        { auth: { persistSession: false } }
-      );
-
       // 1. Segniamo il movimento come riconciliato
       await supabaseAdmin
         .from('movimenti_banca')
-        .update({ stato: 'riconciliato', soggetto_id: soggetto_id })
+        .update({ 
+          stato_riconciliazione: 'riconciliato', 
+          soggetto_id: soggetto_id,
+          categoria_dedotta: categoria || 'fattura'
+        })
         .eq('id', movimento_id);
 
       // 2. Avviamo il Motore di Allocazione Multipla (FIFO + Combinazioni)
       await allocaPagamentoIntelligente(supabaseAdmin, soggetto_id, importo);
       
     } else {
-      throw new Error("Dati insufficienti per confermare (manca sia scadenza che soggetto).");
+      throw new Error("Dati insufficienti per confermare (manca scadenza, soggetto o categoria valida).");
     }
 
     // Aggiorna tutte le viste finanziarie + Anagrafiche
@@ -93,7 +115,7 @@ export async function confermaMatch(formData: FormData) {
   }
 }
 
-export async function rifiutaMatch(formData: FormData) {
+export async function handleRifiuta(formData: FormData) {
   try {
     const movimento_id = formData.get('movimento_id') as string;
     if (!movimento_id) throw new Error("ID movimento mancante.");
@@ -104,9 +126,17 @@ export async function rifiutaMatch(formData: FormData) {
       { auth: { persistSession: false } }
     );
     
+    // AZZERIAMO TUTTO: in questo modo il frontend mostra il menu a tendina manuale
     const { error } = await supabaseAdmin
       .from('movimenti_banca')
-      .update({ ai_suggerimento: null, soggetto_id: null, ai_confidence: null, ai_motivo: null })
+      .update({ 
+        ai_suggerimento: null, 
+        soggetto_id: null, 
+        personale_id: null,
+        categoria_dedotta: null, // FONDAMENTALE
+        ai_confidence: 0, 
+        ai_motivo: 'Selezione manuale richiesta' 
+      })
       .eq('id', movimento_id);
 
     if (error) throw error;
@@ -119,8 +149,9 @@ export async function rifiutaMatch(formData: FormData) {
   }
 }
 
+// Manteniamo il collegamento della vecchia funzione se la usi altrove
 export async function matchManuale(formData: FormData) {
-  return confermaMatch(formData);
+  return handleConferma(formData);
 }
 
 // ============================================================================
@@ -146,7 +177,7 @@ async function allocaPagamentoIntelligente(supabaseAdmin: any, soggetto_id: stri
 
   let combinazioneEsatta = null;
 
-  // 2. FASE 1: Combinazione Esatta (Limite di sicurezza: 20 fatture = ~1 milione di iterazioni = <50ms)
+  // 2. FASE 1: Combinazione Esatta (Limite di sicurezza: 20 fatture)
   if (items.length <= 20) {
     function trovaCombinazioneEsatta(index: number, sum: number, subset: any[]): any[] | null {
       if (sum === targetCents) return subset;
@@ -173,7 +204,7 @@ async function allocaPagamentoIntelligente(supabaseAdmin: any, soggetto_id: stri
     return;
   }
 
-  // 3. FASE 2: Logica FIFO (First In, First Out)
+  // 3. FASE 2: Logica FIFO
   let budgetResiduoCents = targetCents;
 
   for (const scadenza of items) {
