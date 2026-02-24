@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ArrowLeft, Save, Trash2, Receipt, History, Wallet } from "lucide-react"
+import { ArrowLeft, Save, Trash2, Receipt, History, Wallet, BrainCircuit } from "lucide-react"
 import Link from 'next/link'
 
 export default async function SoggettoDetailPage({ 
