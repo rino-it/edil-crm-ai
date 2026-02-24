@@ -31,19 +31,19 @@ export async function POST(request: Request) {
 
     if (errorSoggetti) throw new Error(`Errore DB Soggetti: ${errorSoggetti.message}`);
 
-    // 3. Estrai Personale (Per gli Stipendi) - Adattato alla tua tabella
+    // 3. Estrai Personale (Per gli Stipendi)
     const { data: personale, error: errorPersonale } = await supabase
-  .from('personale')
-  .select('id, nome, iban');
+      .from('personale')
+      .select('id, nome, iban');
 
-if (errorPersonale) console.error("❌ Errore Personale:", errorPersonale);
-const personaleSafe = personale || [];
+    if (errorPersonale) console.error("❌ Errore Personale:", errorPersonale);
 
     // 4. Estrai Conti Banca Aziendali (Per i Giroconti)
     const { data: conti_banca, error: errorConti } = await supabase
       .from('conti_banca')
       .select('id, nome_banca, iban');
 
+    // Definiamo le variabili "Safe" (una sola volta per ciascuna)
     const scadenzeSafe = scadenzeAperte || [];
     const soggettiSafe = soggetti || [];
     const personaleSafe = personale || [];
@@ -52,7 +52,14 @@ const personaleSafe = personale || [];
     // ==========================================
     // FASE A: Pre-Match Deterministico Veloce
     // ==========================================
-    const { matchati, nonMatchati } = await preMatchMovimenti(movimenti, scadenzeSafe, soggettiSafe, personaleSafe, contiSafe);
+    // FIX: Chiusa correttamente la parentesi );
+    const { matchati, nonMatchati } = await preMatchMovimenti(
+      movimenti, 
+      scadenzeSafe, 
+      soggettiSafe, 
+      personaleSafe, 
+      contiSafe
+    );
     
     // ==========================================
     // FASE B: AI Fallback (Gemini) solo sui residui
@@ -73,7 +80,7 @@ const personaleSafe = personale || [];
           const s = soggettiSafe.find(sog => sog.id === res.soggetto_id);
           if (s) res.ragione_sociale = s.ragione_sociale;
         }
-        // I risultati passati dall'AI sono considerati di default fatture/acconti
+        // I risultati passati dall'AI sono considerati di default fatture
         res.categoria = 'fattura';
         return res;
       });
@@ -94,8 +101,8 @@ const personaleSafe = personale || [];
           .update({
             ai_suggerimento: res.scadenza_id || null,
             soggetto_id: res.soggetto_id || null,
-            personale_id: res.personale_id || null,           // Inserimento Stipendio
-            categoria_dedotta: res.categoria || null,         // Inserimento Categoria
+            personale_id: res.personale_id || null,           
+            categoria_dedotta: res.categoria || null,         
             ai_confidence: res.confidence || 0,
             ai_motivo: res.motivo || "Nessun match trovato"
           })
