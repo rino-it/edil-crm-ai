@@ -48,7 +48,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
     if (daAnalizzare.length === 0) return;
 
     setIsAnalyzing(true)
-    const CHUNK_SIZE = 25; 
+    const CHUNK_SIZE = 10; 
     setProgress({ current: 0, total: daAnalizzare.length });
 
     for (let i = 0; i < daAnalizzare.length; i += CHUNK_SIZE) {
