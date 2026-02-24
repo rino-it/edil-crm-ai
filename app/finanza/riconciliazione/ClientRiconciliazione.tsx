@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { importaCSVBanca, confermaMatch, rifiutaMatch } from './actions'
+// FIX 6B: Aggiornato l'import con la nuova action agnostica
+import { importaEstrattoConto, confermaMatch, rifiutaMatch } from './actions'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,7 +20,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
   // Stato reattivo locale per i movimenti
   const [movimentiLocali, setMovimentiLocali] = useState(movimenti);
 
-  // FIX 6: Stato per tracciare la selezione manuale del soggetto per ogni movimento
+  // Stato per tracciare la selezione manuale del soggetto per ogni movimento
   const [manualSelections, setManualSelections] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -32,20 +33,20 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
     e.preventDefault()
     setIsUploading(true)
     const formData = new FormData(e.currentTarget)
-    await importaCSVBanca(formData)
+    // FIX 6B: Usiamo la nuova action che supporta sia CSV che XML
+    await importaEstrattoConto(formData)
     setIsUploading(false)
     router.refresh()
   }
 
-  // FIX 4: Gestione Matching AI con Retry e Robustezza
   const handleAiAnalysis = async () => {
-    const daAnalizzare = movimentiLocali.filter(m => !m.ai_suggerimento && !m.soggetto_id && !m.ai_motivo)
+    const daAnalizzare = movimentiLocali.filter(m => !m.ai_suggerimento && !m.soggetto_id && (!m.ai_motivo || m.ai_motivo.includes("Errore")))
     if (daAnalizzare.length === 0) return;
 
     setIsAnalyzing(true)
     
-    // FIX B: Chunk size ridotto a 10 per prevenire timeout Vercel
-    const CHUNK_SIZE = 10; 
+    // Chunk size a 3 per evitare timeout Vercel
+    const CHUNK_SIZE = 3; 
     setProgress({ current: 0, total: daAnalizzare.length });
 
     for (let i = 0; i < daAnalizzare.length; i += CHUNK_SIZE) {
@@ -78,7 +79,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
                     soggetto_id: match.soggetto_id || null,
                     ai_confidence: match.confidence || 0, 
                     ai_motivo: match.motivo || "Analisi completata",
-                    ragione_sociale: match.ragione_sociale || null // FIX 5: Salviamo la ragione sociale
+                    ragione_sociale: match.ragione_sociale || null
                   };
                 }
                 if (chunk.some(c => c.id === mov.id) && !receivedIds.has(mov.id)) {
@@ -127,7 +128,6 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
     const movId = formData.get('movimento_id') as string;
     await rifiutaMatch(formData);
     setMovimentiLocali(prev => prev.map(m => 
-      // FIX 5: Puliamo anche la ragione_sociale in caso di rifiuto
       m.id === movId ? { ...m, ai_suggerimento: null, soggetto_id: null, ai_confidence: null, ai_motivo: null, ragione_sociale: null } : m
     ));
   }
@@ -139,10 +139,12 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
           <CardHeader className="pb-3"><CardTitle className="text-sm">1. Importa Estratto Conto</CardTitle></CardHeader>
           <CardContent>
             <form onSubmit={handleUpload} className="flex gap-3">
-              <Input type="file" name="file" accept=".csv" required className="cursor-pointer" />
+              {/* FIX 6A: Aggiunto accept=".xml" */}
+              <Input type="file" name="file" accept=".csv,.xml" required className="cursor-pointer" />
               <Button type="submit" disabled={isUploading} className="bg-blue-600 hover:bg-blue-700">
                 {isUploading ? <Loader2 className="animate-spin h-4 w-4" /> : <Upload className="h-4 w-4 mr-2" />}
-                Importa CSV
+                {/* FIX 6C: Testo generico */}
+                Importa File
               </Button>
             </form>
           </CardContent>
@@ -152,9 +154,9 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
           <CardHeader className="pb-3"><CardTitle className="text-sm">2. Analisi Intelligente</CardTitle></CardHeader>
           <CardContent className="flex items-center justify-between">
             <span className="text-sm text-zinc-500">
-              {movimentiLocali.filter(m => !m.ai_suggerimento && !m.soggetto_id && !m.ai_motivo).length} movimenti pronti per analisi AI.
+              {movimentiLocali.filter(m => !m.ai_suggerimento && !m.soggetto_id && (!m.ai_motivo || m.ai_motivo.includes("Errore"))).length} movimenti pronti per analisi AI.
             </span>
-            <Button onClick={handleAiAnalysis} disabled={isAnalyzing || movimentiLocali.filter(m => !m.ai_suggerimento && !m.soggetto_id && !m.ai_motivo).length === 0} className="bg-indigo-600 hover:bg-indigo-700 w-full md:w-auto">
+            <Button onClick={handleAiAnalysis} disabled={isAnalyzing || movimentiLocali.filter(m => !m.ai_suggerimento && !m.soggetto_id && (!m.ai_motivo || m.ai_motivo.includes("Errore"))).length === 0} className="bg-indigo-600 hover:bg-indigo-700 w-full md:w-auto">
               {isAnalyzing ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <BrainCircuit className="h-4 w-4 mr-2" />}
               {isAnalyzing ? `Analisi: ${progress.current} / ${progress.total}` : "Avvia Matching AI"}
             </Button>
@@ -170,7 +172,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
                 <TableHead>Data</TableHead>
                 <TableHead>Causale Bancaria</TableHead>
                 <TableHead className="text-right">Importo</TableHead>
-                <TableHead>Suggerimento AI</TableHead>
+                <TableHead>Suggerimento</TableHead>
                 <TableHead className="text-right">Azioni</TableHead>
               </TableRow>
             </TableHeader>
@@ -201,12 +203,11 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
                       <TableCell>
                         {m.ai_suggerimento ? (
                           <div className="flex flex-col gap-1">
-                            {/* FIX 5: Usa m.ragione_sociale se disponibile */}
                             <span className="text-sm font-semibold">
                               {m.ragione_sociale || suggestedScadenza?.soggetto?.ragione_sociale || suggestedScadenza?.anagrafica_soggetti?.ragione_sociale || 'Match Trovato'}
                             </span>
                             <div className="flex items-center gap-2 text-xs">
-                              <Badge variant="outline" className={`${conf > 0.8 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} border-none`}>
+                              <Badge variant="outline" className={`${conf >= 0.95 ? 'bg-emerald-100 text-emerald-800' : conf >= 0.8 ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'} border-none`}>
                                 {(conf * 100).toFixed(0)}% Match
                               </Badge>
                               <span className="text-zinc-500 truncate max-w-[150px]" title={m.ai_motivo}>{m.ai_motivo}</span>
@@ -214,7 +215,6 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
                           </div>
                         ) : m.ai_motivo ? (
                           <div className="flex flex-col gap-1">
-                            {/* FIX 5: Usa m.ragione_sociale per gli acconti se non c'è in scadenzeAperte */}
                             {isAcconto && (m.ragione_sociale || suggestedSoggetto) && (
                               <span className="text-sm font-semibold">
                                 {m.ragione_sociale || suggestedSoggetto?.soggetto?.ragione_sociale || suggestedSoggetto?.anagrafica_soggetti?.ragione_sociale}
@@ -226,7 +226,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
                             </Badge>
                           </div>
                         ) : (
-                          <span className="text-xs text-zinc-400 italic">In attesa di analisi AI.</span>
+                          <span className="text-xs text-zinc-400 italic">In attesa di analisi.</span>
                         )}
                       </TableCell>
                       

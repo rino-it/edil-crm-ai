@@ -3,26 +3,40 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/utils/supabase/server'
 import { createClient as createAdminClient } from "@supabase/supabase-js"
-import { parseCSVBanca, importMovimentiBanca, confermaRiconciliazione } from '@/utils/data-fetcher'
+// MODIFICA: Aggiunto parseXMLBanca all'import
+import { parseCSVBanca, parseXMLBanca, importMovimentiBanca, confermaRiconciliazione } from '@/utils/data-fetcher'
 
-export async function importaCSVBanca(formData: FormData) {
+// MODIFICA: Rinominata da importaCSVBanca a importaEstrattoConto e aggiunto supporto XML
+export async function importaEstrattoConto(formData: FormData) {
   try {
     const file = formData.get('file') as File;
-    if (!file) throw new Error("Nessun file CSV selezionato.");
-
+    if (!file) throw new Error("Nessun file selezionato.");
+    
     const text = await file.text();
-    const movimenti = parseCSVBanca(text);
-
-    if (movimenti.length === 0) {
-      throw new Error("Nessun movimento valido trovato. Verifica il formato del CSV.");
+    const fileName = file.name.toLowerCase();
+    
+    let movimenti;
+    
+    if (fileName.endsWith('.xml')) {
+      movimenti = parseXMLBanca(text);
+      console.log(`📦 XML: ${movimenti.length} movimenti estratti`);
+    } else if (fileName.endsWith('.csv')) {
+      movimenti = parseCSVBanca(text);
+      console.log(`📦 CSV: ${movimenti.length} movimenti estratti`);
+    } else {
+      throw new Error("Formato non supportato. Usa file .csv o .xml");
     }
-
+    
+    if (movimenti.length === 0) {
+      throw new Error("Nessun movimento valido trovato.");
+    }
+    
     const inseriti = await importMovimentiBanca(movimenti);
-
+    
     revalidatePath('/finanza/riconciliazione');
     return { success: true, conteggio: inseriti?.length || 0 };
   } catch (error: any) {
-    console.error("❌ Errore importazione CSV:", error);
+    console.error("❌ Errore importazione:", error);
     return { error: error.message };
   }
 }
