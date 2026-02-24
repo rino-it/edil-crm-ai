@@ -33,8 +33,11 @@ export async function POST(request: Request) {
 
     // 3. Estrai Personale (Per gli Stipendi) - Adattato alla tua tabella
     const { data: personale, error: errorPersonale } = await supabase
-      .from('personale')
-      .select('id, nome, iban');
+  .from('personale')
+  .select('id, nome, iban');
+
+if (errorPersonale) console.error("❌ Errore Personale:", errorPersonale);
+const personaleSafe = personale || [];
 
     // 4. Estrai Conti Banca Aziendali (Per i Giroconti)
     const { data: conti_banca, error: errorConti } = await supabase

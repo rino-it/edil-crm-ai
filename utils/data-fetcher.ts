@@ -1665,7 +1665,7 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
     // ==========================================
     // ZERO. Pre-Filtro Costi Bancari e Tasse
     // ==========================================
-    const regexBanca = /\b(bollo|commissioni?|canone|tenuta conto|spese liquidazione|competenz[ea]|imposta|f24)\b/i;
+    const regexBanca = /\b(bollo|comm\.?|commissioni?|canone|tenuta conto|spese|competenz[ea]|imposta|f24)\b/i;
     if (regexBanca.test(causale)) {
       matchati.push({
         movimento_id: m.id,
@@ -1680,15 +1680,21 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
     }
 
 // ==========================================
-    // STEP STIPENDI: Match con tabella personale
+    // STEP STIPENDI: Match con tabella personale (Logica Potenziata)
     // ==========================================
-    const regexStipendio = /\b(stipendio|emolument|EMOLUMENTI)\b/i;
+    const regexStipendio = /\b(stipendio|emolument[i]?|uniemens)\b/i;
     if (regexStipendio.test(causale) || (m.xml_causale && regexStipendio.test(m.xml_causale))) {
       let foundPersona = null;
+      
       for (const p of personale) {
-        // Usiamo solo p.nome perché nel tuo DB nome e cognome sono uniti
         const nomeNorm = normalizzaNome(p.nome || '');
-        if (nomeNorm.length >= 4 && causaleNorm.includes(nomeNorm)) {
+        // Dividiamo il nome in parole (es. ["fabrizio", "rodigari"])
+        const paroleNome = nomeNorm.split(' ').filter(w => w.length > 2);
+        
+        // Verifichiamo se OGNI parola del nome è presente nella causale (ordine indifferente)
+        const matchPersona = paroleNome.length > 0 && paroleNome.every(parola => causaleNorm.includes(parola));
+
+        if (matchPersona) {
           foundPersona = p;
           break;
         }
@@ -1710,7 +1716,7 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
     // ==========================================
     // STEP GIROCONTI: Trasferimenti interni
     // ==========================================
-    const regexGiroconto = /\b(giroconto|giro\s*(da|a)\s*(bcc|bper|bpm|intesa|unicredit))\b/i;
+    const regexGiroconto = /\b(giroconto|giro\s*(da|a|per|su))\b/i;
     if (regexGiroconto.test(causale) || (m.xml_causale && /giroconto/i.test(m.xml_causale))) {
       matchati.push({
         movimento_id: m.id,
