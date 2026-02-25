@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/componen
 import { Button } from "@/components/ui/button"
 import { Landmark, ArrowRight, Upload, Plus, AlertCircle } from 'lucide-react'
 import { UploadCalendar } from './components/UploadCalendar'
+import { AggiungiContoDialog } from './components/AggiungiContoDialog'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,9 +35,7 @@ export default async function DashboardRiconciliazionePage() {
           </h1>
           <p className="text-zinc-500 mt-1">Gestisci i conti correnti, carica gli estratti conto e allinea i saldi.</p>
         </div>
-        <Button className="bg-zinc-900 text-white">
-          <Plus className="h-4 w-4 mr-2" /> Aggiungi Conto
-        </Button>
+        <AggiungiContoDialog />
       </div>
 
       {/* KPI Globali */}

@@ -1087,10 +1087,7 @@ export async function getKPIFinanziariGlob() {
 }
 
 export async function getAgingAnalysisData(tipo: 'entrata' | 'uscita' = 'entrata') {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  const supabase = getSupabaseAdmin();
   const oggi = new Date();
   
   const { data } = await supabase
@@ -1124,10 +1121,7 @@ export async function getAgingAnalysisData(tipo: 'entrata' | 'uscita' = 'entrata
 }
 
 export async function getFinanzaPerCantiere() {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  const supabase = getSupabaseAdmin();
   
   const { data: cantieri } = await supabase
     .from('cantieri')
@@ -1147,10 +1141,7 @@ export async function getFinanzaPerCantiere() {
 }
 
 export async function getCashflowPrevisionale(giorni: number = 90) {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  const supabase = getSupabaseAdmin();
   const kpis = await getKPIFinanziariGlob();
   let cassaProgressiva = kpis.cassa_attuale;
 
@@ -2023,7 +2014,7 @@ export async function getScadenzePaginated(
     .select(`
       *,
       anagrafica_soggetti:soggetto_id (ragione_sociale, partita_iva, iban),
-      cantieri:cantiere_id (codice, titolo)
+      cantieri:cantiere_id (codice, nome)
     `, { count: 'exact' });
 
   // 2. Applichiamo i filtri dinamicamente

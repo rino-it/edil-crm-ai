@@ -27,7 +27,7 @@ function useSmistareCount() {
   const [count, setCount] = useState<number | null>(null);
   useEffect(() => {
     // Piccolo fetch in background per non bloccare la UI
-    fetch('/api/scadenze/count-da-smistare')
+    fetch('/api/cron/scadenze/count-da-smistare')
       .then(res => res.json())
       .then(data => setCount(data.count))
       .catch(() => setCount(null));

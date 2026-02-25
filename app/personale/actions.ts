@@ -44,15 +44,21 @@ export async function editPersona(formData: FormData): Promise<void> {
   }
 }
 
-export async function deletePersona(formData: FormData): Promise<void> {
-  const supabase = await createClient()
-  const id = formData.get('id') as string
+export async function deletePersona(formData: FormData) {
+  const id = formData.get("id") as string;
+  if (!id) return;
 
-  const { error } = await supabase.from('personale').delete().eq('id', id)
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('personale')
+    .delete()
+    .eq('id', id);
 
   if (error) {
-    console.error("Errore eliminazione persona:", error)
-  } else {
-    revalidatePath('/personale')
+    console.error("❌ Errore eliminazione personale:", error);
+    throw new Error("Impossibile eliminare il lavoratore.");
   }
+
+  // FONDAMENTALE: Dice a Next.js di ricaricare i dati della pagina
+  revalidatePath('/personale');
 }
