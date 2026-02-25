@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Landmark, ArrowRight, Upload, Plus, AlertCircle } from 'lucide-react'
 import { UploadCalendar } from './components/UploadCalendar'
 import { AggiungiContoDialog } from './components/AggiungiContoDialog'
+import { DocumentiContoDialog } from './components/DocumentiContoDialog'
+import { EstrattiContoMeseDialog } from './components/EstrattiContoMeseDialog'
 
 export const dynamic = 'force-dynamic'
 
@@ -104,10 +106,10 @@ export default async function DashboardRiconciliazionePage() {
                     Apri Riconciliazione <ArrowRight size={14} className="ml-2" />
                   </Button>
                 </Link>
-                {/* Il bottone upload punterà al modulo calendario (Step 5.4) */}
-                <Button variant="ghost" size="icon" className="text-zinc-500 hover:text-emerald-600 hover:bg-emerald-50" title="Carica Estratto Conto">
-                  <Upload size={18} />
-                </Button>
+                <DocumentiContoDialog 
+                  contoId={conto.id} 
+                  nomeBanca={conto.nome_banca} 
+                />
               </CardFooter>
             </Card>
           ))}
@@ -122,8 +124,17 @@ export default async function DashboardRiconciliazionePage() {
           <div className="flex justify-between items-center border-b border-zinc-100 pb-2">
             <h3 className="font-bold text-zinc-700">Situazione Globale</h3>
           </div>
-          {/* Test con Gennaio e Febbraio caricati: [1, 2] */}
-          <UploadCalendar anno={2026} uploadsPresenti={[1, 2]} />
+          <div className="grid grid-cols-3 md:grid-cols-6 lg:grid-cols-12 gap-2 mt-4">
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((meseNum) => (
+              <EstrattiContoMeseDialog 
+                key={meseNum}
+                contoId={conti[0]?.id || ''} 
+                anno={2026} 
+                meseNum={meseNum} 
+                haEstratto={false}
+              />
+            ))}
+          </div>
         </div>
       </div>
 
