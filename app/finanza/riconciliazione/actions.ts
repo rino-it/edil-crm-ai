@@ -5,6 +5,64 @@ import { createClient } from '@/utils/supabase/server'
 import { createClient as createAdminClient } from "@supabase/supabase-js"
 import { parseCSVBanca, parseXMLBanca, importMovimentiBanca, confermaRiconciliazione } from '@/utils/data-fetcher'
 
+// --- AZIONI PER DOCUMENTI GENERICI ---
+export async function uploadDocumentoBanca(formData: FormData) {
+  const supabase = await createClient()
+  const file = formData.get("file") as File
+  const conto_id = formData.get("conto_id") as string
+  const anno = parseInt(formData.get("anno") as string)
+
+  if (!file || !conto_id) throw new Error("Dati mancanti")
+
+  // 1. Upload su Storage
+  const filePath = `conti/${conto_id}/documenti/${anno}/${Date.now()}_${file.name}`
+  const { error: storageErr } = await supabase.storage.from('documenti_finanza').upload(filePath, file)
+  if (storageErr) throw new Error("Errore caricamento file")
+
+  // 2. Ottieni URL Pubblico
+  const { data: { publicUrl } } = supabase.storage.from('documenti_finanza').getPublicUrl(filePath)
+
+  // 3. Salva a Database
+  await supabase.from('documenti_banca').insert({
+    conto_banca_id: conto_id, anno, nome_file: file.name, url_documento: publicUrl
+  })
+  revalidatePath('/finanza/riconciliazione')
+}
+
+export async function getDocumentiBanca(conto_id: string, anno: number) {
+  const supabase = await createClient()
+  const { data } = await supabase.from('documenti_banca').select('*').eq('conto_banca_id', conto_id).eq('anno', anno).order('created_at', { ascending: false })
+  return data || []
+}
+
+// --- AZIONI PER ESTRATTI CONTO ---
+export async function uploadEstrattoConto(formData: FormData) {
+  const supabase = await createClient()
+  const file = formData.get("file") as File
+  const conto_id = formData.get("conto_id") as string
+  const anno = parseInt(formData.get("anno") as string)
+  const mese = parseInt(formData.get("mese") as string)
+
+  if (!file || !conto_id) throw new Error("Dati mancanti")
+
+  const filePath = `conti/${conto_id}/estratti/${anno}/${mese}/${Date.now()}_${file.name}`
+  const { error: storageErr } = await supabase.storage.from('documenti_finanza').upload(filePath, file)
+  if (storageErr) throw new Error("Errore caricamento file")
+
+  const { data: { publicUrl } } = supabase.storage.from('documenti_finanza').getPublicUrl(filePath)
+
+  await supabase.from('estratti_conto').insert({
+    conto_banca_id: conto_id, anno, mese, nome_file: file.name, url_documento: publicUrl
+  })
+  revalidatePath('/finanza/riconciliazione')
+}
+
+export async function getEstrattiConto(conto_id: string, anno: number, mese: number) {
+  const supabase = await createClient()
+  const { data } = await supabase.from('estratti_conto').select('*').eq('conto_banca_id', conto_id).eq('anno', anno).eq('mese', mese).order('created_at', { ascending: false })
+  return data || []
+}
+
 export async function creaContoBanca(formData: FormData) {
   const nome_banca = formData.get("nome_banca") as string
   const nome_conto = formData.get("nome_conto") as string
