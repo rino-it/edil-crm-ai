@@ -1608,10 +1608,14 @@ export async function autoRiconciliaMovimenti(risultatiAI: any[]) {
   return { autoRiconciliati, daMostrare };
 }
 
-export async function getStoricoPaymentsSoggetto(soggetto_id: string) {
+export async function getStoricoPaymentsSoggetto(
+  soggetto_id: string,
+  pagination: PaginationParams
+): Promise<PaginatedResult<any>> {
   const supabase = getSupabaseAdmin();
 
-  const { data, error } = await supabase
+  // Costruiamo la query senza eseguirla (rimuovendo await)
+  const query = supabase
     .from('movimenti_banca')
     .select(`
       id,
@@ -1624,16 +1628,13 @@ export async function getStoricoPaymentsSoggetto(soggetto_id: string) {
         fattura_riferimento,
         importo_totale
       )
-    `)
+    `, { count: 'exact' }) // Obbligatorio per la paginazione
     .eq('stato', 'riconciliato')
     .eq('soggetto_id', soggetto_id)
     .order('data_operazione', { ascending: false });
 
-  if (error) {
-    console.error("❌ Errore getStoricoPaymentsSoggetto:", error);
-    return [];
-  }
-  return data || [];
+  // Deleghiamo l'esecuzione e il calcolo del count all'helper infrastrutturale
+  return await executePaginatedQuery(query, pagination);
 }
 
 export async function getEsposizioneSoggetto(soggetto_id: string) {
@@ -1667,15 +1668,20 @@ export async function getEsposizioneSoggetto(soggetto_id: string) {
   return info;
 }
 
-export async function getFattureAperteSoggetto(soggetto_id: string) {
+export async function getFattureAperteSoggetto(
+  soggetto_id: string,
+  pagination: PaginationParams
+): Promise<PaginatedResult<any>> {
   const supabase = getSupabaseAdmin();
-  const { data } = await supabase
+  
+  const query = supabase
     .from('scadenze_pagamento')
-    .select('*')
+    .select('*', { count: 'exact' })
     .eq('soggetto_id', soggetto_id)
     .neq('stato', 'pagato')
     .order('data_scadenza', { ascending: true });
-  return data || [];
+    
+  return await executePaginatedQuery(query, pagination);
 }
 
 export function normalizzaNome(nome: string): string {
