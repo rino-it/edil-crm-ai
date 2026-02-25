@@ -1,16 +1,60 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from '@/utils/supabase/server';
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
-  const titolo = searchParams.get("titolo") ?? "Scadenza Documento";
-  const data = searchParams.get("data"); // atteso formato YYYY-MM-DD
-  const cantiere = searchParams.get("cantiere"); // parametro opzionale aggiunto
+  
+  // Parametri opzionali legacy o diretti
+  let titolo = searchParams.get("titolo") ?? "Scadenza Finanziaria";
+  let data = searchParams.get("data"); // atteso formato YYYY-MM-DD
+  let cantiere = searchParams.get("cantiere");
+  let descrizioneAggiuntiva = "";
+
+  // NUOVO: Supporto diretto tramite scadenzaId
+  const scadenzaId = searchParams.get("scadenzaId");
+
+  if (scadenzaId) {
+    const supabase = await createClient();
+    const { data: scadenza, error } = await supabase
+      .from('scadenze_pagamento')
+      .select(`
+        data_scadenza,
+        importo_totale,
+        importo_pagato,
+        fattura_riferimento,
+        tipo,
+        anagrafica_soggetti:soggetto_id (ragione_sociale),
+        cantieri:cantiere_id (codice, titolo)
+      `)
+      .eq('id', scadenzaId)
+      .single();
+
+    if (!error && scadenza) {
+      data = scadenza.data_scadenza;
+      
+      const soggetto = scadenza.anagrafica_soggetti?.ragione_sociale || "Soggetto N/D";
+      const fattura = scadenza.fattura_riferimento || "Senza Rif.";
+      const residuo = Number(scadenza.importo_totale) - Number(scadenza.importo_pagato || 0);
+      
+      // Formatta il titolo in base al tipo
+      const verbo = scadenza.tipo === 'entrata' ? 'Incasso' : 'Pagamento';
+      titolo = `${verbo} ${fattura} - ${soggetto}`;
+      
+      // Costruisce la descrizione dettagliata
+      descrizioneAggiuntiva = `\nImporto da saldare: €${residuo.toFixed(2)}\nTipo: ${scadenza.tipo.toUpperCase()}`;
+      
+      // Associa il cantiere se presente
+      if (scadenza.cantieri) {
+        cantiere = `${scadenza.cantieri.codice} - ${scadenza.cantieri.titolo}`;
+      }
+    }
+  }
 
   if (!data) {
     return NextResponse.json(
-      { error: "Parametro 'data' obbligatorio (formato YYYY-MM-DD)" },
+      { error: "Parametro 'data' o 'scadenzaId' valido obbligatorio." },
       { status: 400 }
     );
   }
@@ -26,43 +70,50 @@ export async function GET(request: NextRequest) {
     `T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}Z`;
 
   // UID univoco per l'evento
-  const uid = `scadenza-${dataIcs}-${Date.now()}@edil-crm`;
+  const uid = `scadenza-${scadenzaId || dataIcs}-${Date.now()}@edil-crm`;
 
   // Costruzione stringhe dinamiche per il calendario
-  const summaryPrefix = cantiere ? `[${cantiere}] ` : "";
-  const descrizioneCantiere = cantiere ? `\nRiferimento Cantiere: ${cantiere}` : "";
+  const summaryPrefix = cantiere ? `[${cantiere.split('-')[0].trim()}] ` : "";
+  const stringaCantiere = cantiere ? `\nRiferimento Cantiere: ${cantiere}` : "";
 
   const icsContent = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//EdilCRM//Scadenze Documenti//IT",
+    "PRODID:-//EdilCRM//Scadenze Finanza//IT",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     "BEGIN:VEVENT",
     `UID:${uid}`,
     `DTSTAMP:${dtstamp}`,
+    // Usiamo VALUE=DATE per creare un evento "Tutto il giorno"
     `DTSTART;VALUE=DATE:${dataIcs}`,
     `DTEND;VALUE=DATE:${dataIcs}`,
-    `SUMMARY:⚠️ Scadenza: ${summaryPrefix}${titolo}`,
-    `DESCRIPTION:Il documento "${titolo}" scade in questa data.${descrizioneCantiere}`,
+    `SUMMARY:⚠️ ${summaryPrefix}${titolo}`,
+    `DESCRIPTION:Dettagli Scadenza:${descrizioneAggiuntiva}${stringaCantiere}`,
+    // --- ALLARME 1: 3 Giorni Prima ---
+    "BEGIN:VALARM",
+    "TRIGGER:-P3D",
+    "ACTION:DISPLAY",
+    `DESCRIPTION:Preavviso (-3gg): ${titolo}`,
+    "END:VALARM",
+    // --- ALLARME 2: 1 Giorno Prima ---
     "BEGIN:VALARM",
     "TRIGGER:-P1D",
     "ACTION:DISPLAY",
-    `DESCRIPTION:Promemoria scadenza: ${titolo}`,
+    `DESCRIPTION:Domani scade: ${titolo}`,
     "END:VALARM",
     "END:VEVENT",
     "END:VCALENDAR",
   ].join("\r\n");
 
-  const nomeFile = `scadenza-${titolo.replace(/\s+/g, "-").toLowerCase()}.ics`;
+  const safeFileName = titolo.replace(/[^a-z0-9]/gi, '-').toLowerCase();
+  const nomeFile = `scadenza-${safeFileName}.ics`;
 
   return new NextResponse(icsContent, {
     status: 200,
     headers: {
-      // Header fondamentale per Apple
       "Content-Type": "text/calendar; charset=utf-8",
       "Content-Disposition": `attachment; filename="${nomeFile}"`,
-      // Questi due header dicono all'iPhone di non mettere il file in cache e di trattarlo come nuovo
       "Cache-Control": "no-cache, no-store, must-revalidate",
       "Pragma": "no-cache",
       "Expires": "0",

@@ -8,12 +8,17 @@ import { parseCSVBanca, parseXMLBanca, importMovimentiBanca, confermaRiconciliaz
 export async function importaEstrattoConto(formData: FormData) {
   try {
     const file = formData.get('file') as File;
+    const contoId = formData.get('contoId') as string;
+    const anno = formData.get('anno') as string;
+    const mese = formData.get('mese') as string;
+
     if (!file) throw new Error("Nessun file selezionato.");
+    if (!contoId || !anno || !mese) throw new Error("Parametri del conto o data mancanti.");
     
     const text = await file.text();
     const fileName = file.name.toLowerCase();
     
-    let movimenti;
+    let movimenti: any[] = [];
     
     if (fileName.endsWith('.xml')) {
       movimenti = parseXMLBanca(text);
@@ -29,9 +34,32 @@ export async function importaEstrattoConto(formData: FormData) {
       throw new Error("Nessun movimento valido trovato.");
     }
     
-    const inseriti = await importMovimentiBanca(movimenti);
+    // Assegniamo esplicitamente il conto_banca_id a ogni movimento prima di salvarlo
+    const movimentiConConto = movimenti.map(m => ({
+      ...m,
+      conto_banca_id: contoId
+    }));
+    
+    const inseriti = await importMovimentiBanca(movimentiConConto);
+
+    // Salviamo la traccia dell'upload nell'archivio storico mensile
+    const supabaseAdmin = createAdminClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false } }
+    );
+
+    await supabaseAdmin
+      .from('upload_banca')
+      .insert({
+        conto_banca_id: contoId,
+        anno: Number(anno),
+        mese: Number(mese),
+        nome_file: fileName
+      });
     
     revalidatePath('/finanza/riconciliazione');
+    revalidatePath(`/finanza/riconciliazione/${contoId}`);
     return { success: true, conteggio: inseriti?.length || 0 };
   } catch (error: any) {
     console.error("❌ Errore importazione:", error);
@@ -60,13 +88,12 @@ export async function handleConferma(formData: FormData) {
     // CASO SPECIALE: Commissione, Giroconto, Stipendio
     // ===============================================
     if (['commissione', 'giroconto', 'stipendio', 'leasing', 'ente_pubblico', 'cassa_edile', 'cessione_quinto', 'utenza', 'assicurazione'].includes(categoria)) {
-      // Salviamo il movimento come riconciliato assegnandogli la sua categoria. Non tocca le fatture.
       await supabaseAdmin
         .from('movimenti_banca')
         .update({ 
           stato_riconciliazione: 'riconciliato', 
           categoria_dedotta: categoria,
-          personale_id: personale_id || null // Se stipendio, lega il dipendente
+          personale_id: personale_id || null
         })
         .eq('id', movimento_id);
     } 
@@ -86,7 +113,6 @@ export async function handleConferma(formData: FormData) {
     // CASO B: Allocazione Multipla / Acconto
     // ===============================================
     else if (soggetto_id) {
-      // 1. Segniamo il movimento come riconciliato
       await supabaseAdmin
         .from('movimenti_banca')
         .update({ 
@@ -96,14 +122,12 @@ export async function handleConferma(formData: FormData) {
         })
         .eq('id', movimento_id);
 
-      // 2. Avviamo il Motore di Allocazione Multipla (FIFO + Combinazioni)
       await allocaPagamentoIntelligente(supabaseAdmin, soggetto_id, importo);
       
     } else {
       throw new Error("Dati insufficienti per confermare (manca scadenza, soggetto o categoria valida).");
     }
 
-    // Aggiorna tutte le viste finanziarie + Anagrafiche
     revalidatePath('/finanza/riconciliazione');
     revalidatePath('/finanza');
     revalidatePath('/scadenze');
@@ -126,14 +150,13 @@ export async function handleRifiuta(formData: FormData) {
       { auth: { persistSession: false } }
     );
     
-    // AZZERIAMO TUTTO: in questo modo il frontend mostra il menu a tendina manuale
     const { error } = await supabaseAdmin
       .from('movimenti_banca')
       .update({ 
         ai_suggerimento: null, 
         soggetto_id: null, 
         personale_id: null,
-        categoria_dedotta: null, // FONDAMENTALE
+        categoria_dedotta: null, 
         ai_confidence: 0, 
         ai_motivo: 'Selezione manuale richiesta' 
       })
@@ -149,7 +172,6 @@ export async function handleRifiuta(formData: FormData) {
   }
 }
 
-// Manteniamo il collegamento della vecchia funzione se la usi altrove
 export async function matchManuale(formData: FormData) {
   return handleConferma(formData);
 }
@@ -159,7 +181,6 @@ export async function matchManuale(formData: FormData) {
 // ============================================================================
 
 async function allocaPagamentoIntelligente(supabaseAdmin: any, soggetto_id: string, importo_pagato: number) {
-  // 1. Recupera tutte le scadenze aperte
   const { data: scadenzeAperte } = await supabaseAdmin
     .from('scadenze_pagamento')
     .select('id, importo_totale, importo_pagato, stato')
@@ -177,7 +198,6 @@ async function allocaPagamentoIntelligente(supabaseAdmin: any, soggetto_id: stri
 
   let combinazioneEsatta = null;
 
-  // 2. FASE 1: Combinazione Esatta (Limite di sicurezza: 20 fatture)
   if (items.length <= 20) {
     function trovaCombinazioneEsatta(index: number, sum: number, subset: any[]): any[] | null {
       if (sum === targetCents) return subset;
@@ -193,7 +213,6 @@ async function allocaPagamentoIntelligente(supabaseAdmin: any, soggetto_id: stri
     console.log(`⚠️ Troppe fatture (${items.length}), fallback su FIFO per evitare Timeout.`);
   }
 
-  // Se trova l'esatta combinazione, chiude quelle
   if (combinazioneEsatta) {
     for (const scadenza of combinazioneEsatta) {
       await supabaseAdmin
@@ -204,7 +223,6 @@ async function allocaPagamentoIntelligente(supabaseAdmin: any, soggetto_id: stri
     return;
   }
 
-  // 3. FASE 2: Logica FIFO
   let budgetResiduoCents = targetCents;
 
   for (const scadenza of items) {
@@ -216,7 +234,6 @@ async function allocaPagamentoIntelligente(supabaseAdmin: any, soggetto_id: stri
     const vecchioPagatoEuro = Number(scadenza.importo_pagato || 0);
     const nuovoPagatoEuro = vecchioPagatoEuro + (daPagareCents / 100);
     
-    // Tolleranza di 1 centesimo
     const nuovoStato = (nuovoPagatoEuro >= Number(scadenza.importo_totale) - 0.01) ? 'pagato' : 'parziale';
 
     await supabaseAdmin

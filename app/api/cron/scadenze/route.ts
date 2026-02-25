@@ -129,6 +129,56 @@ export async function GET(request: Request) {
     }
   }
 
+  // ==========================================
+  // PARTE 4: REMINDER UPLOAD ESTRATTO CONTO
+  // ==========================================
+  // Si attiva solo ed esclusivamente il giorno 5 del mese
+  if (oggi.getDate() === 5) {
+    // Calcoliamo il mese precedente (es. il 5 Febbraio verifico Gennaio)
+    let targetMese = oggi.getMonth(); // getMonth() restituisce 0 per Gennaio, 1 per Febbraio, ecc.
+    let targetAnno = oggi.getFullYear();
+    
+    // Se oggi è il 5 Gennaio (0), il target è Dicembre (12) dell'anno prima
+    if (targetMese === 0) {
+      targetMese = 12;
+      targetAnno -= 1;
+    }
+
+    const { data: contiAttivi } = await supabase
+      .from("conti_banca")
+      .select("id, nome_banca, nome_conto")
+      .eq("attivo", true);
+
+    if (contiAttivi) {
+      for (const conto of contiAttivi) {
+        // Verifica se l'upload per il targetMese è già stato fatto
+        const { data: uploadEsistente } = await supabase
+          .from("upload_banca")
+          .select("id")
+          .eq("conto_banca_id", conto.id)
+          .eq("anno", targetAnno)
+          .eq("mese", targetMese)
+          .single();
+
+        // Se l'upload NON esiste, invia il reminder
+        if (!uploadEsistente) {
+          const dataCalendario = `${oggi.getFullYear()}-${String(oggi.getMonth() + 1).padStart(2, '0')}-05`;
+          // Sfrutta la nuova rotta API calendar creata nello Step 3.6
+          const linkCalendario = `${siteUrl}/api/calendar?titolo=Upload+Estratto+Conto+${encodeURIComponent(conto.nome_banca)}&data=${dataCalendario}`;
+          
+          const msgBanca = `🏦 *Promemoria Finanza*\nRicorda di scaricare e importare l'estratto conto di *${conto.nome_banca}* (${conto.nome_conto}) relativo a *${targetMese}/${targetAnno}*.\n\nFallo dalla web app nella sezione Riconciliazione Bancaria.\n📅 Salva promemoria: ${linkCalendario}`;
+          
+          try {
+            await sendWhatsAppMessage(adminWhatsapp, msgBanca);
+            notificatiTotali++;
+          } catch (err) {
+            errori.push(`BancaUpload-${conto.id}`);
+          }
+        }
+      }
+    }
+  }
+
   return NextResponse.json({
     success: true,
     notificati_totali: notificatiTotali,

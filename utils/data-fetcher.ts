@@ -10,6 +10,42 @@
 import { createClient } from "@supabase/supabase-js";
 import { XMLParser } from "fast-xml-parser";
 
+// ============================================================
+// INFRASTRUTTURA: PAGINAZIONE CONDIVISA
+// ============================================================
+import { PaginationParams, PaginatedResult } from '@/types/pagination';
+
+/**
+ * Esegue una query Supabase aggiungendo i limiti di paginazione e recuperando il count totale.
+ * @param queryBuilder La query Supabase pre-costruita (es: supabase.from('...').select('*', { count: 'exact' }).eq(...))
+ * @param params Oggetto PaginationParams { page, pageSize }
+ */
+export async function executePaginatedQuery<T>(queryBuilder: any, params: PaginationParams): Promise<PaginatedResult<T>> {
+  const page = Math.max(1, params.page);
+  const pageSize = Math.max(1, params.pageSize);
+  
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  // Aggiungiamo i limiti di range alla query preesistente
+  const { data, error, count } = await queryBuilder.range(from, to);
+
+  if (error) {
+    console.error("❌ Errore executePaginatedQuery:", error);
+    throw new Error(`Errore query paginata: ${error.message}`);
+  }
+
+  const totalCount = count || 0;
+  
+  return {
+    data: data as T[],
+    totalCount,
+    page,
+    pageSize,
+    totalPages: Math.ceil(totalCount / pageSize)
+  };
+}
+
 // Client Admin (Service Role bypassa RLS)
 function getSupabaseAdmin() {
   return createClient(
@@ -1908,4 +1944,340 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
 
   console.log(`\n✅ RISULTATI PRE-MATCH: ${matchati.length} Risolti/Scartati, ${nonMatchati.length} all'AI.\n`);
   return { matchati, nonMatchati };
+}
+
+// ============================================================
+// FASE 2: SCADENZIARIO - KPI
+// ============================================================
+
+export interface ScadenzeKPIs {
+  daIncassare: number;
+  daPagare: number;
+  scaduto: number;
+  daSmistare: number;
+  dso: number;
+}
+
+export async function getScadenzeKPIs(): Promise<ScadenzeKPIs> {
+  const supabase = getSupabaseAdmin();
+  
+  // Richiama la funzione RPC creata nella migrazione SQL
+  const { data, error } = await supabase.rpc('get_scadenze_kpis');
+  
+  if (error) {
+    console.error("❌ Errore getScadenzeKPIs:", error);
+    return { daIncassare: 0, daPagare: 0, scaduto: 0, daSmistare: 0, dso: 0 };
+  }
+  
+  return data as ScadenzeKPIs;
+}
+
+import { ScadenzaWithSoggetto } from '@/types/finanza';
+
+// ============================================================
+// FASE 2: SCADENZIARIO - QUERY PAGINATA
+// ============================================================
+
+export interface FiltriScadenze {
+  tipo?: 'entrata' | 'uscita';
+  stato?: string[]; // es. ['da_pagare', 'parziale']
+  cantiere_id?: string | null; // null = Da Smistare (senza cantiere)
+  categoria?: string;
+  search?: string;
+}
+
+/**
+ * Recupera le scadenze dal database applicando filtri dinamici e paginazione server-side.
+ */
+export async function getScadenzePaginated(
+  filtri: FiltriScadenze,
+  pagination: PaginationParams
+): Promise<PaginatedResult<ScadenzaWithSoggetto>> {
+  const supabase = getSupabaseAdmin();
+
+  // 1. Costruiamo la base della query richiedendo anche il count esatto
+  let query = supabase
+    .from('scadenze_pagamento')
+    .select(`
+      *,
+      anagrafica_soggetti:soggetto_id (ragione_sociale, partita_iva, iban),
+      cantieri:cantiere_id (codice, titolo)
+    `, { count: 'exact' });
+
+  // 2. Applichiamo i filtri dinamicamente
+  if (filtri.tipo) {
+    query = query.eq('tipo', filtri.tipo);
+  }
+
+  if (filtri.stato && filtri.stato.length > 0) {
+    query = query.in('stato', filtri.stato);
+  }
+
+  if (filtri.cantiere_id !== undefined) {
+    if (filtri.cantiere_id === null) {
+      // Filtro per "Da Smistare": nessun cantiere assegnato
+      query = query.is('cantiere_id', null);
+    } else {
+      query = query.eq('cantiere_id', filtri.cantiere_id);
+    }
+  }
+
+  if (filtri.categoria) {
+    query = query.eq('categoria', filtri.categoria);
+  }
+
+  if (filtri.search) {
+    // Ricerca testuale su fattura o descrizione
+    const searchTerm = `%${filtri.search}%`;
+    query = query.or(`fattura_riferimento.ilike.${searchTerm},descrizione.ilike.${searchTerm}`);
+  }
+
+  // 3. Ordinamento (le scadenze più imminenti prima, se da pagare/incassare, altrimenti le più recenti)
+  if (filtri.stato?.includes('pagato')) {
+    query = query.order('data_pagamento', { ascending: false, nullsFirst: false });
+  } else {
+    query = query.order('data_scadenza', { ascending: true });
+  }
+
+  // 4. Eseguiamo la query passando per l'helper di paginazione creato nello Step 0.4
+  return await executePaginatedQuery<ScadenzaWithSoggetto>(query, pagination);
+}
+
+// ============================================================
+// FASE 3: CASHFLOW PROJECTION
+// ============================================================
+import { addDays, startOfWeek, format, isBefore } from 'date-fns';
+import { it } from 'date-fns/locale';
+
+export interface CashflowWeek {
+  weekLabel: string;
+  entrate: number;
+  uscite: number;
+  saldoPrevisto: number;
+}
+
+export interface CashflowProjection {
+  saldoAttuale: number;
+  weeks: CashflowWeek[];
+  hasNegativeWeeks: boolean;
+}
+
+export async function getCashflowProjection(days = 90): Promise<CashflowProjection> {
+  const supabase = getSupabaseAdmin();
+
+  // 1. Recupero Saldo Attuale Totale (Somma dei conti attivi)
+  const { data: conti } = await supabase.from('conti_banca').select('saldo_attuale');
+  const saldoAttuale = conti?.reduce((acc, c) => acc + (Number(c.saldo_attuale) || 0), 0) || 0;
+
+  // 2. Recupero Scadenze Aperte
+  const endDate = addDays(new Date(), days).toISOString().split('T')[0];
+  const { data: scadenze } = await supabase
+    .from('scadenze_pagamento')
+    .select('tipo, importo_totale, importo_pagato, data_scadenza, stato')
+    .neq('stato', 'pagato')
+    .lte('data_scadenza', endDate);
+
+  const safeScadenze = scadenze || [];
+
+  // 3. Aggregazione per Settimana
+  const weeksMap = new Map<string, { entrate: number; uscite: number }>();
+  const today = new Date();
+
+  // Pre-popoliamo le prossime 12 settimane per avere un grafico continuo
+  for (let i = 0; i < (days / 7); i++) {
+    const weekStart = startOfWeek(addDays(today, i * 7), { weekStartsOn: 1 });
+    const label = `Sett ${format(weekStart, 'w')} (${format(weekStart, 'dd MMM', { locale: it })})`;
+    weeksMap.set(label, { entrate: 0, uscite: 0 });
+  }
+
+  // Smistiamo le scadenze
+  safeScadenze.forEach(s => {
+    const residuo = Number(s.importo_totale) - Number(s.importo_pagato || 0);
+    if (residuo <= 0) return;
+
+    // Se è scaduta, la consideriamo come "impatto immediato" nella settimana corrente
+    let dScadenza = new Date(s.data_scadenza);
+    if (isBefore(dScadenza, today)) dScadenza = today;
+
+    const weekStart = startOfWeek(dScadenza, { weekStartsOn: 1 });
+    const label = `Sett ${format(weekStart, 'w')} (${format(weekStart, 'dd MMM', { locale: it })})`;
+
+    if (weeksMap.has(label)) {
+      const current = weeksMap.get(label)!;
+      if (s.tipo === 'entrata') current.entrate += residuo;
+      else current.uscite += residuo;
+    }
+  });
+
+  // 4. Calcolo Saldo Progressivo
+  let runningBalance = saldoAttuale;
+  let hasNegativeWeeks = false;
+  const weeks: CashflowWeek[] = [];
+
+  Array.from(weeksMap.entries()).forEach(([weekLabel, vals]) => {
+    runningBalance += vals.entrate;
+    runningBalance -= vals.uscite;
+    if (runningBalance < 0) hasNegativeWeeks = true;
+
+    weeks.push({
+      weekLabel,
+      entrate: vals.entrate,
+      uscite: vals.uscite,
+      saldoPrevisto: runningBalance
+    });
+  });
+
+  return { saldoAttuale, weeks, hasNegativeWeeks };
+}
+
+// ============================================================
+// FASE 5: RICONCILIAZIONE E CONTI BANCA
+// ============================================================
+
+export interface ContoSummary {
+  id: string;
+  nome_banca: string;
+  nome_conto: string;
+  iban: string;
+  saldo_attuale: number;
+  saldo_aggiornato_al: string;
+  movimenti_da_riconciliare: number;
+  ultimo_upload_anno?: number;
+  ultimo_upload_mese?: number;
+}
+
+/**
+ * Recupera un riepilogo di tutti i conti correnti bancari, 
+ * incrociando i dati con i movimenti da riconciliare e l'ultimo upload.
+ */
+export async function getContiSummary(): Promise<ContoSummary[]> {
+  const supabase = getSupabaseAdmin();
+  
+  // 1. Recupero di tutti i conti attivi
+  const { data: conti, error: errConti } = await supabase
+    .from('conti_banca')
+    .select('*')
+    .eq('attivo', true)
+    .order('nome_banca', { ascending: true });
+    
+  if (errConti || !conti) {
+    console.error("❌ Errore recupero conti:", errConti);
+    return [];
+  }
+
+  const summaries: ContoSummary[] = [];
+
+  for (const conto of conti) {
+    // 2. Conteggio movimenti non riconciliati (CORRETTO: usa stato_riconciliazione)
+    const { count: daRiconciliare } = await supabase
+      .from('movimenti_banca')
+      .select('*', { count: 'exact', head: true })
+      .eq('conto_banca_id', conto.id)
+      .eq('stato_riconciliazione', 'non_riconciliato');
+
+    // 3. Recupero info ultimo file caricato
+    const { data: ultimoUpload } = await supabase
+      .from('upload_banca')
+      .select('anno, mese')
+      .eq('conto_banca_id', conto.id)
+      .order('anno', { ascending: false })
+      .order('mese', { ascending: false })
+      .limit(1)
+      .single();
+
+    summaries.push({
+      id: conto.id,
+      nome_banca: conto.nome_banca,
+      nome_conto: conto.nome_conto,
+      iban: conto.iban,
+      saldo_attuale: conto.saldo_attuale || 0,
+      saldo_aggiornato_al: conto.saldo_aggiornato_al,
+      movimenti_da_riconciliare: daRiconciliare || 0,
+      ultimo_upload_anno: ultimoUpload?.anno,
+      ultimo_upload_mese: ultimoUpload?.mese
+    });
+  }
+
+  return summaries;
+}
+
+/**
+ * Recupera l'archivio degli upload mensili per un singolo conto e un anno specifico.
+ */
+export async function getUploadArchive(contoId: string, anno: number) {
+  const supabase = getSupabaseAdmin();
+  
+  const { data, error } = await supabase
+    .from('upload_banca')
+    .select('*')
+    .eq('conto_banca_id', contoId)
+    .eq('anno', anno)
+    .order('mese', { ascending: true });
+    
+  if (error) {
+    console.error("❌ Errore recupero archivio upload:", error);
+    return [];
+  }
+  
+  return data;
+}
+
+/**
+ * Recupera i movimenti bancari paginati per un singolo conto corrente.
+ */
+export async function getMovimentiPaginati(
+  contoId: string,
+  pagination: any, // Usiamo any qui per mantenere compatibilità con executePaginatedQuery senza dover importare tipi extra
+  filtri?: { stato?: string; search?: string; mese?: number; anno?: number }
+) {
+  const supabase = getSupabaseAdmin();
+  
+  let query = supabase
+    .from('movimenti_banca')
+    .select('*', { count: 'exact' })
+    .eq('conto_banca_id', contoId);
+
+  // CORRETTO: usa stato_riconciliazione
+  if (filtri?.stato) {
+    query = query.eq('stato_riconciliazione', filtri.stato);
+  }
+  
+  if (filtri?.search) {
+    query = query.ilike('descrizione', `%${filtri.search}%`);
+  }
+  
+  // Se vogliamo filtrare per un mese esatto, calcoliamo il range di date
+  if (filtri?.mese && filtri?.anno) {
+    const startOfMonth = new Date(filtri.anno, filtri.mese - 1, 1).toISOString();
+    const endOfMonth = new Date(filtri.anno, filtri.mese, 0, 23, 59, 59).toISOString();
+    query = query.gte('data_operazione', startOfMonth).lte('data_operazione', endOfMonth);
+  }
+
+  // Ordiniamo dal più recente al più vecchio
+  query = query.order('data_operazione', { ascending: false });
+
+  return await executePaginatedQuery(query, pagination);
+}
+
+// ============================================================
+// FASE 6: ANAGRAFICHE (PAGINAZIONE E RICERCA)
+// ============================================================
+export async function getAnagrafichePaginate(
+  pagination: { page: number; pageSize: number },
+  search?: string
+) {
+  const supabase = getSupabaseAdmin();
+  
+  let query = supabase
+    .from('anagrafica_soggetti')
+    .select('*', { count: 'exact' });
+
+  if (search) {
+    // Cerca nel nome, partita iva o codice fiscale
+    query = query.or(`ragione_sociale.ilike.%${search}%,partita_iva.ilike.%${search}%,codice_fiscale.ilike.%${search}%`);
+  }
+
+  query = query.order('ragione_sociale', { ascending: true });
+
+  return await executePaginatedQuery(query, pagination);
 }

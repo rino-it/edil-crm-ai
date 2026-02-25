@@ -87,7 +87,6 @@ export async function segnaComePagato(formData: FormData) {
 
   revalidatePath('/scadenze')
   revalidatePath('/finanza')
-  // Nota: Nessun redirect qui, così la modale/form può chiudersi o aggiornarsi
 }
 
 /**
@@ -96,8 +95,6 @@ export async function segnaComePagato(formData: FormData) {
 export async function aggiornaStatoScadute() {
   const supabase = await createClient()
 
-  // UPDATE scadenze_pagamento SET stato = 'scaduto' 
-  // WHERE data_scadenza < OGGI AND stato IN ('da_pagare', 'parziale')
   const { error } = await supabase
     .from('scadenze_pagamento')
     .update({ stato: 'scaduto' })
@@ -113,6 +110,9 @@ export async function aggiornaStatoScadute() {
   return { success: true }
 }
 
+/**
+ * 4. Assegnazione Cantiere Semplice (Legacy)
+ */
 export async function assegnaCantiereAScadenza(scadenzaId: string, cantiereId: string) {
   const supabase = await createClient();
   const { error } = await supabase
@@ -126,6 +126,102 @@ export async function assegnaCantiereAScadenza(scadenzaId: string, cantiereId: s
   }
   
   revalidatePath('/scadenze');
-  revalidatePath('/finanza'); // Aggiorna anche la dashboard!
+  revalidatePath('/finanza'); 
   return { success: true };
+}
+
+/**
+ * 5. Salva l'assegnazione del cantiere (Singolo o Multiplo - NUOVO)
+ */
+export async function salvaAssegnazioneCantiere(
+  scadenzaId: string, 
+  data: { mode: 'singolo', cantiere_id: string } | { mode: 'multiplo', allocazioni: { cantiere_id: string, importo: number }[] }
+) {
+  const supabase = await createClient()
+
+  if (data.mode === 'singolo') {
+    const { error: errUpdate } = await supabase
+      .from('scadenze_pagamento')
+      .update({ cantiere_id: data.cantiere_id || null })
+      .eq('id', scadenzaId)
+
+    if (errUpdate) throw new Error("Errore aggiornamento cantiere")
+
+    const { error: errDelete } = await supabase
+      .from('scadenze_cantiere')
+      .delete()
+      .eq('scadenza_id', scadenzaId)
+
+    if (errDelete) throw new Error("Errore rimozione vecchie allocazioni")
+
+  } else {
+    const { error: errUpdate } = await supabase
+      .from('scadenze_pagamento')
+      .update({ cantiere_id: null })
+      .eq('id', scadenzaId)
+
+    if (errUpdate) throw new Error("Errore reset cantiere")
+
+    const { error: errDelete } = await supabase
+      .from('scadenze_cantiere')
+      .delete()
+      .eq('scadenza_id', scadenzaId)
+
+    if (errDelete) throw new Error("Errore rimozione vecchie allocazioni")
+
+    const righeToInsert = data.allocazioni
+      .filter(a => a.cantiere_id && a.importo > 0)
+      .map(a => ({
+        scadenza_id: scadenzaId,
+        cantiere_id: a.cantiere_id,
+        importo: a.importo
+      }))
+
+    if (righeToInsert.length > 0) {
+      const { error: errInsert } = await supabase
+        .from('scadenze_cantiere')
+        .insert(righeToInsert)
+
+      if (errInsert) throw new Error("Errore inserimento nuove allocazioni: " + errInsert.message)
+    }
+  }
+
+  revalidatePath('/scadenze')
+  revalidatePath('/scadenze/da-smistare')
+}
+
+/**
+ * 6. Assegna massivamente un cantiere a più scadenze ("Da Smistare")
+ */
+export async function assegnaCantiereBulk(scadenzaIds: string[], cantiereId: string) {
+  const supabase = await createClient()
+  
+  const { error } = await supabase
+    .from('scadenze_pagamento')
+    .update({ cantiere_id: cantiereId || null })
+    .in('id', scadenzaIds)
+
+  if (error) {
+    console.error("Errore assegnaCantiereBulk:", error)
+    throw new Error("Impossibile assegnare il cantiere in modo massivo.")
+  }
+
+  const { error: errDelete } = await supabase
+    .from('scadenze_cantiere')
+    .delete()
+    .in('scadenza_id', scadenzaIds)
+
+  if (errDelete) {
+    console.error("Errore pulizia scadenze_cantiere bulk:", errDelete)
+  }
+
+  revalidatePath('/scadenze')
+  revalidatePath('/scadenze/da-smistare')
+}
+
+/**
+ * 7. Invia sollecito WhatsApp (Placeholder per Fase 3)
+ */
+export async function inviaReminderWhatsApp(scadenzaId: string) {
+  console.log("Invia reminder per scadenza", scadenzaId)
 }

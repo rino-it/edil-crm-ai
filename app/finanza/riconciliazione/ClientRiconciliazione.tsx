@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Upload, BrainCircuit, Check, X, Search, Loader2 } from 'lucide-react'
+import { PaginationControls } from "@/components/ui/pagination-controls"
 
 // STEP 5: Mappa estesa con le categorie speciali
 const BADGE_MAP: Record<string, { icon: string; label: string; className: string }> = {
@@ -34,7 +35,14 @@ const getConfidenceStyle = (conf: number) => {
   return 'bg-rose-100 text-rose-800';
 };
 
-export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { movimenti: any[], scadenzeAperte: any[] }) {
+interface Props {
+  movimenti: any[];
+  scadenzeAperte: any[];
+  contoId?: string;
+  pagination?: any;
+}
+
+export default function ClientRiconciliazione({ movimenti, scadenzeAperte, contoId, pagination }: Props) {
   const router = useRouter()
   const [isUploading, setIsUploading] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
@@ -55,7 +63,14 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
   const handleUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setIsUploading(true)
+    
     const formData = new FormData(e.currentTarget)
+    
+    // Assicuriamoci che contoId, anno e mese siano presenti per il nuovo backend (Step 5.3)
+    if (contoId && !formData.has('contoId')) formData.append('contoId', contoId);
+    if (!formData.has('anno')) formData.append('anno', new Date().getFullYear().toString());
+    if (!formData.has('mese')) formData.append('mese', (new Date().getMonth() + 1).toString());
+
     await importaEstrattoConto(formData)
     setIsUploading(false)
     router.refresh()
@@ -180,11 +195,12 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
           <CardContent>
             <form onSubmit={handleUpload} className="flex gap-3">
               <Input type="file" name="file" accept=".csv,.xml" required className="cursor-pointer" />
-              <Button type="submit" disabled={isUploading} className="bg-blue-600 hover:bg-blue-700">
-                {isUploading ? <Loader2 className="animate-spin h-4 w-4" /> : <Upload className="h-4 w-4 mr-2" />}
-                Importa File
+              <Button type="submit" disabled={isUploading || !contoId} className="bg-blue-600 hover:bg-blue-700">
+                {isUploading ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
+                {isUploading ? "Importazione..." : "Importa File"}
               </Button>
             </form>
+            {!contoId && <p className="text-xs text-rose-500 mt-2">Nessun conto selezionato.</p>}
           </CardContent>
         </Card>
 
@@ -214,7 +230,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
           />
         </div>
         <Badge variant="outline" className="whitespace-nowrap px-3 py-1">
-          {movimentiFiltrati.length} / {movimentiLocali.length} righe
+          {movimentiFiltrati.length} / {movimentiLocali.length} righe visibili
         </Badge>
       </div>
 
@@ -352,6 +368,19 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte }: { m
               )}
             </TableBody>
           </Table>
+          
+          {/* NUOVO: Componente di Paginazione */}
+          {pagination && (
+            <div className="border-t border-zinc-200 bg-zinc-50/50 p-4">
+              <PaginationControls 
+                totalCount={pagination.totalCount}
+                currentPage={pagination.page}
+                pageSize={pagination.pageSize}
+                totalPages={pagination.totalPages}
+              />
+            </div>
+          )}
+          
         </CardContent>
       </Card>
     </div>

@@ -10,7 +10,7 @@ import {
 import CashflowChart from './CashflowChart'
 import AgingChart from './AgingChart'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { TrendingUp, TrendingDown, Wallet, Activity, BarChart3, HardHat, ChevronRight, AlertCircle } from 'lucide-react'
+import { TrendingUp, TrendingDown, Wallet, Activity, LineChart, HardHat, ChevronRight, AlertCircle, ArrowRight } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,7 +50,7 @@ export default async function FinanzaPage() {
           )}
         </div>
 
-        {/* SEZIONE 1: KPI Globali */}
+        {/* SEZIONE 1: KPI Globali (Cliccabili per navigare alle nuove pagine) */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <Card className={`bg-white shadow-sm border-l-4 ${kpis.cassa_attuale < 0 ? 'border-l-rose-500' : 'border-l-blue-500'}`}>
             <CardHeader className="pb-2">
@@ -65,27 +65,39 @@ export default async function FinanzaPage() {
             </CardContent>
           </Card>
 
-          <Card className="bg-white shadow-sm border-l-4 border-l-emerald-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs font-bold text-zinc-500 uppercase flex items-center justify-between">
-                Tot. Emesso <TrendingUp className="h-4 w-4 text-emerald-500" />
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-black text-emerald-700">{formatEuro(kpis.fatturato)}</div>
-            </CardContent>
-          </Card>
+          <Link href="/finanza/da-incassare" className="block group h-full">
+            <Card className="bg-white shadow-sm border-l-4 border-l-emerald-500 h-full transition-all hover:shadow-md hover:bg-emerald-50/30">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs font-bold text-zinc-500 uppercase flex items-center justify-between">
+                  Tot. Emesso <TrendingUp className="h-4 w-4 text-emerald-500" />
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-black text-emerald-700 flex items-center gap-2">
+                  {formatEuro(kpis.fatturato)}
+                  <ArrowRight size={14} className="text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+                <p className="text-[10px] text-zinc-400 mt-1">Da Incassare &rarr;</p>
+              </CardContent>
+            </Card>
+          </Link>
 
-          <Card className="bg-white shadow-sm border-l-4 border-l-rose-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs font-bold text-zinc-500 uppercase flex items-center justify-between">
-                Tot. Impegnato <TrendingDown className="h-4 w-4 text-rose-500" />
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-black text-rose-700">{formatEuro(kpis.costi)}</div>
-            </CardContent>
-          </Card>
+          <Link href="/finanza/da-pagare" className="block group h-full">
+            <Card className="bg-white shadow-sm border-l-4 border-l-rose-500 h-full transition-all hover:shadow-md hover:bg-rose-50/30">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs font-bold text-zinc-500 uppercase flex items-center justify-between">
+                  Tot. Impegnato <TrendingDown className="h-4 w-4 text-rose-500" />
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-black text-rose-700 flex items-center gap-2">
+                  {formatEuro(kpis.costi)}
+                  <ArrowRight size={14} className="text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+                <p className="text-[10px] text-zinc-400 mt-1">Da Pagare &rarr;</p>
+              </CardContent>
+            </Card>
+          </Link>
 
           <Card className="bg-white shadow-sm border-l-4 border-l-indigo-500">
             <CardHeader className="pb-2">
@@ -100,24 +112,36 @@ export default async function FinanzaPage() {
             </CardContent>
           </Card>
 
-          <Card className={`bg-white shadow-sm border-l-4 border-l-slate-500`}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs font-bold text-zinc-500 uppercase flex items-center justify-between">
-                DSO <BarChart3 className="h-4 w-4 text-slate-500" />
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-black text-zinc-900">{kpis.dso} <span className="text-sm font-medium text-zinc-400">gg</span></div>
-            </CardContent>
-          </Card>
+          {/* Sostituito: Da DSO a Programmazione Cashflow */}
+          <Link href="/finanza/programmazione" className="block group h-full">
+            <Card className={`bg-white shadow-sm border-l-4 border-l-blue-500 h-full transition-all hover:shadow-md hover:bg-blue-50/30`}>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs font-bold text-zinc-500 uppercase flex items-center justify-between">
+                  Programmazione <LineChart className="h-4 w-4 text-blue-500" />
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-lg font-black text-blue-700 flex items-center gap-2 mt-1">
+                  Cashflow 90gg
+                  <ArrowRight size={14} className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+                <p className="text-[10px] text-zinc-400 mt-1">Apri Simulatore &rarr;</p>
+              </CardContent>
+            </Card>
+          </Link>
         </div>
 
-        {/* SEZIONE 2 & 3: Grafici e Aging Analisi (Splittata) */}
+        {/* SEZIONE 2 & 3: Grafici e Aging Analisi (Splittata e Cliccabile) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Cashflow Previsionale (2 colonne) */}
           <Card className="lg:col-span-2 shadow-sm bg-white">
             <CardHeader>
-              <CardTitle className="text-lg">Proiezione Liquidità (90gg)</CardTitle>
+              <CardTitle className="text-lg flex justify-between items-center">
+                Proiezione Liquidità (90gg)
+                <Link href="/finanza/programmazione">
+                  <span className="text-xs text-blue-600 font-normal hover:underline cursor-pointer">Apri Dettaglio Completo</span>
+                </Link>
+              </CardTitle>
               <CardDescription>Il punto iniziale include il peso di <strong>tutti i debiti/crediti scaduti nel passato</strong>.</CardDescription>
             </CardHeader>
             <CardContent className="pt-2">
@@ -125,29 +149,35 @@ export default async function FinanzaPage() {
             </CardContent>
           </Card>
 
-          {/* Aging Analysis (1 colonna impilata) */}
+          {/* Aging Analysis (1 colonna impilata, resa cliccabile) */}
           <div className="flex flex-col gap-6">
-            <Card className="shadow-sm bg-white border-t-4 border-t-emerald-500">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-sm">⚠️ Ritardi Clienti (Da Incassare)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <AgingChart data={agingCrediti} />
-              </CardContent>
-            </Card>
+            <Link href="/finanza/scaduto?tab=crediti" className="group">
+              <Card className="shadow-sm bg-white border-t-4 border-t-emerald-500 transition-all hover:shadow-md cursor-pointer">
+                <CardHeader className="pb-4 flex flex-row justify-between items-center">
+                  <CardTitle className="text-sm">⚠️ Ritardi Clienti (Da Incassare)</CardTitle>
+                  <ArrowRight size={14} className="text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </CardHeader>
+                <CardContent>
+                  <AgingChart data={agingCrediti} />
+                </CardContent>
+              </Card>
+            </Link>
 
-            <Card className="shadow-sm bg-white border-t-4 border-t-rose-500">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-sm">⚠️ Ritardi Fornitori (Da Pagare)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <AgingChart data={agingDebiti} />
-              </CardContent>
-            </Card>
+            <Link href="/finanza/scaduto?tab=debiti" className="group">
+              <Card className="shadow-sm bg-white border-t-4 border-t-rose-500 transition-all hover:shadow-md cursor-pointer">
+                <CardHeader className="pb-4 flex flex-row justify-between items-center">
+                  <CardTitle className="text-sm">⚠️ Ritardi Fornitori (Da Pagare)</CardTitle>
+                  <ArrowRight size={14} className="text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </CardHeader>
+                <CardContent>
+                  <AgingChart data={agingDebiti} />
+                </CardContent>
+              </Card>
+            </Link>
           </div>
         </div>
 
-        {/* SEZIONE 4: Analisi di Commessa */}
+        {/* SEZIONE 4: Analisi di Commessa (Intatta) */}
         <div>
           <h2 className="text-xl font-bold tracking-tight text-zinc-900 mb-4 flex items-center gap-2">
             <HardHat className="h-5 w-5 text-zinc-400" /> Redditività per Cantiere (Scadenze Assegnate)

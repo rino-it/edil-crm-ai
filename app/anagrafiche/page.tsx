@@ -1,6 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
-import { getSoggetti, getKPIAnagrafiche } from '@/utils/data-fetcher'
+import { getAnagrafichePaginate, getKPIAnagrafiche } from '@/utils/data-fetcher'
 import { addSoggetto } from './actions'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,21 +8,38 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
+import { DEFAULT_PAGE_SIZE } from '@/types/pagination'
+import { PaginationControls } from '@/components/ui/pagination-controls'
 import { Building2, Users, Wallet, TrendingDown, Plus, Search, Mail, Phone, ExternalLink } from "lucide-react"
 import Link from 'next/link'
+
+export const dynamic = 'force-dynamic'
 
 export default async function AnagrafichePage({
   searchParams,
 }: {
-  searchParams: Promise<{ tipo?: string; error?: string; nuovo?: string }>
+  searchParams: Promise<{ tipo?: string; error?: string; nuovo?: string; page?: string; search?: string }>
 }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { tipo, error, nuovo } = await searchParams
-  const soggetti = await getSoggetti(tipo)
+  const resolvedParams = await searchParams
+  const tipo = resolvedParams.tipo
+  const error = resolvedParams.error
+  const nuovo = resolvedParams.nuovo
+  const page = Number(resolvedParams.page) || 1
+  const search = resolvedParams.search || ''
+
+  // Caricamento dati con Paginazione e Ricerca
+  const result = await getAnagrafichePaginate(
+    { page, pageSize: DEFAULT_PAGE_SIZE },
+    search,
+    tipo
+  )
   const kpis = await getKPIAnagrafiche()
+
+  const formatEuro = (val: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val)
 
   return (
     <div className="min-h-screen bg-zinc-50 p-8">
@@ -58,9 +75,9 @@ export default async function AnagrafichePage({
           </div>
         )}
 
-        {/* Sezione Creazione Inline (visibile solo se URL ha ?nuovo=true) */}
+        {/* Sezione Creazione Inline */}
         {nuovo && (
-          <Card className="border-blue-200 bg-blue-50/30 shadow-sm">
+          <Card className="border-blue-200 bg-blue-50/30 shadow-sm animate-in slide-in-from-top duration-300">
             <CardHeader className="pb-4">
               <CardTitle className="text-blue-800">Aggiungi Nuovo Soggetto</CardTitle>
               <CardDescription className="text-blue-600/80">Inserisci i dati anagrafici del cliente o fornitore.</CardDescription>
@@ -122,63 +139,71 @@ export default async function AnagrafichePage({
 
         {/* KPI Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="border-zinc-200 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-2 bg-white rounded-t-xl">
-              <CardTitle className="text-sm font-medium text-zinc-500">Fornitori</CardTitle>
+          <Card className="border-zinc-200 shadow-sm bg-white">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-zinc-500 uppercase">Fornitori</CardTitle>
               <Users className="h-4 w-4 text-orange-500" />
             </CardHeader>
-            <CardContent className="bg-white rounded-b-xl">
-              <div className="text-2xl font-bold">{kpis.fornitori}</div>
+            <CardContent>
+              <div className="text-2xl font-black">{kpis.fornitori}</div>
             </CardContent>
           </Card>
-          <Card className="border-zinc-200 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-2 bg-white rounded-t-xl">
-              <CardTitle className="text-sm font-medium text-zinc-500">Clienti</CardTitle>
+          <Card className="border-zinc-200 shadow-sm bg-white">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-zinc-500 uppercase">Clienti</CardTitle>
               <Users className="h-4 w-4 text-green-500" />
             </CardHeader>
-            <CardContent className="bg-white rounded-b-xl">
-              <div className="text-2xl font-bold">{kpis.clienti}</div>
+            <CardContent>
+              <div className="text-2xl font-black">{kpis.clienti}</div>
             </CardContent>
           </Card>
-          <Card className="border-zinc-200 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-2 bg-white rounded-t-xl">
-              <CardTitle className="text-sm font-medium text-zinc-500">Crediti Aperti</CardTitle>
-              <TrendingDown className="h-4 w-4 text-green-600" />
+          <Card className="border-zinc-200 shadow-sm bg-white">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-zinc-500 uppercase">Crediti Aperti</CardTitle>
+              <TrendingDown className="h-4 w-4 text-emerald-600" />
             </CardHeader>
-            <CardContent className="bg-white rounded-b-xl">
-              <div className="text-2xl font-bold text-green-600">€ 0,00</div>
-              <p className="text-xs text-zinc-400 mt-1">Placeholder (Step 3)</p>
+            <CardContent>
+              <div className="text-2xl font-black text-emerald-600">{formatEuro(kpis.totale_crediti)}</div>
             </CardContent>
           </Card>
-          <Card className="border-zinc-200 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-2 bg-white rounded-t-xl">
-              <CardTitle className="text-sm font-medium text-zinc-500">Debiti Aperti</CardTitle>
+          <Card className="border-zinc-200 shadow-sm bg-white">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-zinc-500 uppercase">Debiti Aperti</CardTitle>
               <Wallet className="h-4 w-4 text-red-600" />
             </CardHeader>
-            <CardContent className="bg-white rounded-b-xl">
-              <div className="text-2xl font-bold text-red-600">€ 0,00</div>
-              <p className="text-xs text-zinc-400 mt-1">Placeholder (Step 3)</p>
+            <CardContent>
+              <div className="text-2xl font-black text-red-600">{formatEuro(kpis.totale_debiti)}</div>
             </CardContent>
           </Card>
         </div>
 
         {/* Filtri e Tabella */}
-        <Card className="shadow-sm border-zinc-200">
-          <CardHeader className="border-b border-zinc-100 bg-white">
+        <Card className="shadow-sm border-zinc-200 bg-white">
+          <CardHeader className="border-b border-zinc-100 p-4">
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-              <div className="flex bg-zinc-100 p-1 rounded-lg">
-                <Link href="/anagrafiche" className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${!tipo ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}>Tutti</Link>
-                <Link href="/anagrafiche?tipo=fornitore" className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${tipo === 'fornitore' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}>Fornitori</Link>
-                <Link href="/anagrafiche?tipo=cliente" className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${tipo === 'cliente' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}>Clienti</Link>
+              <div className="flex bg-zinc-100 p-1 rounded-lg w-full md:w-auto">
+                <Link href="/anagrafiche" className={`flex-1 md:flex-none text-center px-4 py-1.5 rounded-md text-sm font-bold transition-colors ${!tipo ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}>Tutti</Link>
+                <Link href="/anagrafiche?tipo=fornitore" className={`flex-1 md:flex-none text-center px-4 py-1.5 rounded-md text-sm font-bold transition-colors ${tipo === 'fornitore' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}>Fornitori</Link>
+                <Link href="/anagrafiche?tipo=cliente" className={`flex-1 md:flex-none text-center px-4 py-1.5 rounded-md text-sm font-bold transition-colors ${tipo === 'cliente' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}>Clienti</Link>
               </div>
               
-              <div className="relative w-full md:w-80">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-                <Input placeholder="Cerca ragione sociale o P.IVA..." className="pl-9 bg-white border-zinc-200" />
-              </div>
+              {/* Motore di Ricerca Server-Side */}
+              <form action="/anagrafiche" method="GET" className="flex items-center gap-2 w-full md:w-80">
+                {tipo && <input type="hidden" name="tipo" value={tipo} />}
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                  <Input 
+                    name="search" 
+                    defaultValue={search} 
+                    placeholder="Cerca Ragione Sociale o P.IVA..." 
+                    className="pl-9 bg-zinc-50 border-zinc-200" 
+                  />
+                </div>
+                <Button type="submit" variant="secondary" size="sm" className="h-10">Cerca</Button>
+              </form>
             </div>
           </CardHeader>
-          <CardContent className="p-0 bg-white">
+          <CardContent className="p-0">
             <Table>
               <TableHeader className="bg-zinc-50/50">
                 <TableRow>
@@ -186,24 +211,23 @@ export default async function AnagrafichePage({
                   <TableHead>Identificativo</TableHead>
                   <TableHead>Tipo</TableHead>
                   <TableHead>Contatti</TableHead>
-                  <TableHead>Pagamento</TableHead>
                   <TableHead className="text-right">Azioni</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {soggetti.length === 0 ? (
+                {result.data.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-16 text-zinc-500">
+                    <TableCell colSpan={5} className="text-center py-16 text-zinc-500">
                       <div className="flex flex-col items-center justify-center gap-2">
                         <Building2 className="h-8 w-8 text-zinc-300" />
-                        <p className="italic">Nessun soggetto trovato in questa categoria.</p>
+                        <p className="italic">Nessun soggetto trovato.</p>
                       </div>
                     </TableCell>
                   </TableRow>
                 ) : (
-                  soggetti.map((s) => (
+                  result.data.map((s) => (
                     <TableRow key={s.id} className="hover:bg-zinc-50/80 group transition-colors">
-                      <TableCell className="font-medium text-zinc-900">
+                      <TableCell className="font-bold text-zinc-900">
                         <Link href={`/anagrafiche/${s.id}`} className="hover:text-blue-600 transition-colors">
                           {s.ragione_sociale}
                         </Link>
@@ -216,7 +240,7 @@ export default async function AnagrafichePage({
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className={s.tipo === 'cliente' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-orange-50 text-orange-700 border-orange-200'}>
-                          {s.tipo.toUpperCase()}
+                          {s.tipo?.toUpperCase()}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-zinc-500 text-xs">
@@ -224,9 +248,6 @@ export default async function AnagrafichePage({
                           <span className="flex items-center gap-1.5"><Mail size={12} className="text-zinc-400" /> {s.email || '-'}</span>
                           <span className="flex items-center gap-1.5"><Phone size={12} className="text-zinc-400" /> {s.telefono || '-'}</span>
                         </div>
-                      </TableCell>
-                      <TableCell className="text-zinc-500 text-xs font-medium">
-                        {s.condizioni_pagamento}
                       </TableCell>
                       <TableCell className="text-right">
                         <Link href={`/anagrafiche/${s.id}`}>
@@ -240,6 +261,17 @@ export default async function AnagrafichePage({
                 )}
               </TableBody>
             </Table>
+
+            {/* Controlli Paginazione */}
+            <div className="p-4 border-t border-zinc-100 bg-zinc-50/30">
+              <PaginationControls 
+                totalCount={result.totalCount}
+                currentPage={result.page}
+                pageSize={result.pageSize}
+                totalPages={result.totalPages}
+                searchParams={{ tipo, search }}
+              />
+            </div>
           </CardContent>
         </Card>
       </div>

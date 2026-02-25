@@ -14,14 +14,22 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ArrowLeft, Save, Trash2, Receipt, History, Wallet, BrainCircuit } from "lucide-react"
+import { PaginationControls } from "@/components/ui/pagination-controls"
+import { DEFAULT_PAGE_SIZE } from '@/types/pagination'
 import Link from 'next/link'
 
+export const dynamic = 'force-dynamic'
+
 export default async function SoggettoDetailPage({ 
-  params 
+  params,
+  searchParams
 }: { 
-  params: Promise<{ id: string }> 
+  params: Promise<{ id: string }>,
+  searchParams: Promise<{ pAperte?: string; pStorico?: string }>
 }) {
   const { id } = await params
+  const { pAperte, pStorico } = await searchParams
+  
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -29,11 +37,15 @@ export default async function SoggettoDetailPage({
   const soggetto = await getSoggettoById(id) as any
   if (!soggetto) notFound()
 
-  // STEP 5B e 5C: Chiamate parallele per i dati della Scheda Fornitore
+  // Parametri di paginazione per le due tabelle
+  const pageAperte = Number(pAperte) || 1
+  const pageStorico = Number(pStorico) || 1
+
+  // STEP 6.2: Recupero dati con supporto alla paginazione (retrofit)
   const [esposizione, storicoPagamenti, fattureAperte] = await Promise.all([
     getEsposizioneSoggetto(id),
-    getStoricoPaymentsSoggetto(id),
-    getFattureAperteSoggetto(id)
+    getStoricoPaymentsSoggetto(id, { page: pageStorico, pageSize: 10 }), // Storico paginato
+    getFattureAperteSoggetto(id, { page: pageAperte, pageSize: 10 })   // Fatture aperte paginate
   ])
 
   const formatEuro = (val: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val)
@@ -126,18 +138,14 @@ export default async function SoggettoDetailPage({
                     <Input name="indirizzo" defaultValue={soggetto.indirizzo || ''} />
                   </div>
 
-                  {/* ============================================================== */}
-                  {/* NUOVA SEZIONE: REGOLE RICONCILIAZIONE (STEP 7) */}
-                  {/* ============================================================== */}
+                  {/* Automazione Riconciliazione (Logica preservata) */}
                   <div className="mt-6 pt-6 border-t border-zinc-100">
                     <h3 className="text-sm font-semibold text-zinc-900 mb-3 flex items-center gap-2">
                       <BrainCircuit className="h-4 w-4 text-indigo-600" />
                       Automazione Riconciliazione (Soggetti Speciali)
                     </h3>
                     <div className="space-y-4 bg-zinc-50 p-4 rounded-lg border border-zinc-200">
-                      
                       <div className="flex items-center gap-3">
-                        {/* Checkbox nascosto logicamente che guida il CSS 'peer' */}
                         <input 
                           type="checkbox" 
                           id="auto_riconcilia"
@@ -150,8 +158,6 @@ export default async function SoggettoDetailPage({
                           Auto-riconcilia pagamenti senza cercare fatture
                         </Label>
                       </div>
-                      
-                      {/* Questo div appare solo se il checkbox 'peer' è selezionato */}
                       <div className="hidden peer-checked:block pl-7 space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
                         <Label htmlFor="categoria_riconciliazione" className="text-xs text-zinc-500">
                           Assegna la categoria per il bilancio:
@@ -170,10 +176,8 @@ export default async function SoggettoDetailPage({
                           <option value="assicurazione">🛡️ Assicurazione</option>
                         </select>
                       </div>
-
                     </div>
                   </div>
-                  {/* ============================================================== */}
 
                   <div className="pt-4 flex justify-end">
                     <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
@@ -211,7 +215,7 @@ export default async function SoggettoDetailPage({
                         name="note" 
                         defaultValue={soggetto.note || ''} 
                         rows={4}
-                        className="flex min-h-[80px] w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex min-h-[80px] w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                       />
                     </div>
                   </div>
@@ -225,7 +229,7 @@ export default async function SoggettoDetailPage({
             </Card>
           </div>
 
-          {/* Colonna Destra: Stats e Pericolo */}
+          {/* Colonna Destra: Stats */}
           <div className="space-y-6">
             <Card className="bg-zinc-900 text-white shadow-xl">
               <CardHeader>
@@ -236,17 +240,17 @@ export default async function SoggettoDetailPage({
               </CardHeader>
               <CardContent className="space-y-6">
                 <div>
-                  <p className="text-zinc-400 text-xs">Da pagare</p>
+                  <p className="text-zinc-400 text-xs">Saldo in sospeso</p>
                   <p className="text-3xl font-bold text-rose-400">{formatEuro(esposizione.totale_da_pagare)}</p>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4 border-t border-zinc-800 pt-4">
                   <div>
-                    <p className="text-zinc-500 text-xs">Totale Fatturato</p>
+                    <p className="text-zinc-500 text-xs">Totale Volume</p>
                     <p className="text-sm font-semibold">{formatEuro(esposizione.totale_fatture)}</p>
                   </div>
                   <div>
-                    <p className="text-zinc-500 text-xs">Totale Pagato</p>
+                    <p className="text-zinc-500 text-xs">Totale Saldato</p>
                     <p className="text-sm font-semibold text-emerald-400">{formatEuro(esposizione.totale_pagato)}</p>
                   </div>
                 </div>
@@ -274,18 +278,18 @@ export default async function SoggettoDetailPage({
           </div>
         </div>
 
-        {/* Sezione Fatture Aperte */}
+        {/* STEP 6.2: Sezione Fatture Aperte con Paginazione */}
         <Card className="mt-8 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div className="space-y-1">
               <CardTitle className="flex items-center gap-2">
                 <Receipt className="h-5 w-5 text-zinc-500" />
-                Fatture Aperte ({fattureAperte.length})
+                Fatture Aperte ({fattureAperte.totalCount})
               </CardTitle>
               <CardDescription>Elenco delle fatture non ancora saldate completamente.</CardDescription>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -298,13 +302,12 @@ export default async function SoggettoDetailPage({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {fattureAperte.length === 0 ? (
+                {fattureAperte.data.length === 0 ? (
                   <TableRow><TableCell colSpan={6} className="text-center py-8 text-zinc-400">Nessuna fattura aperta al momento.</TableCell></TableRow>
                 ) : (
-                  fattureAperte.map((f) => {
+                  fattureAperte.data.map((f: any) => {
                     const residuo = Number(f.importo_totale) - Number(f.importo_pagato || 0);
                     const isScaduta = new Date(f.data_scadenza) < new Date();
-                    
                     return (
                       <TableRow key={f.id} className="hover:bg-zinc-50/50">
                         <TableCell className="text-sm">
@@ -329,21 +332,30 @@ export default async function SoggettoDetailPage({
                 )}
               </TableBody>
             </Table>
+            <div className="p-4 border-t border-zinc-100 bg-zinc-50/30">
+              <PaginationControls 
+                totalCount={fattureAperte.totalCount}
+                currentPage={fattureAperte.page}
+                pageSize={fattureAperte.pageSize}
+                totalPages={fattureAperte.totalPages}
+                paramName="pAperte" // Parametro specifico per questa tabella
+              />
+            </div>
           </CardContent>
         </Card>
 
-        {/* Sezione Storico Pagamenti */}
+        {/* STEP 6.2: Sezione Storico Pagamenti con Paginazione */}
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div className="space-y-1">
               <CardTitle className="flex items-center gap-2">
                 <History className="h-5 w-5 text-zinc-500" />
-                Storico Pagamenti Riconciliati
+                Storico Pagamenti Riconciliati ({storicoPagamenti.totalCount})
               </CardTitle>
               <CardDescription>Ultimi pagamenti e acconti registrati e verificati tramite la banca.</CardDescription>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -355,13 +367,12 @@ export default async function SoggettoDetailPage({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {storicoPagamenti.length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="text-center py-8 text-zinc-400">Nessun pagamento registrato nello storico.</TableCell></TableRow>
+                {storicoPagamenti.data.length === 0 ? (
+                  <TableRow><TableCell colSpan={5} className="text-center py-8 text-zinc-400">Nessun pagamento registrato.</TableCell></TableRow>
                 ) : (
-                  storicoPagamenti.map((m: any) => {
+                  storicoPagamenti.data.map((m: any) => {
                     const isAcconto = !m.scadenza_id;
                     const fattura = m.scadenze_pagamento ? m.scadenze_pagamento.fattura_riferimento : 'Nessuna';
-                    
                     return (
                       <TableRow key={m.id} className="hover:bg-zinc-50/50">
                         <TableCell className="text-sm whitespace-nowrap">
@@ -389,6 +400,15 @@ export default async function SoggettoDetailPage({
                 )}
               </TableBody>
             </Table>
+            <div className="p-4 border-t border-zinc-100 bg-zinc-50/30">
+              <PaginationControls 
+                totalCount={storicoPagamenti.totalCount}
+                currentPage={storicoPagamenti.page}
+                pageSize={storicoPagamenti.pageSize}
+                totalPages={storicoPagamenti.totalPages}
+                paramName="pStorico" // Parametro specifico per questa tabella
+              />
+            </div>
           </CardContent>
         </Card>
 
