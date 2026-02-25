@@ -116,25 +116,33 @@ export default async function DashboardRiconciliazionePage() {
         </div>
       </div>
 
-      {/* Archivio Upload Mensili - Placeholder per Step 5.4 */}
+      {/* Archivio Upload Mensili Dinamico per ogni conto */}
       <div className="pt-8">
-        <h2 className="text-xl font-bold text-zinc-800 mb-4">Archivio Upload 2026</h2>
-        {/* Esempio statico, puoi renderlo dinamico iterando sui conti */}
-        <div className="bg-white p-6 rounded-xl border border-zinc-200 shadow-sm">
-          <div className="flex justify-between items-center border-b border-zinc-100 pb-2">
-            <h3 className="font-bold text-zinc-700">Situazione Globale</h3>
-          </div>
-          <div className="grid grid-cols-3 md:grid-cols-6 lg:grid-cols-12 gap-2 mt-4">
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((meseNum) => (
-              <EstrattiContoMeseDialog 
-                key={meseNum}
-                contoId={conti[0]?.id || ''} 
-                anno={2026} 
-                meseNum={meseNum} 
-                haEstratto={false}
-              />
-            ))}
-          </div>
+        <h2 className="text-xl font-bold text-zinc-800 mb-4">Archivio Estratti Conto 2026</h2>
+        
+        <div className="bg-white p-6 rounded-xl border border-zinc-200 shadow-sm space-y-8">
+          {conti.length === 0 ? (
+            <p className="text-zinc-500 italic text-sm">Aggiungi un conto corrente per visualizzare i calendari.</p>
+          ) : (
+            conti.map(conto => (
+              <div key={`calendar-${conto.id}`}>
+                <div className="flex justify-between items-center border-b border-zinc-100 pb-2">
+                  <h3 className="font-bold text-zinc-700">{conto.nome_banca} - {conto.nome_conto}</h3>
+                </div>
+                <div className="grid grid-cols-3 md:grid-cols-6 lg:grid-cols-12 gap-2 mt-4">
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((meseNum) => (
+                    <EstrattiContoMeseDialog 
+                      key={meseNum}
+                      contoId={conto.id} 
+                      anno={2026} 
+                      meseNum={meseNum} 
+                      haEstratto={false} // La logica per verificare se è stato caricato andrà aggiunta qui in futuro
+                    />
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
