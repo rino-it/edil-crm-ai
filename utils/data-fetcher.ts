@@ -869,19 +869,35 @@ export async function upsertSoggettoDaPIVA(
   return { success: true, id: data.id };
 }
 
-export async function getKPIAnagrafiche(): Promise<{ fornitori: number; clienti: number }> {
+export async function getKPIAnagrafiche(): Promise<{ fornitori: number; clienti: number; totale_debiti: number; totale_crediti: number }> {
   const supabase = getSupabaseAdmin();
   
   const { data, error } = await supabase
     .from("anagrafica_soggetti")
     .select("tipo");
 
-  if (error || !data) return { fornitori: 0, clienti: 0 };
+  if (error || !data) return { fornitori: 0, clienti: 0, totale_debiti: 0, totale_crediti: 0 };
 
-  const fornitori = data.filter(s => s.tipo === 'fornitore').length;
-  const clienti = data.filter(s => s.tipo === 'cliente').length;
+  const fornitori = data.filter((s: any) => s.tipo === 'fornitore').length;
+  const clienti = data.filter((s: any) => s.tipo === 'cliente').length;
 
-  return { fornitori, clienti };
+  // Calcola totale debiti (uscite non pagate) e crediti (entrate non pagate)
+  const { data: scadenze } = await supabase
+    .from("scadenze_pagamento")
+    .select("tipo, importo_totale, importo_pagato")
+    .in("stato", ["da_pagare", "parziale", "scaduto"]);
+
+  let totale_debiti = 0;
+  let totale_crediti = 0;
+  if (scadenze) {
+    for (const s of scadenze) {
+      const residuo = Number(s.importo_totale) - Number(s.importo_pagato || 0);
+      if (s.tipo === 'uscita') totale_debiti += residuo;
+      else if (s.tipo === 'entrata') totale_crediti += residuo;
+    }
+  }
+
+  return { fornitori, clienti, totale_debiti, totale_crediti };
 }
 
 export interface Scadenza {
@@ -2268,9 +2284,28 @@ export async function getMovimentiPaginati(
 // ============================================================
 // FASE 6: ANAGRAFICHE (PAGINAZIONE E RICERCA)
 // ============================================================
+interface SoggettoAnagrafica {
+  id: string;
+  ragione_sociale: string;
+  tipo: string;
+  partita_iva?: string;
+  codice_fiscale?: string;
+  email?: string;
+  telefono?: string;
+  indirizzo?: string;
+  pec?: string;
+  codice_sdi?: string;
+  iban?: string;
+  condizioni_pagamento?: string;
+  note?: string;
+  auto_riconcilia?: boolean;
+  categoria_riconciliazione?: string;
+}
+
 export async function getAnagrafichePaginate(
   pagination: { page: number; pageSize: number },
-  search?: string
+  search?: string,
+  tipo?: string
 ) {
   const supabase = getSupabaseAdmin();
   
@@ -2283,7 +2318,11 @@ export async function getAnagrafichePaginate(
     query = query.or(`ragione_sociale.ilike.%${search}%,partita_iva.ilike.%${search}%,codice_fiscale.ilike.%${search}%`);
   }
 
+  if (tipo) {
+    query = query.eq('tipo', tipo);
+  }
+
   query = query.order('ragione_sociale', { ascending: true });
 
-  return await executePaginatedQuery(query, pagination);
+  return await executePaginatedQuery<SoggettoAnagrafica>(query, pagination);
 }

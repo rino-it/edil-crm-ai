@@ -79,9 +79,9 @@ export function AssegnaCantiereModal({
   const handleSubmit = async () => {
     setIsSubmitting(true)
     try {
-      const data = mode === 'singolo' 
-        ? { mode: 'singolo', cantiere_id: singleCantiere }
-        : { mode: 'multiplo', allocazioni }
+      const data = mode === 'singolo'
+        ? { mode: 'singolo' as const, cantiere_id: singleCantiere }
+        : { mode: 'multiplo' as const, allocazioni }
 
       await salvaAssegnazioneCantiere(scadenzaId, data)
       setIsOpen(false)

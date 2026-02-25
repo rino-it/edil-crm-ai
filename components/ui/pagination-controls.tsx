@@ -10,17 +10,28 @@ interface PaginationControlsProps {
   currentPage: number;
   pageSize: number;
   totalPages: number;
+  paramName?: string;
+  searchParams?: Record<string, string | undefined>;
 }
 
-export function PaginationControls({ totalCount, currentPage, pageSize, totalPages }: PaginationControlsProps) {
+export function PaginationControls({ totalCount, currentPage, pageSize, totalPages, paramName, searchParams: extraParams }: PaginationControlsProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const createPageURL = (pageNumber: number | string, size: number) => {
     const params = new URLSearchParams(searchParams.toString());
-    params.set('page', pageNumber.toString());
-    params.set('pageSize', size.toString());
+    // Se c'è un paramName custom, usa quello al posto di 'page'
+    const pageKey = paramName || 'page';
+    params.set(pageKey, pageNumber.toString());
+    if (!paramName) params.set('pageSize', size.toString());
+    // Aggiungi eventuali searchParams extra (es: tipo, search)
+    if (extraParams) {
+      Object.entries(extraParams).forEach(([key, value]) => {
+        if (value !== undefined) params.set(key, value);
+        else params.delete(key);
+      });
+    }
     return `${pathname}?${params.toString()}`;
   };
 

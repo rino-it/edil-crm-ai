@@ -76,7 +76,7 @@ export default function ProgrammazionePage() {
               <XAxis dataKey="weekLabel" axisLine={false} tickLine={false} tick={{fontSize: 11, fill: '#71717a'}} dy={10} />
               <YAxis yAxisId="left" tickFormatter={(val) => `€${(val/1000).toFixed(0)}k`} axisLine={false} tickLine={false} tick={{fontSize: 11, fill: '#71717a'}} />
               <YAxis yAxisId="right" orientation="right" tickFormatter={(val) => `€${(val/1000).toFixed(0)}k`} axisLine={false} tickLine={false} tick={{fontSize: 11, fill: '#71717a'}} />
-              <Tooltip formatter={(value: number) => formatEuro(value)} labelClassName="font-bold text-zinc-900" />
+              <Tooltip formatter={(value) => formatEuro(Number(value ?? 0))} labelClassName="font-bold text-zinc-900" />
               <Legend wrapperStyle={{ paddingTop: '20px' }} />
               
               <Bar yAxisId="left" dataKey="entrate" name="Entrate Previste" fill="#34d399" radius={[4, 4, 0, 0]} maxBarSize={40} />

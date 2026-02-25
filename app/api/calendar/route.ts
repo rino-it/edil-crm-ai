@@ -34,7 +34,15 @@ export async function GET(request: NextRequest) {
     if (!error && scadenza) {
       data = scadenza.data_scadenza;
       
-      const soggetto = scadenza.anagrafica_soggetti?.ragione_sociale || "Soggetto N/D";
+      // Supabase può restituire oggetti o array per le relazioni FK
+      const soggettoData = Array.isArray(scadenza.anagrafica_soggetti)
+        ? scadenza.anagrafica_soggetti[0]
+        : scadenza.anagrafica_soggetti;
+      const cantiereData = Array.isArray(scadenza.cantieri)
+        ? scadenza.cantieri[0]
+        : scadenza.cantieri;
+      
+      const soggetto = soggettoData?.ragione_sociale || "Soggetto N/D";
       const fattura = scadenza.fattura_riferimento || "Senza Rif.";
       const residuo = Number(scadenza.importo_totale) - Number(scadenza.importo_pagato || 0);
       
@@ -46,8 +54,8 @@ export async function GET(request: NextRequest) {
       descrizioneAggiuntiva = `\nImporto da saldare: €${residuo.toFixed(2)}\nTipo: ${scadenza.tipo.toUpperCase()}`;
       
       // Associa il cantiere se presente
-      if (scadenza.cantieri) {
-        cantiere = `${scadenza.cantieri.codice} - ${scadenza.cantieri.titolo}`;
+      if (cantiereData) {
+        cantiere = `${cantiereData.codice} - ${cantiereData.titolo}`;
       }
     }
   }
