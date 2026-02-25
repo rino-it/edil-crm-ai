@@ -5,6 +5,35 @@ import { createClient } from '@/utils/supabase/server'
 import { createClient as createAdminClient } from "@supabase/supabase-js"
 import { parseCSVBanca, parseXMLBanca, importMovimentiBanca, confermaRiconciliazione } from '@/utils/data-fetcher'
 
+export async function creaContoBanca(formData: FormData) {
+  const nome_banca = formData.get("nome_banca") as string
+  const nome_conto = formData.get("nome_conto") as string
+  const iban = formData.get("iban") as string
+  const saldo_iniziale = parseFloat((formData.get("saldo_iniziale") as string) || "0")
+
+  if (!nome_banca || !nome_conto) {
+    throw new Error("Nome banca e nome conto sono obbligatori")
+  }
+
+  const supabase = await createClient()
+  
+  const { error } = await supabase.from('conti_banca').insert({
+    nome_banca,
+    nome_conto,
+    iban,
+    saldo_iniziale,
+    saldo_attuale: saldo_iniziale // All'inizio coincidono
+  })
+
+  if (error) {
+    console.error("Errore creazione conto:", error)
+    throw new Error("Impossibile creare il conto")
+  }
+
+  // Ricarica la dashboard per mostrare la nuova card
+  revalidatePath('/finanza/riconciliazione')
+}
+
 export async function importaEstrattoConto(formData: FormData) {
   try {
     const file = formData.get('file') as File;
