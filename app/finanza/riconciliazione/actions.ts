@@ -17,7 +17,10 @@ export async function uploadDocumentoBanca(formData: FormData) {
   // 1. Upload su Storage
   const filePath = `conti/${conto_id}/documenti/${anno}/${Date.now()}_${file.name}`
   const { error: storageErr } = await supabase.storage.from('documenti_finanza').upload(filePath, file)
-  if (storageErr) throw new Error("Errore caricamento file")
+  if (storageErr) {
+    console.error("❌ ERRORE STORAGE SUPABASE:", storageErr)
+    throw new Error(`Errore caricamento file: ${storageErr.message}`)
+  }
 
   // 2. Ottieni URL Pubblico
   const { data: { publicUrl } } = supabase.storage.from('documenti_finanza').getPublicUrl(filePath)
@@ -47,7 +50,10 @@ export async function uploadEstrattoConto(formData: FormData) {
 
   const filePath = `conti/${conto_id}/estratti/${anno}/${mese}/${Date.now()}_${file.name}`
   const { error: storageErr } = await supabase.storage.from('documenti_finanza').upload(filePath, file)
-  if (storageErr) throw new Error("Errore caricamento file")
+  if (storageErr) {
+    console.error("❌ ERRORE STORAGE SUPABASE:", storageErr)
+    throw new Error(`Errore caricamento file: ${storageErr.message}`)
+  }
 
   const { data: { publicUrl } } = supabase.storage.from('documenti_finanza').getPublicUrl(filePath)
 
