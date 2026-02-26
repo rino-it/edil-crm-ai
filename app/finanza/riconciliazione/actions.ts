@@ -152,14 +152,15 @@ export async function importaEstrattoConto(formData: FormData) {
     
     const fileName = file.name.toLowerCase();
     
-    // --- 1. GESTIONE PDF (Solo Archiviazione in Cloud) ---
+    // ----------------------------------------------------
+    // 1. GESTIONE PDF (Solo Archiviazione in Cloud)
+    // ----------------------------------------------------
     if (fileName.endsWith('.pdf')) {
       const supabase = await createClient(); 
-      
       const filePath = `conti/${contoId}/estratti/${anno}/${mese}/${Date.now()}_${file.name}`;
       const { error: storageErr } = await supabase.storage.from('documenti_finanza').upload(filePath, file);
       
-      if (storageErr) throw new Error(`Errore salvataggio PDF: ${storageErr.message}`);
+      if (storageErr) throw new Error(`Errore storage: ${storageErr.message}`);
       
       const { data: { publicUrl } } = supabase.storage.from('documenti_finanza').getPublicUrl(filePath);
 
@@ -169,26 +170,24 @@ export async function importaEstrattoConto(formData: FormData) {
         { auth: { persistSession: false } }
       );
 
-      await supabaseAdmin
-        .from('upload_banca')
-        .insert({
-          conto_banca_id: contoId,
-          anno: Number(anno),
-          mese: Number(mese),
-          nome_file: file.name,
-          url_storage: publicUrl,
-          tipo: 'pdf_estratto'
-        });
+      await supabaseAdmin.from('upload_banca').insert({
+        conto_banca_id: contoId,
+        anno: Number(anno),
+        mese: Number(mese),
+        nome_file: file.name,
+        url_storage: publicUrl,
+        tipo: 'pdf_estratto'
+      });
         
       revalidatePath('/finanza/riconciliazione');
-      revalidatePath(`/finanza/riconciliazione/${contoId}`);
-      return { success: true, conteggio: 0 };
+      return { success: true, conteggio: 0, message: "PDF archiviato con successo" };
     }
 
-    // --- 2. GESTIONE XML / CSV (Estrazione Movimenti) ---
+    // ----------------------------------------------------
+    // 2. GESTIONE XML / CSV (Logica Preesistente)
+    // ----------------------------------------------------
     const text = await file.text();
     let movimenti: any[] = [];
-    
     if (fileName.endsWith('.xml')) {
       movimenti = parseXMLBanca(text);
     } else if (fileName.endsWith('.csv')) {

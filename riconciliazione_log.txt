@@ -958,3 +958,11 @@ python: can't open file 'C:\\Users\\Ufficio\\Desktop\\PROGETTO X\\Sviluppo\\edil
 python: can't open file 'C:\\Users\\Ufficio\\Desktop\\PROGETTO X\\Sviluppo\\edil-crm-ai\\riconciliazione_xml.py': [Errno 2] No such file or directory
 [26/02/2026 15:21:25.98] Fine importazione XML 
 ---------------------------------------- 
+[26/02/2026 16:21:25.79] Avvio importazione XML 
+python: can't open file 'C:\\Users\\Ufficio\\Desktop\\PROGETTO X\\Sviluppo\\edil-crm-ai\\riconciliazione_xml.py': [Errno 2] No such file or directory
+[26/02/2026 16:21:27.43] Fine importazione XML 
+---------------------------------------- 
+[26/02/2026 17:21:25.76] Avvio importazione XML 
+python: can't open file 'C:\\Users\\Ufficio\\Desktop\\PROGETTO X\\Sviluppo\\edil-crm-ai\\riconciliazione_xml.py': [Errno 2] No such file or directory
+[26/02/2026 17:21:25.90] Fine importazione XML 
+---------------------------------------- 
