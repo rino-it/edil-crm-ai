@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Sidebar } from "@/components/Sidebar";
 import NavbarMobile from "@/components/NavbarMobile";
+import { PageTransition } from "@/components/PageTransition";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,7 +28,7 @@ export default function RootLayout({
   return (
     <html lang="it">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased flex min-h-screen bg-gray-50`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased flex min-h-screen bg-[var(--background)]`}
       >
         {/* SIDEBAR: Visibile solo da tablet in su (md:flex) */}
         <div className="hidden md:flex">
@@ -39,7 +40,9 @@ export default function RootLayout({
           
           {/* MAIN CONTENT: p-4 su mobile per risparmiare spazio, pb-24 per non finire sotto la navbar */}
           <main className="flex-1 overflow-auto p-4 md:p-8 pb-24 md:pb-8">
-            {children}
+            <PageTransition>
+              {children}
+            </PageTransition>
           </main>
 
           {/* NAVBAR MOBILE: Visibile solo su mobile (md:hidden) */}

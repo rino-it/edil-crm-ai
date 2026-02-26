@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { StaggeredGrid } from '@/components/StaggeredGrid'
 
 export default async function CantieriPage() {
   const supabase = await createClient()
@@ -19,7 +20,7 @@ export default async function CantieriPage() {
     .order('created_at', { ascending: false })
 
   return (
-    <div className="min-h-screen bg-zinc-50 p-8">
+    <div className="min-h-screen bg-[var(--background)] p-8 animate-in fade-in duration-300">
       <div className="max-w-6xl mx-auto space-y-8">
         
         <div className="flex justify-between items-center">
@@ -40,38 +41,41 @@ export default async function CantieriPage() {
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <StaggeredGrid className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {cantieri.map((cantiere) => (
               <Link href={`/cantieri/${cantiere.id}`} key={cantiere.id} className="block group">
-                <Card className="h-full hover:shadow-lg transition-all duration-200 cursor-pointer border-zinc-200 group-hover:border-blue-500/50">
-                  <CardHeader className="pb-3">
-                    <div className="flex justify-between items-start mb-1">
+                <Card className="h-full card-hover border-border/60">
+                  <CardHeader className="pb-3 border-b border-border/40">
+                    <div className="flex justify-between items-start mb-2 gap-2">
                       <Badge variant="outline" className="font-mono text-xs">
                         {cantiere.codice}
                       </Badge>
-                      <Badge variant={cantiere.stato === 'aperto' ? 'default' : 'secondary'}>
-                        {cantiere.stato}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <div className={`h-2 w-2 rounded-full ${cantiere.stato === 'aperto' ? 'bg-emerald-500' : 'bg-zinc-400'}`} />
+                        <Badge variant={cantiere.stato === 'aperto' ? 'default' : 'secondary'} className="text-xs">
+                          {cantiere.stato}
+                        </Badge>
+                      </div>
                     </div>
-                    <CardTitle className="text-xl group-hover:text-blue-600 transition-colors">
+                    <CardTitle className="text-lg group-hover:text-blue-600 transition-colors">
                       {cantiere.nome || cantiere.descrizione}
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="text-sm text-zinc-600 pb-3">
+                  <CardContent className="text-sm text-muted-foreground py-3">
                     <p className="flex items-center gap-2">
                       📍 {cantiere.indirizzo || 'Nessun indirizzo'}
                     </p>
                   </CardContent>
-                  <CardFooter className="pt-3 border-t bg-zinc-50/30 flex justify-between items-center text-sm">
+                  <CardFooter className="pt-3 border-t border-border/40 bg-muted/30 flex justify-between items-center text-sm">
                     <span className="text-muted-foreground">Budget</span>
-                    <span className="font-semibold text-zinc-900">
+                    <span className="font-semibold text-foreground">
                       € {cantiere.budget?.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
                     </span>
                   </CardFooter>
                 </Card>
               </Link>
             ))}
-          </div>
+          </StaggeredGrid>
         )}
       </div>
     </div>

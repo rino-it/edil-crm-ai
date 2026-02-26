@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import { HardHat, CalendarCheck, TrendingUp, Menu, X, Users, FileText, Building2, Landmark } from "lucide-react";
 
 export default function NavbarMobile() {
@@ -24,53 +25,124 @@ export default function NavbarMobile() {
 
   return (
     <>
-      {/* Overlay Menu "Altro" */}
-      {isMenuOpen && (
-        <div className="fixed inset-0 bg-black/60 z-[60] animate-in fade-in duration-200">
-          <div className="absolute bottom-20 left-4 right-4 bg-white rounded-2xl p-6 shadow-2xl animate-in slide-in-from-bottom-10">
-            <div className="flex justify-between items-center mb-6">
-              <span className="font-bold text-lg text-zinc-900">Altre Funzioni</span>
-              <button onClick={() => setIsMenuOpen(false)} className="p-2 bg-zinc-100 rounded-full">
-                <X size={20} />
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              {otherLinks.map((link) => (
-                <Link 
-                  key={link.href} 
-                  href={link.href} 
-                  onClick={() => setIsMenuOpen(false)}
-                  className="flex flex-col items-center gap-2 p-4 bg-zinc-50 rounded-xl active:scale-95 transition-transform"
-                >
-                  <link.icon size={24} className="text-blue-600" />
-                  <span className="text-xs font-semibold text-zinc-700">{link.label}</span>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Barra Principale */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 px-2 py-3 flex justify-around items-center z-50 shadow-[0_-4px_20px_rgba(0,0,0,0.3)]">
-        {mainLinks.map(({ href, icon: Icon, label }) => (
-          <Link 
-            key={href} 
-            href={href} 
-            className={`flex flex-col items-center gap-1 transition-colors ${pathname.startsWith(href) ? 'text-blue-400' : 'text-gray-400'}`}
+      {/* Overlay Menu "Altro" con backdrop-blur */}
+      <AnimatePresence>
+        {isMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-md z-[60]"
+            onClick={() => setIsMenuOpen(false)}
           >
-            <Icon size={22} />
-            <span className="text-[10px] font-medium">{label}</span>
-          </Link>
-        ))}
-        
-        <button 
+            <motion.div
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 50 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className="absolute bottom-20 left-4 right-4 bg-white rounded-2xl p-6 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-center mb-6">
+                <span className="font-bold text-lg text-zinc-900">Altre Funzioni</span>
+                <button onClick={() => setIsMenuOpen(false)} className="p-2 bg-zinc-100 rounded-full hover:bg-zinc-200 transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                {otherLinks.map((link, index) => (
+                  <motion.div
+                    key={link.href}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05, duration: 0.3 }}
+                  >
+                    <Link
+                      href={link.href}
+                      onClick={() => setIsMenuOpen(false)}
+                      className="flex flex-col items-center gap-2 p-4 bg-zinc-50 rounded-xl active:scale-95 transition-transform hover:bg-zinc-100"
+                    >
+                      <link.icon size={24} className="text-blue-600" />
+                      <span className="text-xs font-semibold text-zinc-700">{link.label}</span>
+                    </Link>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Barra Principale con glassmorphism */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[#0f1117]/95 backdrop-blur-lg border-t border-white/10 px-2 py-3 flex justify-around items-center z-50 shadow-[0_-4px_20px_rgba(0,0,0,0.3)]">
+        {mainLinks.map(({ href, icon: Icon, label }, index) => {
+          const isActive = pathname.startsWith(href);
+          return (
+            <motion.div
+              key={href}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.1, duration: 0.3 }}
+            >
+              <Link
+                href={href}
+                className={`flex flex-col items-center gap-1.5 transition-colors relative group`}
+              >
+                <Icon 
+                  size={22} 
+                  className={`transition-colors ${isActive ? 'text-blue-400' : 'text-gray-400 group-hover:text-gray-300'}`}
+                />
+                {/* Dot indicator sotto icona attiva (stile iOS) */}
+                <AnimatePresence>
+                  {isActive && (
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      exit={{ scale: 0 }}
+                      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                      className="h-1.5 w-1.5 bg-blue-400 rounded-full absolute -bottom-2"
+                    />
+                  )}
+                </AnimatePresence>
+                <span className={`text-[10px] font-medium transition-colors ${isActive ? 'text-blue-400' : 'text-gray-400'}`}>{label}</span>
+              </Link>
+            </motion.div>
+          );
+        })}
+
+        {/* Pulsante "Altro" */}
+        <motion.button
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3, duration: 0.3 }}
           onClick={() => setIsMenuOpen(!isMenuOpen)}
-          className={`flex flex-col items-center gap-1 transition-colors ${isMenuOpen ? 'text-blue-400' : 'text-gray-400'}`}
+          className={`flex flex-col items-center gap-1.5 transition-colors relative`}
         >
-          {isMenuOpen ? <X size={22} /> : <Menu size={22} />}
-          <span className="text-[10px] font-medium">Altro</span>
-        </button>
+          <motion.div
+            animate={{ rotate: isMenuOpen ? 90 : 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            {isMenuOpen ? (
+              <X size={22} className="text-blue-400" />
+            ) : (
+              <Menu size={22} className="text-gray-400 hover:text-gray-300" />
+            )}
+          </motion.div>
+          {/* Dot indicator quando menu è aperto */}
+          <AnimatePresence>
+            {isMenuOpen && (
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                className="h-1.5 w-1.5 bg-blue-400 rounded-full absolute -bottom-2"
+              />
+            )}
+          </AnimatePresence>
+          <span className={`text-[10px] font-medium transition-colors ${isMenuOpen ? 'text-blue-400' : 'text-gray-400'}`}>Altro</span>
+        </motion.button>
       </nav>
     </>
   );
