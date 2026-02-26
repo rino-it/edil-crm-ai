@@ -1044,44 +1044,44 @@ export async function getAgingAnalysis() {
 }
 
 export async function getKPIFinanziariGlob() {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  const supabase = getSupabaseAdmin();
   
   const { data: params } = await supabase
     .from('parametri_globali')
-    .select('saldo_iniziale_banca, soglia_alert_cassa')
+    .select('soglia_alert_cassa')
     .single();
 
-  const saldo_iniziale = params?.saldo_iniziale_banca || 0;
   const soglia_alert = params?.soglia_alert_cassa || 5000;
 
+  // 1. LA VERITÀ ASSOLUTA: La cassa è SOLO la somma dei saldi bancari reali ad oggi
+  const { data: conti } = await supabase
+    .from('conti_banca')
+    .select('saldo_attuale')
+    .eq('attivo', true);
+    
+  const cassa_attuale = conti?.reduce((acc, c) => acc + (Number(c.saldo_attuale) || 0), 0) || 0;
+
+  // 2. Volumi globali di business (Fatturato e Costi)
   const { data: scadenze } = await supabase
     .from('scadenze_pagamento')
-    .select('tipo, importo_totale, importo_pagato, stato');
+    .select('tipo, importo_totale');
 
   let fatturato = 0;
   let costi = 0;
-  let cassa_attuale = saldo_iniziale;
 
   if (scadenze) {
     scadenze.forEach(s => {
-      const pagato = Number(s.importo_pagato) || 0;
       const totale = Number(s.importo_totale) || 0;
-      
-      if (s.tipo === 'entrata') {
-        fatturato += totale;
-        cassa_attuale += pagato;
-      } else if (s.tipo === 'uscita') {
-        costi += totale;
-        cassa_attuale -= pagato;
-      }
+      if (s.tipo === 'entrata') fatturato += totale;
+      else if (s.tipo === 'uscita') costi += totale;
     });
   }
 
   const margine = fatturato - costi;
-  const dso = 30; 
+  
+  // Calcolo reale dei giorni medi di incasso
+  let dso = 30;
+  try { dso = await calcolaDSO(); } catch(e) {} 
 
   return { cassa_attuale, fatturato, costi, margine, dso, soglia_alert };
 }
