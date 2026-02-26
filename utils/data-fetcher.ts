@@ -1754,13 +1754,64 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
     }
 
 // ==========================================
-    // 2. STEP GIROCONTI: Trasferimenti interni
+    // 2. STEP GIROCONTI E CARTE DI CREDITO
     // ==========================================
-    const regexGiroconto = /\b(giroconto|giro\s*(da|a|per|su))\b/i;
-    if (regexGiroconto.test(causale) || (m.xml_causale && /giroconto/i.test(m.xml_causale))) {
+    // Intercetta parole chiave classiche o specifiche delle carte
+    const regexGiroconto = /\b(giroconto|giro\s*(da|a|per|su)|addebito carta|carta del credito cooperativo|estratto conto carta)\b/i;
+    let isGiroconto = regexGiroconto.test(causale) || (m.xml_causale && regexGiroconto.test(m.xml_causale));
+    let controparteGiroconto = "";
+    let contoMatchato = null;
+
+    // Controllo dinamico: vediamo se la causale contiene il nome di una nostra carta/conto
+    for (const c of conti_banca) {
+      // 1. Cerca un eventuale numero parziale di carta (es. "*288") nel nome del conto che hai inserito
+      const lastDigitsMatch = c.nome_conto.match(/\*(\d{3,4})/);
+      if (lastDigitsMatch && causale.includes(lastDigitsMatch[0])) {
+        isGiroconto = true;
+        contoMatchato = c;
+        break;
+      }
+      
+      // 2. Cerca per nome testuale (es. "Nexi Aziendale")
+      const nomeContoNorm = normalizzaNome(c.nome_conto);
+      if (nomeContoNorm.length > 4 && causaleNorm.includes(nomeContoNorm)) {
+        isGiroconto = true;
+        contoMatchato = c;
+        break;
+      }
+    }
+
+    if (isGiroconto) {
+      // Se abbiamo matchato il conto in base al nome o al *288
+      if (contoMatchato) {
+        controparteGiroconto = `(con ${contoMatchato.nome_banca} - ${contoMatchato.nome_conto})`;
+      } else {
+        // Tentativo classico tramite IBAN se presente nel tracciato XML
+        let ibanTrovato = m.xml_iban_controparte;
+        if (!ibanTrovato) {
+          const ibanInCausale = causale.match(/\bIT\d{2}[A-Z]\d{10}[A-Z0-9]{12}\b/i);
+          if (ibanInCausale) ibanTrovato = ibanInCausale[0];
+        }
+
+        if (ibanTrovato) {
+          const ibanCercato = ibanTrovato.replace(/\s/g, '').toUpperCase();
+          const contoTrovato = conti_banca.find(c => c.iban && c.iban.replace(/\s/g, '').toUpperCase() === ibanCercato);
+          
+          if (contoTrovato) {
+            controparteGiroconto = `(con ${contoTrovato.nome_banca} - ${contoTrovato.nome_conto})`;
+          } else {
+            controparteGiroconto = `(IBAN: ${ibanCercato})`;
+          }
+        } else if (m.xml_nome_controparte) {
+          controparteGiroconto = `(con ${m.xml_nome_controparte})`;
+        }
+      }
+
       matchati.push({
         movimento_id: m.id, scadenza_id: null, soggetto_id: null, confidence: 0.99,
-        motivo: `Giroconto interno`, ragione_sociale: "Giroconto", categoria: 'giroconto'
+        motivo: `Addebito Carta / Giroconto interno ${controparteGiroconto}`.trim(), 
+        ragione_sociale: "Giroconto / Carta", 
+        categoria: 'giroconto'
       });
       continue;
     }
