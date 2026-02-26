@@ -84,13 +84,14 @@ export function DocumentiContoDialog({ contoId, nomeBanca }: { contoId: string, 
               <Input type="number" name="anno" value={anno} onChange={(e) => setAnno(parseInt(e.target.value))} required />
             </div>
             <div className="space-y-2 w-2/3">
-              <Label>Seleziona File</Label>
-              <Input type="file" name="file" required accept=".pdf,.png,.jpg,.jpeg" />
+              <Label>Seleziona File (Multipli)</Label>
+              {/* Aggiunto name="files" e l'attributo multiple */}
+              <Input type="file" name="files" required accept=".pdf,.png,.jpg,.jpeg" multiple />
             </div>
           </div>
           <Button type="submit" disabled={isUploading} className="w-full bg-zinc-900 text-white">
             {isUploading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
-            Carica Documento
+            {isUploading ? "Caricamento in corso..." : "Carica Documenti"}
           </Button>
         </form>
 

@@ -10,24 +10,33 @@ import { parseCSVBanca, parseXMLBanca, importMovimentiBanca, confermaRiconciliaz
 // ==========================================
 export async function uploadDocumentoBanca(formData: FormData) {
   const supabase = await createClient()
-  const file = formData.get("file") as File
+  
+  // Usiamo getAll("files") per estrarre l'array di tutti i documenti caricati
+  const files = formData.getAll("files") as File[]
   const conto_id = formData.get("conto_id") as string
   const anno = parseInt(formData.get("anno") as string)
 
-  if (!file || !conto_id) throw new Error("Dati mancanti")
+  if (!files || files.length === 0 || !conto_id) throw new Error("Dati mancanti")
 
-  const filePath = `conti/${conto_id}/documenti/${anno}/${Date.now()}_${file.name}`
-  const { error: storageErr } = await supabase.storage.from('documenti_finanza').upload(filePath, file)
-  if (storageErr) {
-    console.error("❌ ERRORE STORAGE SUPABASE:", storageErr)
-    throw new Error(`Errore caricamento file: ${storageErr.message}`)
+  // Cicliamo su ogni file eseguendo l'upload su Storage e il salvataggio in DB
+  for (const file of files) {
+    if (file.size === 0) continue; // Ignoriamo i file fantasma generati a volte dal browser
+
+    const filePath = `conti/${conto_id}/documenti/${anno}/${Date.now()}_${file.name}`
+    const { error: storageErr } = await supabase.storage.from('documenti_finanza').upload(filePath, file)
+    
+    if (storageErr) {
+      console.error(`❌ ERRORE STORAGE SU ${file.name}:`, storageErr)
+      throw new Error(`Errore caricamento file ${file.name}: ${storageErr.message}`)
+    }
+
+    const { data: { publicUrl } } = supabase.storage.from('documenti_finanza').getPublicUrl(filePath)
+
+    await supabase.from('documenti_banca').insert({
+      conto_banca_id: conto_id, anno, nome_file: file.name, url_documento: publicUrl
+    })
   }
-
-  const { data: { publicUrl } } = supabase.storage.from('documenti_finanza').getPublicUrl(filePath)
-
-  await supabase.from('documenti_banca').insert({
-    conto_banca_id: conto_id, anno, nome_file: file.name, url_documento: publicUrl
-  })
+  
   revalidatePath('/finanza/riconciliazione')
 }
 
