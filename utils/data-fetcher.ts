@@ -2397,12 +2397,10 @@ export async function getStoricoGiroconti() {
     .eq('categoria_dedotta', 'giroconto')
     .eq('stato_riconciliazione', 'riconciliato')
     .order('data_operazione', { ascending: false });
-
   if (error) {
     console.error("❌ Errore recupero storico giroconti:", error);
     return [];
   }
   
   return data || [];
-}
 }
