@@ -4,7 +4,8 @@ import {
   getSoggettoById, 
   getEsposizioneSoggetto, 
   getStoricoPaymentsSoggetto, 
-  getFattureAperteSoggetto 
+  getFattureAperteSoggetto,
+  getScadenzeSoggetto
 } from '@/utils/data-fetcher'
 import { editSoggetto, deleteSoggetto } from '../actions'
 import { Button } from "@/components/ui/button"
@@ -13,7 +14,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ArrowLeft, Save, Trash2, Receipt, History, Wallet, BrainCircuit } from "lucide-react"
+import { ArrowLeft, Save, Trash2, Receipt, History, Wallet, BrainCircuit, FileText, AlertCircle, CheckCircle2, Clock } from "lucide-react"
 import { PaginationControls } from "@/components/ui/pagination-controls"
 import { DEFAULT_PAGE_SIZE } from '@/types/pagination'
 import Link from 'next/link'
@@ -37,6 +38,8 @@ export default async function SoggettoDetailPage({
   const soggetto = await getSoggettoById(id) as any
   if (!soggetto) notFound()
 
+  const scadenze = await getScadenzeSoggetto(id)
+
   // Parametri di paginazione per le due tabelle
   const pageAperte = Number(pAperte) || 1
   const pageStorico = Number(pStorico) || 1
@@ -49,6 +52,7 @@ export default async function SoggettoDetailPage({
   ])
 
   const formatEuro = (val: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val)
+  const formatData = (d: string) => new Date(d).toLocaleDateString('it-IT')
 
   return (
     <div className="min-h-screen bg-zinc-50 p-8">
@@ -275,6 +279,54 @@ export default async function SoggettoDetailPage({
                 </form>
               </CardContent>
             </Card>
+          </div>
+        </div>
+
+        {/* SEZIONE FATTURE E CASHFLOW */}
+        <div className="mt-8 space-y-4">
+          <h2 className="text-xl font-bold text-zinc-800 flex items-center gap-2">
+            <FileText className="text-blue-600" size={24} /> Fatture e Cashflow
+          </h2>
+          
+          <div className="bg-white rounded-2xl border border-zinc-200/80 shadow-sm overflow-hidden">
+            {scadenze.length === 0 ? (
+              <p className="p-6 text-zinc-500 italic text-sm text-center">Nessuna fattura o scadenza associata a questa anagrafica.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-zinc-50/50 text-xs uppercase tracking-wider text-muted-foreground font-semibold border-b border-zinc-200/80">
+                    <tr>
+                      <th className="p-4">Fattura</th>
+                      <th className="p-4">Tipo</th>
+                      <th className="p-4">Data Scadenza</th>
+                      <th className="p-4">Data Pianificata</th>
+                      <th className="p-4">Stato</th>
+                      <th className="p-4 text-right">Importo</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100">
+                    {scadenze.map((s: any) => (
+                      <tr key={s.id} className="hover:bg-zinc-50/50 transition-colors duration-150 group">
+                        <td className="p-4 font-medium text-zinc-900">{s.fattura_riferimento || 'N/D'}</td>
+                        <td className="p-4">
+                          <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase ${s.tipo === 'entrata' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                            {s.tipo}
+                          </span>
+                        </td>
+                        <td className="p-4 text-zinc-500">{s.data_scadenza ? formatData(s.data_scadenza) : '-'}</td>
+                        <td className="p-4 font-medium text-zinc-700">{s.data_pianificata ? formatData(s.data_pianificata) : '-'}</td>
+                        <td className="p-4">
+                          {s.stato === 'pagato' && <span className="flex items-center gap-1.5 text-emerald-600 text-xs font-bold"><CheckCircle2 size={14}/> Pagato</span>}
+                          {s.stato === 'da_pagare' && <span className="flex items-center gap-1.5 text-blue-600 text-xs font-bold"><Clock size={14}/> In Corso</span>}
+                          {s.stato === 'scaduto' && <span className="flex items-center gap-1.5 text-rose-600 text-xs font-bold"><AlertCircle size={14}/> Scaduto</span>}
+                        </td>
+                        <td className="p-4 text-right font-bold text-zinc-900">{formatEuro(s.importo_totale)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
 

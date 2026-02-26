@@ -1140,82 +1140,119 @@ export async function getFinanzaPerCantiere() {
   });
 }
 
-export async function getCashflowPrevisionale(giorni: number = 90) {
+export async function getCashflowProiezione() {
   const supabase = getSupabaseAdmin();
-  const kpis = await getKPIFinanziariGlob();
-  let cassaProgressiva = kpis.cassa_attuale;
-
   const oggi = new Date();
-  const limite = new Date();
-  limite.setDate(limite.getDate() + giorni);
+  
+  // 1. DATA ZERO: Cassa Reale di partenza
+  const { data: conti } = await supabase.from('conti_banca').select('saldo_attuale').eq('attivo', true);
+  const cassaIniziale = conti?.reduce((acc, c) => acc + (Number(c.saldo_attuale) || 0), 0) || 0;
 
+  // 2. Recupero Scadenze Aperte (Entrate e Uscite) ordinate per data pianificata
   const { data: scadenze } = await supabase
     .from('scadenze_pagamento')
-    .select('tipo, importo_totale, importo_pagato, data_scadenza')
+    .select('tipo, importo_totale, importo_pagato, data_pianificata')
     .neq('stato', 'pagato')
-    .lte('data_scadenza', limite.toISOString().split('T')[0]);
+    .order('data_pianificata', { ascending: true });
 
-  let debitiScaduti = 0;
-  let creditiScaduti = 0;
-  const timeline: Record<string, { entrate: number, uscite: number }> = {};
+  // 3. Inizializzazione Secchielli (Buckets)
+  const proiezione = {
+    giorno_0: cassaIniziale, // Include lo scaduto
+    giorni_30: cassaIniziale,
+    giorni_60: cassaIniziale,
+    giorni_90: cassaIniziale,
+    giorni_120: cassaIniziale
+  };
 
-  if (scadenze) {
-    scadenze.forEach(s => {
-      const residuo = (Number(s.importo_totale) || 0) - (Number(s.importo_pagato) || 0);
-      const dataScad = new Date(s.data_scadenza);
+  if (!scadenze) return proiezione;
 
-      if (dataScad < oggi) {
-        if (s.tipo === 'entrata') creditiScaduti += residuo;
-        if (s.tipo === 'uscita') debitiScaduti += residuo;
-      } else {
-        const dataStr = s.data_scadenza;
-        if (!timeline[dataStr]) timeline[dataStr] = { entrate: 0, uscite: 0 };
-        if (s.tipo === 'entrata') timeline[dataStr].entrate += residuo;
-        if (s.tipo === 'uscita') timeline[dataStr].uscite += residuo;
-      }
-    });
-  }
+  let saldoProgressivo = cassaIniziale;
 
-  cassaProgressiva = cassaProgressiva + creditiScaduti - debitiScaduti;
+  scadenze.forEach((s: any) => {
+    const importoAtteso = Number(s.importo_totale) - Number(s.importo_pagato || 0);
+    const variazione = s.tipo === 'entrata' ? importoAtteso : -importoAtteso;
+    
+    const dataPianificata = new Date(s.data_pianificata);
+    const diffGiorni = Math.ceil((dataPianificata.getTime() - oggi.getTime()) / (1000 * 3600 * 24));
 
-  const proiezioni: Array<{ data: string, saldo: number, entrate_giorno: number, uscite_giorno: number }> = [];
-  
-  proiezioni.push({
-    data: oggi.toISOString().split('T')[0],
-    saldo: cassaProgressiva,
-    entrate_giorno: creditiScaduti,
-    uscite_giorno: debitiScaduti
+    saldoProgressivo += variazione;
+
+    // Distribuzione progressiva nei secchielli
+    if (diffGiorni <= 0) proiezione.giorno_0 += variazione; // Scaduto = impatto immediato
+    if (diffGiorni <= 30) proiezione.giorni_30 = saldoProgressivo;
+    if (diffGiorni > 30 && diffGiorni <= 60) proiezione.giorni_60 = saldoProgressivo;
+    if (diffGiorni > 60 && diffGiorni <= 90) proiezione.giorni_90 = saldoProgressivo;
+    if (diffGiorni > 90 && diffGiorni <= 120) proiezione.giorni_120 = saldoProgressivo;
   });
 
-  for (let i = 1; i <= giorni; i += 7) {
-    const dataStep = new Date(oggi);
-    dataStep.setDate(dataStep.getDate() + i);
-    const dataStr = dataStep.toISOString().split('T')[0];
+  // Riallineamento a cascata per i periodi vuoti
+  if (proiezione.giorni_30 === cassaIniziale && proiezione.giorno_0 !== cassaIniziale) proiezione.giorni_30 = proiezione.giorno_0;
+  if (proiezione.giorni_60 === cassaIniziale) proiezione.giorni_60 = proiezione.giorni_30;
+  if (proiezione.giorni_90 === cassaIniziale) proiezione.giorni_90 = proiezione.giorni_60;
+  if (proiezione.giorni_120 === cassaIniziale) proiezione.giorni_120 = proiezione.giorni_90;
+
+  return proiezione;
+}
+
+export async function getCashflowPrevisionale(giorni: number = 90): Promise<any[]> {
+  const supabase = getSupabaseAdmin();
+  const dataInizio = new Date();
+  dataInizio.setHours(0, 0, 0, 0);
+
+  const dataFine = new Date(dataInizio);
+  dataFine.setDate(dataFine.getDate() + giorni);
+
+  // 1. DATA ZERO: Cassa Reale Attuale
+  const { data: conti } = await supabase.from('conti_banca').select('saldo_attuale').eq('attivo', true);
+  let saldoCorrente = conti?.reduce((acc, c) => acc + (Number(c.saldo_attuale) || 0), 0) || 0;
+
+  // 2. Legge le scadenze NON PAGATE basandosi sulla DATA PIANIFICATA
+  const { data: scadenze } = await supabase
+    .from('scadenze_pagamento')
+    .select('tipo, importo_totale, importo_pagato, data_pianificata, data_scadenza')
+    .neq('stato', 'pagato')
+    .order('data_pianificata', { ascending: true });
+
+  if (!scadenze || scadenze.length === 0) return [{ data: dataInizio.toISOString().split('T')[0], saldo: saldoCorrente }];
+
+  // 3. Calcolo dello scaduto (tutto ciò che era pianificato nel passato impatta il Giorno 0)
+  const scadute = scadenze.filter(s => new Date(s.data_pianificata || s.data_scadenza) < dataInizio);
+  scadute.forEach(s => {
+    const importo = Number(s.importo_totale) - Number(s.importo_pagato || 0);
+    saldoCorrente += s.tipo === 'entrata' ? importo : -importo;
+  });
+
+  const cashflow: any[] = [];
+  const mappaGiorni: Record<string, { entrate: number, uscite: number }> = {};
+
+  // Raggruppa per giorno futuro
+  const future = scadenze.filter(s => new Date(s.data_pianificata || s.data_scadenza) >= dataInizio);
+  future.forEach(s => {
+    const dataIso = (s.data_pianificata || s.data_scadenza).split('T')[0];
+    if (!mappaGiorni[dataIso]) mappaGiorni[dataIso] = { entrate: 0, uscite: 0 };
     
-    let entratePeriodo = 0; let uscitePeriodo = 0;
+    const importo = Number(s.importo_totale) - Number(s.importo_pagato || 0);
+    if (s.tipo === 'entrata') mappaGiorni[dataIso].entrate += importo;
+    else mappaGiorni[dataIso].uscite += importo;
+  });
 
-    Object.keys(timeline).forEach(giorno => {
-      const dataGiorno = new Date(giorno);
-      const dataStepPrec = new Date(dataStep);
-      dataStepPrec.setDate(dataStepPrec.getDate() - 7);
-      
-      if (dataGiorno > dataStepPrec && dataGiorno <= dataStep) {
-        entratePeriodo += timeline[giorno].entrate;
-        uscitePeriodo += timeline[giorno].uscite;
-      }
-    });
+  // Genera i punti per il grafico SVG
+  for (let d = new Date(dataInizio); d <= dataFine; d.setDate(d.getDate() + 1)) {
+    const dateStr = d.toISOString().split('T')[0];
+    const movimentiGiorno = mappaGiorni[dateStr] || { entrate: 0, uscite: 0 };
+    
+    saldoCorrente += movimentiGiorno.entrate;
+    saldoCorrente -= movimentiGiorno.uscite;
 
-    cassaProgressiva += entratePeriodo - uscitePeriodo;
-
-    proiezioni.push({
-      data: dataStr,
-      saldo: cassaProgressiva,
-      entrate_giorno: entratePeriodo,
-      uscite_giorno: uscitePeriodo
+    cashflow.push({
+      data: dateStr,
+      saldo: saldoCorrente,
+      entrate_giorno: movimentiGiorno.entrate,
+      uscite_giorno: movimentiGiorno.uscite
     });
   }
 
-  return proiezioni;
+  return cashflow;
 }
 
 // ============================================================
@@ -2402,5 +2439,20 @@ export async function getStoricoGiroconti() {
     return [];
   }
   
+  return data || [];
+}
+
+export async function getScadenzeSoggetto(soggettoId: string) {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('scadenze_pagamento')
+    .select('id, tipo, importo_totale, importo_pagato, data_scadenza, data_pianificata, stato, fattura_riferimento')
+    .eq('soggetto_id', soggettoId)
+    .order('data_pianificata', { ascending: true }); // Ordina per la data operativa che abbiamo creato
+
+  if (error) {
+    console.error("❌ Errore fetch scadenze soggetto:", error);
+    return [];
+  }
   return data || [];
 }

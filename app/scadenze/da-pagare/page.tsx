@@ -15,7 +15,7 @@ export default async function DaPagarePage({
   const result = await getScadenzePaginated(
     { 
       tipo: 'uscita', 
-      stato: ['da_pagare', 'parziale'], 
+      stato: ['da_pagare'], 
       search: params.search 
     },
     { page, pageSize }
