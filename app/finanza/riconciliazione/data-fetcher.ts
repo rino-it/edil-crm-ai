@@ -2387,3 +2387,21 @@ export async function getAnagrafichePaginate(
 
   return await executePaginatedQuery<SoggettoAnagrafica>(query, pagination);
 }
+
+export async function getStoricoGiroconti() {
+  const supabase = getSupabaseAdmin();
+  
+  const { data, error } = await supabase
+    .from('movimenti_banca')
+    .select('*, conti_banca(nome_banca, nome_conto)')
+    .eq('categoria_dedotta', 'giroconto')
+    .eq('stato_riconciliazione', 'riconciliato')
+    .order('data_operazione', { ascending: false });
+
+  if (error) {
+    console.error("❌ Errore recupero storico giroconti:", error);
+    return [];
+  }
+  
+  return data || [];
+}

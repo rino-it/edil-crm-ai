@@ -1,7 +1,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { getContiSummary } from '@/utils/data-fetcher'
+import { getContiSummary, getStoricoGiroconti } from '@/utils/data-fetcher'
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Landmark, ArrowRight, Upload, Plus, AlertCircle } from 'lucide-react'
@@ -9,6 +9,7 @@ import { UploadCalendar } from './components/UploadCalendar'
 import { AggiungiContoDialog } from './components/AggiungiContoDialog'
 import { DocumentiContoDialog } from './components/DocumentiContoDialog'
 import { EstrattiContoMeseDialog } from './components/EstrattiContoMeseDialog'
+import { GirocontiDialog } from './components/GirocontiDialog'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,6 +24,7 @@ export default async function DashboardRiconciliazionePage() {
   // Calcolo KPI Globali
   const totaleSaldo = conti.reduce((acc, c) => acc + (c.saldo_attuale || 0), 0)
   const totaleDaRiconciliare = conti.reduce((acc, c) => acc + (c.movimenti_da_riconciliare || 0), 0)
+  const storicoGiroconti = await getStoricoGiroconti()
 
   const formatEuro = (val: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val)
 
@@ -41,7 +43,7 @@ export default async function DashboardRiconciliazionePage() {
       </div>
 
       {/* KPI Globali */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="border-blue-200 bg-blue-50/30 shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-bold text-blue-800 uppercase">Saldo Totale Globale</CardTitle>
@@ -70,6 +72,9 @@ export default async function DashboardRiconciliazionePage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* NUOVA CARD GIROCONTI */}
+        <GirocontiDialog giroconti={storicoGiroconti} />
       </div>
 
       {/* Grid Conti Bancari */}

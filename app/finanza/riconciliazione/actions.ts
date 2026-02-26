@@ -150,9 +150,43 @@ export async function importaEstrattoConto(formData: FormData) {
     if (!file) throw new Error("Nessun file selezionato.");
     if (!contoId || !anno || !mese) throw new Error("Parametri del conto o data mancanti.");
     
-    const text = await file.text();
     const fileName = file.name.toLowerCase();
     
+    // --- 1. GESTIONE PDF (Solo Archiviazione in Cloud) ---
+    if (fileName.endsWith('.pdf')) {
+      const supabase = await createClient(); 
+      
+      const filePath = `conti/${contoId}/estratti/${anno}/${mese}/${Date.now()}_${file.name}`;
+      const { error: storageErr } = await supabase.storage.from('documenti_finanza').upload(filePath, file);
+      
+      if (storageErr) throw new Error(`Errore salvataggio PDF: ${storageErr.message}`);
+      
+      const { data: { publicUrl } } = supabase.storage.from('documenti_finanza').getPublicUrl(filePath);
+
+      const supabaseAdmin = createAdminClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        { auth: { persistSession: false } }
+      );
+
+      await supabaseAdmin
+        .from('upload_banca')
+        .insert({
+          conto_banca_id: contoId,
+          anno: Number(anno),
+          mese: Number(mese),
+          nome_file: file.name,
+          url_storage: publicUrl,
+          tipo: 'pdf_estratto'
+        });
+        
+      revalidatePath('/finanza/riconciliazione');
+      revalidatePath(`/finanza/riconciliazione/${contoId}`);
+      return { success: true, conteggio: 0 };
+    }
+
+    // --- 2. GESTIONE XML / CSV (Estrazione Movimenti) ---
+    const text = await file.text();
     let movimenti: any[] = [];
     
     if (fileName.endsWith('.xml')) {
@@ -160,7 +194,7 @@ export async function importaEstrattoConto(formData: FormData) {
     } else if (fileName.endsWith('.csv')) {
       movimenti = parseCSVBanca(text);
     } else {
-      throw new Error("Formato non supportato. Usa file .csv o .xml");
+      throw new Error("Formato non supportato. Usa file .pdf, .csv o .xml");
     }
     
     if (movimenti.length === 0) {
@@ -186,7 +220,8 @@ export async function importaEstrattoConto(formData: FormData) {
         conto_banca_id: contoId,
         anno: Number(anno),
         mese: Number(mese),
-        nome_file: fileName
+        nome_file: file.name,
+        tipo: fileName.endsWith('.xml') ? 'xml' : 'csv'
       });
     
     revalidatePath('/finanza/riconciliazione');
