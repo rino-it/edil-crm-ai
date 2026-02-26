@@ -12,52 +12,65 @@ export default async function ScadenzeLayout({
   const formatEuro = (val: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val);
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-6">
+    <div className="min-h-screen bg-[var(--background)] p-8 animate-in fade-in duration-300">
+      <div className="max-w-7xl mx-auto space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-zinc-900">Scadenziario</h1>
-        <p className="text-zinc-500">Gestione pagamenti, incassi e flussi di cassa.</p>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">Scadenziario</h1>
+        <p className="text-muted-foreground">Gestione pagamenti, incassi e flussi di cassa.</p>
       </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="shadow-sm border-rose-100">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-rose-800">Da Pagare</CardTitle>
+        <Card className="shadow-[var(--shadow-sm)] border-border/60">
+          <CardHeader className="pb-2 border-b border-border/40 flex flex-row items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-rose-500" />
+              <CardTitle className="text-xs font-bold text-muted-foreground uppercase">Da Pagare</CardTitle>
+            </div>
             <TrendingDown className="h-4 w-4 text-rose-600" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-rose-900">{formatEuro(kpis.daPagare)}</div>
+          <CardContent className="pt-4">
+            <div className="text-2xl font-bold text-rose-700">{formatEuro(kpis.daPagare)}</div>
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm border-emerald-100">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-emerald-800">Da Incassare</CardTitle>
+        <Card className="shadow-[var(--shadow-sm)] border-border/60">
+          <CardHeader className="pb-2 border-b border-border/40 flex flex-row items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-emerald-500" />
+              <CardTitle className="text-xs font-bold text-muted-foreground uppercase">Da Incassare</CardTitle>
+            </div>
             <TrendingUp className="h-4 w-4 text-emerald-600" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-emerald-900">{formatEuro(kpis.daIncassare)}</div>
+          <CardContent className="pt-4">
+            <div className="text-2xl font-bold text-emerald-700">{formatEuro(kpis.daIncassare)}</div>
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm border-amber-100">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-amber-800">Scaduto</CardTitle>
+        <Card className="shadow-[var(--shadow-sm)] border-border/60">
+          <CardHeader className="pb-2 border-b border-border/40 flex flex-row items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-amber-500" />
+              <CardTitle className="text-xs font-bold text-muted-foreground uppercase">Scaduto</CardTitle>
+            </div>
             <AlertTriangle className="h-4 w-4 text-amber-600" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-amber-900">{formatEuro(kpis.scaduto)}</div>
+          <CardContent className="pt-4">
+            <div className="text-2xl font-bold text-amber-700">{formatEuro(kpis.scaduto)}</div>
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm bg-zinc-900 text-white">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-zinc-300">Da Smistare (Cantieri)</CardTitle>
-            <Inbox className="h-4 w-4 text-zinc-400" />
+        <Card className="shadow-[var(--shadow-sm)] border-border/60">
+          <CardHeader className="pb-2 border-b border-border/40 flex flex-row items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-blue-500" />
+              <CardTitle className="text-xs font-bold text-muted-foreground uppercase">Da Smistare (Cantieri)</CardTitle>
+            </div>
+            <Inbox className="h-4 w-4 text-blue-600" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{kpis.daSmistare}</div>
-            <p className="text-xs text-zinc-400 mt-1">Fatture senza cantiere assegnato</p>
+          <CardContent className="pt-4">
+            <div className="text-2xl font-bold text-blue-700">{kpis.daSmistare}</div>
+            <p className="text-xs text-muted-foreground mt-1">Fatture senza cantiere assegnato</p>
           </CardContent>
         </Card>
       </div>
@@ -68,6 +81,7 @@ export default async function ScadenzeLayout({
       {/* Contenuto dinamico delle sotto-pagine */}
       <div className="min-h-[500px]">
         {children}
+      </div>
       </div>
     </div>
   );

@@ -18,13 +18,14 @@ function LoginFormContent() {
   const [showPassword, setShowPassword] = useState(false)
 
   return (
-    <Card className="w-full max-w-md shadow-lg">
-      <CardHeader className="text-center space-y-1">
-        <CardTitle className="text-2xl font-bold">Edil CRM</CardTitle>
-        <CardDescription>
-          Inserisci le tue credenziali per accedere ai cantieri
-        </CardDescription>
-      </CardHeader>
+    <div className="min-h-screen bg-[var(--background)] flex items-center justify-center p-4 animate-in fade-in duration-300">
+      <Card className="w-full max-w-md shadow-xl rounded-2xl border-border/60">
+        <CardHeader className="text-center space-y-1 border-b border-border/40">
+          <CardTitle className="text-2xl font-bold">Edil<span className="text-blue-600">CRM</span></CardTitle>
+          <CardDescription>
+            Inserisci le tue credenziali per accedere ai cantieri
+          </CardDescription>
+        </CardHeader>
       <CardContent>
         {message && (
           <div className="mb-4 rounded-md bg-destructive/15 p-3 text-sm text-destructive text-center font-medium">
@@ -41,6 +42,7 @@ function LoginFormContent() {
               type="email" 
               placeholder="nome@impresa.it" 
               required 
+              className="hover:border-ring/50 focus-visible:ring-2"
             />
           </div>
           
@@ -50,10 +52,9 @@ function LoginFormContent() {
               <Input 
                 id="password" 
                 name="password" 
-                // Qui cambiamo dinamicamente il tipo dell'input
                 type={showPassword ? "text" : "password"} 
                 required 
-                className="pr-10" // Spazio a destra per non sovrapporre l'icona
+                className="pr-10 hover:border-ring/50 focus-visible:ring-2"
               />
               <Button
                 type="button"
@@ -73,7 +74,7 @@ function LoginFormContent() {
           </div>
 
           <div className="flex flex-col gap-3 pt-2">
-            <Button formAction={login} className="w-full">
+            <Button formAction={login} className="w-full hover:shadow-md active:scale-[0.97] transition-all">
               Accedi
             </Button>
             
@@ -83,23 +84,21 @@ function LoginFormContent() {
               <Separator className="flex-1" />
             </div>
 
-            <Button formAction={signup} variant="outline" className="w-full">
+            <Button formAction={signup} variant="outline" className="w-full hover:bg-muted/50">
               Registrati come nuovo utente
             </Button>
           </div>
         </form>
       </CardContent>
     </Card>
+    </div>
   )
 }
 
 export default function LoginPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 p-4">
-      {/* Suspense è necessario perché usiamo useSearchParams in un Client Component */}
-      <Suspense fallback={<div className="text-center">Caricamento...</div>}>
-        <LoginFormContent />
-      </Suspense>
-    </div>
+    <Suspense fallback={<div className="min-h-screen bg-[var(--background)] flex items-center justify-center"><div className="text-center text-muted-foreground">Caricamento...</div></div>}>
+      <LoginFormContent />
+    </Suspense>
   )
 }

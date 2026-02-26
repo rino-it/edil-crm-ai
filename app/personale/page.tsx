@@ -49,28 +49,28 @@ export default async function PersonalePage() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50 p-8">
+    <div className="min-h-screen bg-[var(--background)] p-8 animate-in fade-in duration-300">
       <div className="max-w-6xl mx-auto space-y-8">
         
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-zinc-900 flex items-center gap-2">
+            <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
               <Users className="h-8 w-8 text-blue-600" /> Gestione Personale
             </h1>
-            <p className="text-zinc-500">Aggiungi dipendenti e subappaltatori per tracciare i costi della manodopera.</p>
+            <p className="text-muted-foreground">Aggiungi dipendenti e subappaltatori per tracciare i costi della manodopera.</p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
           {/* TABELLA PERSONALE */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
+          <Card className="lg:col-span-2 shadow-[var(--shadow-sm)] border-border/60">
+            <CardHeader className="border-b border-border/40">
               <CardTitle>Anagrafica Lavoratori ({personale?.length || 0})</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-4">
               {(!personale || personale.length === 0) ? (
-                <div className="text-center py-10 text-muted-foreground border border-dashed rounded-lg">
+                <div className="text-center py-10 text-muted-foreground border border-border/40 border-dashed rounded-lg">
                   Nessun lavoratore registrato.
                 </div>
               ) : (

@@ -10,6 +10,7 @@ import { AggiungiContoDialog } from './components/AggiungiContoDialog'
 import { DocumentiContoDialog } from './components/DocumentiContoDialog'
 import { EstrattiContoMeseDialog } from './components/EstrattiContoMeseDialog'
 import { GirocontiDialog } from './components/GirocontiDialog'
+import { StaggeredGrid } from '@/components/StaggeredGrid'
 
 export const dynamic = 'force-dynamic'
 
@@ -90,7 +91,7 @@ export default async function DashboardRiconciliazionePage() {
       {/* Grid Conti Bancari */}
       <div className="space-y-4">
         <h2 className="text-xl font-bold text-foreground">I tuoi Conti Correnti</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <StaggeredGrid className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {conti.map(conto => (
             <Card key={conto.id} className="shadow-[var(--shadow-sm)] border-border/60 card-hover flex flex-col">
               <CardHeader className="pb-2 border-b border-border/40 mb-2">
@@ -128,7 +129,7 @@ export default async function DashboardRiconciliazionePage() {
               </CardFooter>
             </Card>
           ))}
-        </div>
+        </StaggeredGrid>
       </div>
 
       {/* Archivio Upload Mensili Dinamico per ogni conto */}

@@ -81,12 +81,19 @@ export function EstrattiContoMeseDialog({ contoId, anno, meseNum, haEstratto }: 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <div title={`Estratto conto ${nomeMese} ${anno}`} className={`flex flex-col items-center justify-center p-3 rounded-xl border transition-all cursor-pointer hover:scale-105 shadow-sm ${haEstratto ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-white border-zinc-200 text-zinc-400 hover:bg-zinc-50'}`}>
+        <div 
+          title={`Estratto conto ${nomeMese} ${anno}`} 
+          className={`flex flex-col items-center justify-center p-3 rounded-xl border transition-all duration-200 cursor-pointer hover:shadow-md ${
+            haEstratto 
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-600 hover:bg-emerald-100' 
+              : 'bg-white border-border/60 text-muted-foreground hover:bg-muted/20 hover:border-ring/50'
+          }`}
+        >
           <span className="text-[11px] font-black uppercase mb-1.5">{nomeMese}</span>
           {haEstratto ? (
              <CheckCircle2 className="h-5 w-5" />
           ) : (
-             <div className="h-5 w-5 rounded-full border-2 border-dashed border-zinc-300" />
+             <div className="h-5 w-5 rounded-full border-2 border-dashed border-border" />
           )}
         </div>
       </DialogTrigger>

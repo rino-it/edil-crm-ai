@@ -42,16 +42,16 @@ export default async function AnagrafichePage({
   const formatEuro = (val: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val)
 
   return (
-    <div className="min-h-screen bg-zinc-50 p-8">
+    <div className="min-h-screen bg-[var(--background)] p-8 animate-in fade-in duration-300">
       <div className="max-w-7xl mx-auto space-y-8">
         
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-zinc-900 flex items-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
               <Building2 className="h-8 w-8 text-blue-600" /> Anagrafiche
             </h1>
-            <p className="text-zinc-500">Gestione centralizzata fornitori e clienti dell'azienda.</p>
+            <p className="text-muted-foreground">Gestione centralizzata fornitori e clienti dell'azienda.</p>
           </div>
           
           {!nuovo ? (
@@ -77,12 +77,12 @@ export default async function AnagrafichePage({
 
         {/* Sezione Creazione Inline */}
         {nuovo && (
-          <Card className="border-blue-200 bg-blue-50/30 shadow-sm animate-in slide-in-from-top duration-300">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-blue-800">Aggiungi Nuovo Soggetto</CardTitle>
-              <CardDescription className="text-blue-600/80">Inserisci i dati anagrafici del cliente o fornitore.</CardDescription>
+          <Card className="border-blue-200 bg-blue-50/30 shadow-sm animate-in slide-in-from-top duration-300 shadow-[var(--shadow-sm)] border-border/60">
+            <CardHeader className="pb-4 border-b border-border/40">
+              <CardTitle className="text-foreground">Aggiungi Nuovo Soggetto</CardTitle>
+              <CardDescription>Inserisci i dati anagrafici del cliente o fornitore.</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-4">
               <form action={addSoggetto} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-2">
@@ -98,32 +98,32 @@ export default async function AnagrafichePage({
                     </select>
                   </div>
                   <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="ragione_sociale" className="text-zinc-700">Ragione Sociale *</Label>
-                    <Input name="ragione_sociale" id="ragione_sociale" placeholder="Es: Rossi Srl" required className="bg-white border-zinc-200" />
+                    <Label htmlFor="ragione_sociale">Ragione Sociale *</Label>
+                    <Input name="ragione_sociale" id="ragione_sociale" placeholder="Es: Rossi Srl" required className="hover:border-ring/50 focus-visible:ring-2" />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="partita_iva" className="text-zinc-700">Partita IVA</Label>
-                    <Input name="partita_iva" id="partita_iva" placeholder="11 cifre" className="bg-white border-zinc-200" />
+                    <Label htmlFor="partita_iva">Partita IVA</Label>
+                    <Input name="partita_iva" id="partita_iva" placeholder="11 cifre" className="hover:border-ring/50 focus-visible:ring-2" />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="codice_fiscale" className="text-zinc-700">Codice Fiscale</Label>
-                    <Input name="codice_fiscale" id="codice_fiscale" placeholder="16 caratteri" className="bg-white border-zinc-200" />
+                    <Label htmlFor="codice_fiscale">Codice Fiscale</Label>
+                    <Input name="codice_fiscale" id="codice_fiscale" placeholder="16 caratteri" className="hover:border-ring/50 focus-visible:ring-2" />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="codice_sdi" className="text-zinc-700">Codice SDI</Label>
-                    <Input name="codice_sdi" id="codice_sdi" placeholder="0000000" className="bg-white border-zinc-200" />
+                    <Label htmlFor="codice_sdi">Codice SDI</Label>
+                    <Input name="codice_sdi" id="codice_sdi" placeholder="0000000" className="hover:border-ring/50 focus-visible:ring-2" />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="email" className="text-zinc-700">Email</Label>
-                    <Input name="email" id="email" type="email" placeholder="info@azienda.it" className="bg-white border-zinc-200" />
+                    <Label htmlFor="email">Email</Label>
+                    <Input name="email" id="email" type="email" placeholder="info@azienda.it" className="hover:border-ring/50 focus-visible:ring-2" />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="telefono" className="text-zinc-700">Telefono</Label>
-                    <Input name="telefono" id="telefono" placeholder="+39..." className="bg-white border-zinc-200" />
+                    <Label htmlFor="telefono">Telefono</Label>
+                    <Input name="telefono" id="telefono" placeholder="+39..." className="hover:border-ring/50 focus-visible:ring-2" />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="indirizzo" className="text-zinc-700">Indirizzo Sede Legale</Label>
-                    <Input name="indirizzo" id="indirizzo" placeholder="Via, civico, CAP, Città" className="bg-white border-zinc-200" />
+                    <Label htmlFor="indirizzo">Indirizzo Sede Legale</Label>
+                    <Input name="indirizzo" id="indirizzo" placeholder="Via, civico, CAP, Città" className="hover:border-ring/50 focus-visible:ring-2" />
                   </div>
                 </div>
                 <div className="pt-2 flex justify-end gap-2">
@@ -139,40 +139,52 @@ export default async function AnagrafichePage({
 
         {/* KPI Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="border-zinc-200 shadow-sm bg-white">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-zinc-500 uppercase">Fornitori</CardTitle>
+          <Card className="shadow-[var(--shadow-sm)] border-border/60">
+            <CardHeader className="pb-2 border-b border-border/40 flex flex-row items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-orange-500" />
+                <CardTitle className="text-xs font-bold text-muted-foreground uppercase">Fornitori</CardTitle>
+              </div>
               <Users className="h-4 w-4 text-orange-500" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-black">{kpis.fornitori}</div>
+            <CardContent className="pt-4">
+              <div className="text-2xl font-black text-orange-700">{kpis.fornitori}</div>
             </CardContent>
           </Card>
-          <Card className="border-zinc-200 shadow-sm bg-white">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-zinc-500 uppercase">Clienti</CardTitle>
-              <Users className="h-4 w-4 text-green-500" />
+          <Card className="shadow-[var(--shadow-sm)] border-border/60">
+            <CardHeader className="pb-2 border-b border-border/40 flex flex-row items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-emerald-500" />
+                <CardTitle className="text-xs font-bold text-muted-foreground uppercase">Clienti</CardTitle>
+              </div>
+              <Users className="h-4 w-4 text-emerald-500" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-black">{kpis.clienti}</div>
+            <CardContent className="pt-4">
+              <div className="text-2xl font-black text-emerald-700">{kpis.clienti}</div>
             </CardContent>
           </Card>
-          <Card className="border-zinc-200 shadow-sm bg-white">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-zinc-500 uppercase">Crediti Aperti</CardTitle>
-              <TrendingDown className="h-4 w-4 text-emerald-600" />
+          <Card className="shadow-[var(--shadow-sm)] border-border/60">
+            <CardHeader className="pb-2 border-b border-border/40 flex flex-row items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-indigo-500" />
+                <CardTitle className="text-xs font-bold text-muted-foreground uppercase">Crediti Aperti</CardTitle>
+              </div>
+              <TrendingDown className="h-4 w-4 text-indigo-600" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-black text-emerald-600">{formatEuro(kpis.totale_crediti)}</div>
+            <CardContent className="pt-4">
+              <div className="text-2xl font-black text-indigo-700">{formatEuro(kpis.totale_crediti)}</div>
             </CardContent>
           </Card>
-          <Card className="border-zinc-200 shadow-sm bg-white">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-zinc-500 uppercase">Debiti Aperti</CardTitle>
-              <Wallet className="h-4 w-4 text-red-600" />
+          <Card className="shadow-[var(--shadow-sm)] border-border/60">
+            <CardHeader className="pb-2 border-b border-border/40 flex flex-row items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-rose-500" />
+                <CardTitle className="text-xs font-bold text-muted-foreground uppercase">Debiti Aperti</CardTitle>
+              </div>
+              <Wallet className="h-4 w-4 text-rose-600" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-black text-red-600">{formatEuro(kpis.totale_debiti)}</div>
+            <CardContent className="pt-4">
+              <div className="text-2xl font-black text-rose-700">{formatEuro(kpis.totale_debiti)}</div>
             </CardContent>
           </Card>
         </div>
