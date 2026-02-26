@@ -23,6 +23,7 @@ export interface ScadenzaWithSoggetto extends ScadenzaPagamento {
     ragione_sociale: string;
     partita_iva?: string;
     iban?: string;
+    telefono?: string;
   };
   cantieri?: {
     codice: string;

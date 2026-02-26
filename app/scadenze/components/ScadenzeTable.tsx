@@ -8,6 +8,8 @@ import Link from "next/link"
 import { ScadenzaWithSoggetto } from "@/types/finanza"
 import { PaginatedResult } from "@/types/pagination"
 import { PaginationControls } from "@/components/ui/pagination-controls"
+import { WhatsAppReminderButton } from "@/app/finanza/components/WhatsAppReminderButton"
+import { CalendarLinkButton } from "@/app/finanza/components/CalendarLinkButton"
 
 interface ScadenzeTableProps {
   data: ScadenzaWithSoggetto[];
@@ -58,7 +60,7 @@ export function ScadenzeTable({
               const isScaduta = new Date(s.data_scadenza) < new Date() && s.stato !== 'pagato';
 
               return (
-                <TableRow key={s.id} className="hover:bg-zinc-50/50 transition-colors">
+                <TableRow key={s.id} className="group hover:bg-zinc-50/50 transition-colors">
                   <TableCell className="font-bold text-zinc-900">
                     {s.anagrafica_soggetti?.ragione_sociale || 'N/D'}
                   </TableCell>
@@ -95,16 +97,32 @@ export function ScadenzeTable({
                     </Badge>
                   </TableCell>
                   
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      {/* Placeholder per Calendar & WhatsApp - Li attiveremo in Fase 3 */}
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-blue-600" title="Aggiungi a Calendario">
-                        <CalendarPlus size={16} />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-green-600" title="Invia Sollecito WhatsApp">
-                        <MessageCircle size={16} />
-                      </Button>
-                      
+                  <TableCell className="text-right py-3 pr-4">
+                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      {s.anagrafica_soggetti?.telefono ? (
+                        <WhatsAppReminderButton scadenzaId={s.id} />
+                      ) : (
+                        <button
+                          disabled
+                          className="inline-flex items-center justify-center size-8 rounded-md text-zinc-300 cursor-not-allowed bg-zinc-50"
+                          title="Telefono mancante in anagrafica"
+                        >
+                          <MessageCircle size={15} />
+                        </button>
+                      )}
+
+                      {s.data_scadenza ? (
+                        <CalendarLinkButton scadenzaId={s.id} />
+                      ) : (
+                        <button
+                          disabled
+                          className="inline-flex items-center justify-center size-8 rounded-md text-zinc-300 cursor-not-allowed bg-zinc-50"
+                          title="Data scadenza mancante"
+                        >
+                          <CalendarPlus size={15} />
+                        </button>
+                      )}
+
                       {showPagamentoActions && s.stato !== 'pagato' && (
                         <Link href={`?pagamento_id=${s.id}`}>
                           <Button variant="outline" size="sm" className="h-8 text-blue-600 border-blue-200 hover:bg-blue-50">
