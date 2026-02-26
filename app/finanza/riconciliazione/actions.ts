@@ -397,3 +397,24 @@ async function allocaPagamentoIntelligente(supabaseAdmin: any, soggetto_id: stri
       .eq('id', scadenza.id);
   }
 }
+
+export async function rinominaEstrattoConto(id: string, nuovoNome: string) {
+  const supabase = await createClient()
+  
+  let nomeFinale = nuovoNome
+  const { data: doc } = await supabase.from('estratti_conto').select('nome_file').eq('id', id).single()
+  
+  if (doc) {
+    const extMatch = doc.nome_file.match(/\.[0-9a-z]+$/i)
+    const originalExt = extMatch ? extMatch[0] : ''
+    if (originalExt && !nomeFinale.endsWith(originalExt)) {
+      nomeFinale += originalExt
+    }
+  }
+
+  const { error } = await supabase.from('estratti_conto').update({ nome_file: nomeFinale }).eq('id', id)
+  if (error) throw new Error("Impossibile rinominare l'estratto conto")
+  
+  revalidatePath('/finanza/riconciliazione')
+  return true
+}
