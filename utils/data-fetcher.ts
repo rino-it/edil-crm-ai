@@ -1477,10 +1477,9 @@ export async function importMovimentiBanca(movimenti: any[], conto_banca_id?: st
     data_operazione: m.data_operazione,
     descrizione: m.descrizione,
     importo: m.importo,
-    stato: m.stato || 'non_riconciliato',
-    conto_banca_id: conto_banca_id || null, 
+    stato_riconciliazione: m.stato || 'non_riconciliato', // FIX 1: Colonna corretta
+    conto_banca_id: conto_banca_id || m.conto_banca_id || null, // FIX 2: Passaggio ID Conto garantito
     upload_id: upload_id || null,
-    // Gestione campi XML CBI
     xml_iban_controparte: m.xml_iban_controparte || null,
     xml_nome_controparte: m.xml_nome_controparte || null,
     xml_piva_controparte: m.xml_piva_controparte || null,
@@ -1493,7 +1492,10 @@ export async function importMovimentiBanca(movimenti: any[], conto_banca_id?: st
     .insert(righe)
     .select();
     
-  if (error) throw new Error(error.message);
+  if (error) {
+    console.error("Errore inserimento in DB:", error.message);
+    throw new Error(error.message);
+  }
   return data;
 }
 
@@ -1503,7 +1505,7 @@ export async function getMovimentiNonRiconciliati(contoId?: string) {
   let query = supabase
     .from('movimenti_banca')
     .select('*, conti_banca(nome_banca, nome_conto), anagrafica_soggetti(ragione_sociale)')
-    .eq('stato', 'non_riconciliato')
+    .eq('stato_riconciliazione', 'non_riconciliato') // FIX: Usa stato_riconciliazione e non stato
     .order('data_operazione', { ascending: false });
     
   if (contoId) query = query.eq('conto_banca_id', contoId);

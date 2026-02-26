@@ -108,7 +108,7 @@ export async function importaEstrattoConto(formData: FormData) {
       conto_banca_id: contoId
     }));
     
-    const inseriti = await importMovimentiBanca(movimentiConConto);
+    const inseriti = await importMovimentiBanca(movimentiConConto, contoId);
 
     // Salviamo la traccia dell'upload nell'archivio storico mensile
     const supabaseAdmin = createAdminClient(
