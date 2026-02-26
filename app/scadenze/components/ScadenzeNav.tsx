@@ -17,34 +17,36 @@ export default function ScadenzeNav({ badgeDaSmistare }: { badgeDaSmistare: numb
   ];
 
   return (
-    <nav className="flex gap-6 border-b border-border/50">
-      {tabs.map((tab) => {
-        const isActive = pathname === tab.href;
-        const Icon = tab.icon;
-        return (
-          <Link 
-            key={tab.href} 
-            href={tab.href}
-            className={`relative pb-3 text-sm font-medium transition-colors ${
-              isActive ? 'text-blue-600' : 'text-zinc-500 hover:text-zinc-800'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <Icon size={16} />
-              {tab.label}
-              {tab.badge !== undefined && tab.badge > 0 && (
-                <Badge variant={isActive ? "default" : "secondary"} className="ml-1 px-1.5 py-0 text-xs">
-                  {tab.badge}
-                </Badge>
+    <div className="overflow-x-auto -mx-4 px-4">
+      <nav className="flex gap-2 md:gap-6 border-b border-border/50 min-w-max">
+        {tabs.map((tab) => {
+          const isActive = pathname === tab.href;
+          const Icon = tab.icon;
+          return (
+            <Link 
+              key={tab.href} 
+              href={tab.href}
+              className={`relative pb-3 text-xs md:text-sm font-medium transition-colors flex-shrink-0 whitespace-nowrap ${
+                isActive ? 'text-blue-600' : 'text-zinc-500 hover:text-zinc-800'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Icon size={16} className="hidden md:inline" />
+                {tab.label}
+                {tab.badge !== undefined && tab.badge > 0 && (
+                  <Badge variant={isActive ? "default" : "secondary"} className="ml-1 px-1.5 py-0 text-xs">
+                    {tab.badge}
+                  </Badge>
+                )}
+              </div>
+              
+              {isActive && (
+                <div className="absolute left-0 right-0 bottom-0 h-[3px] bg-blue-600 rounded-t-full" />
               )}
-            </div>
-            
-            {isActive && (
-              <div className="absolute left-0 right-0 bottom-0 h-[3px] bg-blue-600 rounded-t-full" />
-            )}
-          </Link>
-        )
-      })}
-    </nav>
+            </Link>
+          )
+        })}
+      </nav>
+    </div>
   );
 }

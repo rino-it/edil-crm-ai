@@ -49,12 +49,12 @@ export default async function PersonalePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--background)] p-8 animate-in fade-in duration-300">
+    <div className="animate-in fade-in duration-300">
       <div className="max-w-6xl mx-auto space-y-8">
         
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
+            <h1 className="text-xl md:text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
               <Users className="h-8 w-8 text-blue-600" /> Gestione Personale
             </h1>
             <p className="text-muted-foreground">Aggiungi dipendenti e subappaltatori per tracciare i costi della manodopera.</p>
@@ -74,62 +74,123 @@ export default async function PersonalePage() {
                   Nessun lavoratore registrato.
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Nome</TableHead>
-                      <TableHead>Ruolo</TableHead>
-                      <TableHead>Costo Orario</TableHead>
-                      <TableHead>Stato</TableHead>
-                      <TableHead className="text-right">Azioni</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                <>
+                  <div className="hidden md:block">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Nome</TableHead>
+                          <TableHead>Ruolo</TableHead>
+                          <TableHead>Costo Orario</TableHead>
+                          <TableHead>Stato</TableHead>
+                          <TableHead className="text-right">Azioni</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {personale.map((p) => {
+                          const nScadenze = scadenzePerPersona[p.id] ?? 0
+                          const nBozze = bozzePerPersona[p.id] ?? 0
+                          return (
+                            <TableRow key={p.id}>
+                              <TableCell className="font-medium">
+                                <div className="flex flex-col gap-1">
+                                  <span>{p.nome}</span>
+                                  <span className="text-xs text-zinc-400 flex items-center gap-1">
+                                    <Phone className="h-3 w-3" /> {p.telefono || 'N/D'}
+                                  </span>
+                                  {/* Badge scadenza documenti */}
+                                  {nScadenze > 0 && (
+                                    <span className="inline-flex items-center gap-1 text-xs text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full w-fit">
+                                      <AlertTriangle className="h-3 w-3" />
+                                      {nScadenze} doc. in scadenza
+                                    </span>
+                                  )}
+                                  {/* Badge bozze da validare */}
+                                  {nBozze > 0 && (
+                                    <span className="inline-flex items-center gap-1 text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 px-1.5 py-0.5 rounded-full w-fit">
+                                      <FileText className="h-3 w-3" />
+                                      {nBozze} da validare
+                                    </span>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-xs font-normal">
+                                  {p.ruolo || 'Nessuno'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="font-semibold text-zinc-700">
+                                € {p.costo_orario?.toLocaleString('it-IT', { minimumFractionDigits: 2 })} / h
+                              </TableCell>
+                              <TableCell>
+                                {p.attivo ? (
+                                  <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full border border-green-200">Attivo</span>
+                                ) : (
+                                  <span className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded-full border border-red-200">Inattivo</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex items-center justify-end gap-1">
+                                  {/* Link documenti */}
+                                  <Link href={`/personale/${p.id}/documenti`}>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className={`text-blue-600 hover:text-blue-800 hover:bg-blue-50 ${(nScadenze > 0 || nBozze > 0) ? 'ring-1 ring-yellow-400' : ''}`}
+                                      title="Gestisci documenti"
+                                    >
+                                      <FileText className="h-4 w-4" />
+                                    </Button>
+                                  </Link>
+                                  {/* Elimina */}
+                                  <form action={deletePersona}>
+                                    <input type="hidden" name="id" value={p.id} />
+                                    <Button variant="ghost" size="sm" type="submit" className="text-red-500 hover:text-red-700 hover:bg-red-50">
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </form>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  <div className="md:hidden divide-y divide-zinc-100">
                     {personale.map((p) => {
                       const nScadenze = scadenzePerPersona[p.id] ?? 0
                       const nBozze = bozzePerPersona[p.id] ?? 0
                       return (
-                        <TableRow key={p.id}>
-                          <TableCell className="font-medium">
-                            <div className="flex flex-col gap-1">
-                              <span>{p.nome}</span>
-                              <span className="text-xs text-zinc-400 flex items-center gap-1">
+                        <div key={p.id} className="p-4 space-y-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="space-y-1 min-w-0">
+                              <div className="font-bold text-zinc-900 truncate">{p.nome}</div>
+                              <div className="text-xs text-zinc-500 flex items-center gap-1">
                                 <Phone className="h-3 w-3" /> {p.telefono || 'N/D'}
-                              </span>
-                              {/* Badge scadenza documenti */}
-                              {nScadenze > 0 && (
-                                <span className="inline-flex items-center gap-1 text-xs text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full w-fit">
-                                  <AlertTriangle className="h-3 w-3" />
-                                  {nScadenze} doc. in scadenza
-                                </span>
-                              )}
-                              {/* Badge bozze da validare */}
-                              {nBozze > 0 && (
-                                <span className="inline-flex items-center gap-1 text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 px-1.5 py-0.5 rounded-full w-fit">
-                                  <FileText className="h-3 w-3" />
-                                  {nBozze} da validare
-                                </span>
-                              )}
+                              </div>
                             </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="text-xs font-normal">
+                            <Badge variant="outline" className="text-xs font-normal shrink-0">
                               {p.ruolo || 'Nessuno'}
                             </Badge>
-                          </TableCell>
-                          <TableCell className="font-semibold text-zinc-700">
-                            € {p.costo_orario?.toLocaleString('it-IT', { minimumFractionDigits: 2 })} / h
-                          </TableCell>
-                          <TableCell>
+                          </div>
+
+                          <div className="flex items-center justify-between text-sm bg-zinc-50 rounded-lg border border-zinc-100 px-3 py-2">
+                            <span className="text-zinc-500">Costo orario</span>
+                            <span className="font-semibold text-zinc-800">
+                              € {p.costo_orario?.toLocaleString('it-IT', { minimumFractionDigits: 2 })} / h
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between">
                             {p.attivo ? (
                               <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full border border-green-200">Attivo</span>
                             ) : (
                               <span className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded-full border border-red-200">Inattivo</span>
                             )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              {/* Link documenti */}
+
+                            <div className="flex items-center gap-1">
                               <Link href={`/personale/${p.id}/documenti`}>
                                 <Button
                                   variant="ghost"
@@ -140,7 +201,6 @@ export default async function PersonalePage() {
                                   <FileText className="h-4 w-4" />
                                 </Button>
                               </Link>
-                              {/* Elimina */}
                               <form action={deletePersona}>
                                 <input type="hidden" name="id" value={p.id} />
                                 <Button variant="ghost" size="sm" type="submit" className="text-red-500 hover:text-red-700 hover:bg-red-50">
@@ -148,12 +208,12 @@ export default async function PersonalePage() {
                                 </Button>
                               </form>
                             </div>
-                          </TableCell>
-                        </TableRow>
+                          </div>
+                        </div>
                       )
                     })}
-                  </TableBody>
-                </Table>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>

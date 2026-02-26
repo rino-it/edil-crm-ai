@@ -61,7 +61,7 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50 p-8">
+    <div>
       <div className="max-w-6xl mx-auto space-y-8">
         
         {/* Header */}
@@ -71,7 +71,7 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
               <ArrowLeft size={16} />
               <Link href="/cantieri">Torna alla lista</Link>
             </div>
-            <h1 className="text-3xl font-bold tracking-tight text-zinc-900 flex items-center gap-3">
+            <h1 className="text-xl md:text-3xl font-bold tracking-tight text-zinc-900 flex items-center gap-3">
               {cantiere.nome || cantiere.descrizione}
               <Badge variant={cantiere.stato === 'aperto' ? 'default' : 'secondary'}>
                 {cantiere.stato}
@@ -83,7 +83,7 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
           <div className="flex flex-wrap gap-2">
             {/* INIZIO MODIFICA: Aggiunto pulsante Archivio Documenti */}
             <Link href={`/cantieri/${id}/archivio`}>
-              <Button variant="outline" className="flex items-center gap-2 border-blue-200 text-blue-700 hover:bg-blue-50">
+              <Button variant="outline" className="w-full md:w-auto flex items-center gap-2 border-blue-200 text-blue-700 hover:bg-blue-50">
                 <FileText className="h-4 w-4" />
                 Archivio Documenti
               </Button>
@@ -91,13 +91,13 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
             {/* FINE MODIFICA */}
             
             <Link href={`/cantieri/${id}/computo`}>
-              <Button variant="outline" className="flex items-center gap-2">
+              <Button variant="outline" className="w-full md:w-auto flex items-center gap-2">
                 <ListChecks className="h-4 w-4" />
                 Computo Metrico
               </Button>
             </Link>
             <Link href={`/cantieri/${id}/spesa`}>
-              <Button className="flex items-center gap-2">
+              <Button className="w-full md:w-auto flex items-center gap-2">
                 <ShoppingCart className="h-4 w-4" />
                 + Nuova Spesa / DDT
               </Button>
@@ -191,46 +191,88 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
                         Nessuna ora lavorata registrata.
                     </div>
                 ) : (
-                    <Table>
+                  <>
+                    <div className="hidden md:block">
+                      <Table>
                         <TableHeader>
-                            <TableRow>
-                                <TableHead>Data</TableHead>
-                                <TableHead>Operaio</TableHead>
-                                <TableHead>Ruolo</TableHead>
-                                <TableHead>Descrizione</TableHead>
-                                <TableHead className="text-right">Ore</TableHead>
-                                <TableHead className="text-right">Costo</TableHead>
-                            </TableRow>
+                          <TableRow>
+                            <TableHead>Data</TableHead>
+                            <TableHead>Operaio</TableHead>
+                            <TableHead>Ruolo</TableHead>
+                            <TableHead>Descrizione</TableHead>
+                            <TableHead className="text-right">Ore</TableHead>
+                            <TableHead className="text-right">Costo</TableHead>
+                          </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                            {presenze.map((p: any) => (
-                                <TableRow key={p.id}>
-                                    <TableCell className="font-medium">
-                                        {new Date(p.data).toLocaleDateString('it-IT')}
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <User className="h-3 w-3 text-zinc-400" />
-                                            <span className="font-medium text-zinc-700">
-                                                {p.personale?.nome || 'Sconosciuto'}
-                                            </span>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge variant="outline" className="text-xs font-normal">
-                                            {p.personale?.ruolo || 'N/D'}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell className="text-zinc-500">{p.descrizione || '-'}</TableCell>
-                                    <TableCell className="text-right font-medium">{p.ore} h</TableCell>
-                                    <TableCell className="text-right font-bold text-zinc-900">
-                                        € {p.costo_calcolato?.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
+                          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                          {presenze.map((p: any) => (
+                            <TableRow key={p.id}>
+                              <TableCell className="font-medium">
+                                {new Date(p.data).toLocaleDateString('it-IT')}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <User className="h-3 w-3 text-zinc-400" />
+                                  <span className="font-medium text-zinc-700">
+                                    {p.personale?.nome || 'Sconosciuto'}
+                                  </span>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-xs font-normal">
+                                  {p.personale?.ruolo || 'N/D'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-zinc-500">{p.descrizione || '-'}</TableCell>
+                              <TableCell className="text-right font-medium">{p.ore} h</TableCell>
+                              <TableCell className="text-right font-bold text-zinc-900">
+                                € {p.costo_calcolato?.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
+                              </TableCell>
+                            </TableRow>
+                          ))}
                         </TableBody>
-                    </Table>
+                      </Table>
+                    </div>
+
+                    <div className="md:hidden divide-y divide-zinc-100">
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                      {presenze.map((p: any) => (
+                        <div key={p.id} className="p-4 space-y-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm font-medium text-zinc-700">
+                              {new Date(p.data).toLocaleDateString('it-IT')}
+                            </span>
+                            <Badge variant="outline" className="text-xs font-normal">
+                              {p.personale?.ruolo || 'N/D'}
+                            </Badge>
+                          </div>
+
+                          <div className="flex items-center gap-2 text-zinc-900 font-semibold">
+                            <User className="h-4 w-4 text-zinc-500" />
+                            <span>{p.personale?.nome || 'Sconosciuto'}</span>
+                          </div>
+
+                          {p.descrizione && (
+                            <p className="text-sm text-zinc-500">{p.descrizione}</p>
+                          )}
+
+                          <div className="grid grid-cols-2 gap-2 bg-zinc-50 rounded-lg border border-zinc-100 p-3">
+                            <div>
+                              <div className="text-[10px] uppercase tracking-wider text-zinc-400">Ore</div>
+                              <div className="text-sm font-bold text-zinc-800">{p.ore} h</div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-[10px] uppercase tracking-wider text-zinc-400">Costo</div>
+                              <div className="text-sm font-bold text-zinc-900">
+                                € {p.costo_calcolato?.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 )}
             </CardContent>
         </Card>
@@ -249,49 +291,114 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
                 Nessuna spesa registrata per questo cantiere.
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Descrizione</TableHead>
-                    <TableHead>Allegato</TableHead>
-                    <TableHead>Stato</TableHead>
-                    <TableHead className="text-right">Importo</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+              <>
+                <div className="hidden md:block">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Data</TableHead>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Descrizione</TableHead>
+                        <TableHead>Allegato</TableHead>
+                        <TableHead>Stato</TableHead>
+                        <TableHead className="text-right">Importo</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {movimenti.map((mov) => (
+                        <TableRow key={mov.id}>
+                          <TableCell className="font-medium whitespace-nowrap">
+                            {new Date(mov.data_movimento).toLocaleDateString('it-IT')}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2 capitalize text-xs">
+                              {getIcon(mov.tipo)} {mov.tipo.replace('_', ' ')}
+                            </div>
+                          </TableCell>
+                          <TableCell className="max-w-[250px] truncate" title={mov.descrizione}>
+                            {mov.descrizione}
+                          </TableCell>
+                          
+                          <TableCell>
+                            {mov.file_url ? (
+                              <a 
+                                href={mov.file_url} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="flex items-center gap-1 text-blue-600 hover:underline text-xs"
+                              >
+                                <FileText className="h-4 w-4" />
+                                Vedi
+                              </a>
+                            ) : (
+                              <span className="text-zinc-400 text-xs">-</span>
+                            )}
+                          </TableCell>
+
+                          <TableCell>
+                            {mov.note ? (
+                              mov.note.includes('⚠️') ? (
+                                <Badge 
+                                  variant="outline" 
+                                  className="bg-amber-50 text-amber-600 border-amber-200 cursor-help whitespace-nowrap" 
+                                  title={mov.note}
+                                >
+                                  <AlertTriangle className="w-3 h-3 mr-1" />
+                                  Parziale
+                                </Badge>
+                              ) : mov.note.includes('✅') ? (
+                                <Badge 
+                                  variant="outline" 
+                                  className="bg-green-50 text-green-600 border-green-200 cursor-help whitespace-nowrap" 
+                                  title={mov.note}
+                                >
+                                  <CheckCircle2 className="w-3 h-3 mr-1" />
+                                  Verificato
+                                </Badge>
+                              ) : (
+                                <Badge 
+                                  variant="outline" 
+                                  className="bg-zinc-50 text-zinc-600 border-zinc-200 cursor-help whitespace-nowrap" 
+                                  title={mov.note}
+                                >
+                                  <Info className="w-3 h-3 mr-1" />
+                                  Info
+                                </Badge>
+                              )
+                            ) : (
+                              <span className="text-zinc-400 text-xs">-</span>
+                            )}
+                          </TableCell>
+
+                          <TableCell className="text-right font-bold text-zinc-900 whitespace-nowrap">
+                            € {mov.importo?.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                <div className="md:hidden divide-y divide-zinc-100">
                   {movimenti.map((mov) => (
-                    <TableRow key={mov.id}>
-                      <TableCell className="font-medium whitespace-nowrap">
-                        {new Date(mov.data_movimento).toLocaleDateString('it-IT')}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2 capitalize text-xs">
+                    <div key={mov.id} className="p-4 space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium text-zinc-700">
+                          {new Date(mov.data_movimento).toLocaleDateString('it-IT')}
+                        </span>
+                        <div className="flex items-center gap-2 capitalize text-xs text-zinc-700">
                           {getIcon(mov.tipo)} {mov.tipo.replace('_', ' ')}
                         </div>
-                      </TableCell>
-                      <TableCell className="max-w-[250px] truncate" title={mov.descrizione}>
-                        {mov.descrizione}
-                      </TableCell>
-                      
-                      <TableCell>
-                        {mov.file_url ? (
-                          <a 
-                            href={mov.file_url} 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
-                            className="flex items-center gap-1 text-blue-600 hover:underline text-xs"
-                          >
-                            <FileText className="h-4 w-4" />
-                            Vedi
-                          </a>
-                        ) : (
-                          <span className="text-zinc-400 text-xs">-</span>
-                        )}
-                      </TableCell>
+                      </div>
 
-                      <TableCell>
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-sm text-zinc-700 flex-1">{mov.descrizione}</p>
+                        <span className="font-bold text-zinc-900 whitespace-nowrap">
+                          € {mov.importo?.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+
+                      <div>
                         {mov.note ? (
                           mov.note.includes('⚠️') ? (
                             <Badge 
@@ -324,15 +431,23 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
                         ) : (
                           <span className="text-zinc-400 text-xs">-</span>
                         )}
-                      </TableCell>
+                      </div>
 
-                      <TableCell className="text-right font-bold text-zinc-900 whitespace-nowrap">
-                        € {mov.importo?.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
-                      </TableCell>
-                    </TableRow>
+                      {mov.file_url && (
+                        <a
+                          href={mov.file_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-blue-600 hover:underline text-xs"
+                        >
+                          <FileText className="h-4 w-4" />
+                          Vedi allegato
+                        </a>
+                      )}
+                    </div>
                   ))}
-                </TableBody>
-              </Table>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>

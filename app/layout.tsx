@@ -6,6 +6,7 @@ import NavbarMobile from "@/components/NavbarMobile";
 import { PageTransition } from "@/components/PageTransition";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { SearchParamsToast } from "@/components/SearchParamsToast";
+import ChatGuida from "@/components/ChatGuida";
 import { Toaster } from "@/components/ui/sonner";
 
 const geistSans = Geist({
@@ -57,6 +58,7 @@ export default function RootLayout({
 
         {/* GLOBAL: Scroll-to-top + Toast + URL param feedback */}
         <ScrollToTop />
+        <ChatGuida />
         <SearchParamsToast />
         <Toaster position="bottom-right" richColors closeButton />
       </body>

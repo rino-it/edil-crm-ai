@@ -30,13 +30,13 @@ export default async function DashboardRiconciliazionePage() {
   const formatEuro = (val: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val)
 
   return (
-    <div className="min-h-screen bg-[var(--background)] p-8 animate-in fade-in duration-300">
+    <div className="animate-in fade-in duration-300">
       <div className="max-w-7xl mx-auto space-y-8">
       
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
+          <h1 className="text-xl md:text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
             <Landmark className="h-8 w-8 text-blue-600" /> Conti e Riconciliazione
           </h1>
           <p className="text-muted-foreground mt-1">Gestisci i conti correnti, carica gli estratti conto e allinea i saldi.</p>

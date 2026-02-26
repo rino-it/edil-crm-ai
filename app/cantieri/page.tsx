@@ -20,12 +20,12 @@ export default async function CantieriPage() {
     .order('created_at', { ascending: false })
 
   return (
-    <div className="min-h-screen bg-[var(--background)] p-8 animate-in fade-in duration-300">
+    <div className="animate-in fade-in duration-300">
       <div className="max-w-6xl mx-auto space-y-8">
         
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-zinc-900">Cantieri</h1>
+            <h1 className="text-xl md:text-3xl font-bold tracking-tight text-zinc-900">Cantieri</h1>
             <p className="text-zinc-500">Gestisci i tuoi progetti attivi e l'archivio.</p>
           </div>
           <Link href="/cantieri/nuovo">

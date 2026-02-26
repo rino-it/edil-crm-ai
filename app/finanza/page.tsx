@@ -31,13 +31,13 @@ export default async function FinanzaPage() {
   const formatEuro = (val: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val)
 
   return (
-    <div className="min-h-screen bg-[var(--background)] p-8 animate-in fade-in duration-300">
+    <div className="animate-in fade-in duration-300">
       <div className="max-w-7xl mx-auto space-y-8">
         
         {/* Header con Alert Cassa */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-zinc-900 flex items-center gap-3">
+            <h1 className="text-xl md:text-3xl font-bold tracking-tight text-zinc-900 flex items-center gap-3">
               <TrendingUp className="h-8 w-8 text-blue-600" /> Finanza & Controllo
             </h1>
             <p className="text-zinc-500 mt-1">Cashflow reale, con impatto immediato dello storico arretrato.</p>
@@ -51,9 +51,9 @@ export default async function FinanzaPage() {
         </div>
 
         {/* SEZIONE 1: KPI Globali (Cliccabili per navigare alle nuove pagine) */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <Card className={`shadow-[var(--shadow-sm)] border-border/60 ${kpis.cassa_attuale < 0 ? 'ring-1 ring-rose-500/20' : ''}`}>
-            <CardHeader className="pb-2 border-b border-border/40">
+            <CardHeader className="pb-1 md:pb-2 border-b border-border/40">
               <div className="flex items-center justify-between gap-2">
                 <div className={`h-2 w-2 rounded-full ${kpis.cassa_attuale < 0 ? 'bg-rose-500' : 'bg-blue-500'}`} />
                 <CardTitle className="text-xs font-bold text-muted-foreground uppercase flex-1">
@@ -62,8 +62,8 @@ export default async function FinanzaPage() {
                 <Wallet className={`h-4 w-4 ${kpis.cassa_attuale < 0 ? 'text-rose-500' : 'text-blue-500'}`} />
               </div>
             </CardHeader>
-            <CardContent className="pt-4">
-              <div className={`text-2xl font-black ${kpis.cassa_attuale < kpis.soglia_alert ? 'text-rose-600' : 'text-foreground'}`}>
+            <CardContent className="pt-3 md:pt-4">
+              <div className={`text-lg md:text-2xl font-black ${kpis.cassa_attuale < kpis.soglia_alert ? 'text-rose-600' : 'text-foreground'}`}>
                 {formatEuro(kpis.cassa_attuale)}
               </div>
             </CardContent>
@@ -71,7 +71,7 @@ export default async function FinanzaPage() {
 
           <Link href="/finanza/da-incassare" className="block group h-full">
             <Card className="shadow-[var(--shadow-sm)] border-border/60 h-full card-hover">
-              <CardHeader className="pb-2 border-b border-border/40">
+              <CardHeader className="pb-1 md:pb-2 border-b border-border/40">
                 <div className="flex items-center justify-between gap-2">
                   <div className="h-2 w-2 rounded-full bg-emerald-500" />
                   <CardTitle className="text-xs font-bold text-muted-foreground uppercase flex-1">
@@ -80,8 +80,8 @@ export default async function FinanzaPage() {
                   <TrendingUp className="h-4 w-4 text-emerald-500" />
                 </div>
               </CardHeader>
-              <CardContent className="pt-4">
-                <div className="text-2xl font-black text-emerald-700 flex items-center gap-2">
+              <CardContent className="pt-3 md:pt-4">
+                <div className="text-lg md:text-2xl font-black text-emerald-700 flex items-center gap-2">
                   {formatEuro(kpis.fatturato)}
                   <ArrowRight size={14} className="text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
@@ -92,7 +92,7 @@ export default async function FinanzaPage() {
 
           <Link href="/finanza/da-pagare" className="block group h-full">
             <Card className="shadow-[var(--shadow-sm)] border-border/60 h-full card-hover">
-              <CardHeader className="pb-2 border-b border-border/40">
+              <CardHeader className="pb-1 md:pb-2 border-b border-border/40">
                 <div className="flex items-center justify-between gap-2">
                   <div className="h-2 w-2 rounded-full bg-rose-500" />
                   <CardTitle className="text-xs font-bold text-muted-foreground uppercase flex-1">
@@ -101,8 +101,8 @@ export default async function FinanzaPage() {
                   <TrendingDown className="h-4 w-4 text-rose-500" />
                 </div>
               </CardHeader>
-              <CardContent className="pt-4">
-                <div className="text-2xl font-black text-rose-700 flex items-center gap-2">
+              <CardContent className="pt-3 md:pt-4">
+                <div className="text-lg md:text-2xl font-black text-rose-700 flex items-center gap-2">
                   {formatEuro(kpis.costi)}
                   <ArrowRight size={14} className="text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
@@ -112,7 +112,7 @@ export default async function FinanzaPage() {
           </Link>
 
           <Card className="shadow-[var(--shadow-sm)] border-border/60">
-            <CardHeader className="pb-2 border-b border-border/40">
+            <CardHeader className="pb-1 md:pb-2 border-b border-border/40">
               <div className="flex items-center justify-between gap-2">
                 <div className="h-2 w-2 rounded-full bg-indigo-500" />
                 <CardTitle className="text-xs font-bold text-muted-foreground uppercase flex-1">
@@ -121,8 +121,8 @@ export default async function FinanzaPage() {
                 <Activity className="h-4 w-4 text-indigo-500" />
               </div>
             </CardHeader>
-            <CardContent className="pt-4">
-              <div className={`text-2xl font-black ${kpis.margine >= 0 ? 'text-indigo-700' : 'text-rose-600'}`}>
+            <CardContent className="pt-3 md:pt-4">
+              <div className={`text-lg md:text-2xl font-black ${kpis.margine >= 0 ? 'text-indigo-700' : 'text-rose-600'}`}>
                 {formatEuro(kpis.margine)}
               </div>
             </CardContent>
@@ -131,7 +131,7 @@ export default async function FinanzaPage() {
           {/* Sostituito: Da DSO a Programmazione Cashflow */}
           <Link href="/finanza/programmazione" className="block group h-full">
             <Card className="shadow-[var(--shadow-sm)] border-border/60 h-full card-hover">
-              <CardHeader className="pb-2 border-b border-border/40">
+              <CardHeader className="pb-1 md:pb-2 border-b border-border/40">
                 <div className="flex items-center justify-between gap-2">
                   <div className="h-2 w-2 rounded-full bg-blue-500" />
                   <CardTitle className="text-xs font-bold text-muted-foreground uppercase flex-1">
@@ -140,8 +140,8 @@ export default async function FinanzaPage() {
                   <LineChart className="h-4 w-4 text-blue-500" />
                 </div>
               </CardHeader>
-              <CardContent className="pt-4">
-                <div className="text-lg font-black text-blue-700 flex items-center gap-2">
+              <CardContent className="pt-3 md:pt-4">
+                <div className="text-base md:text-lg font-black text-blue-700 flex items-center gap-2">
                   Cashflow 90gg
                   <ArrowRight size={14} className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>

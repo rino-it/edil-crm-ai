@@ -42,13 +42,13 @@ export default async function AnagrafichePage({
   const formatEuro = (val: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val)
 
   return (
-    <div className="min-h-screen bg-[var(--background)] p-8 animate-in fade-in duration-300">
+    <div className="animate-in fade-in duration-300">
       <div className="max-w-7xl mx-auto space-y-8">
         
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
+            <h1 className="text-xl md:text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
               <Building2 className="h-8 w-8 text-blue-600" /> Anagrafiche
             </h1>
             <p className="text-muted-foreground">Gestione centralizzata fornitori e clienti dell'azienda.</p>
@@ -138,53 +138,53 @@ export default async function AnagrafichePage({
         )}
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Card className="shadow-[var(--shadow-sm)] border-border/60">
-            <CardHeader className="pb-2 border-b border-border/40 flex flex-row items-center justify-between">
+            <CardHeader className="pb-1 md:pb-2 border-b border-border/40 flex flex-row items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-orange-500" />
                 <CardTitle className="text-xs font-bold text-muted-foreground uppercase">Fornitori</CardTitle>
               </div>
               <Users className="h-4 w-4 text-orange-500" />
             </CardHeader>
-            <CardContent className="pt-4">
-              <div className="text-2xl font-black text-orange-700">{kpis.fornitori}</div>
+            <CardContent className="pt-3 md:pt-4">
+              <div className="text-lg md:text-2xl font-black text-orange-700">{kpis.fornitori}</div>
             </CardContent>
           </Card>
           <Card className="shadow-[var(--shadow-sm)] border-border/60">
-            <CardHeader className="pb-2 border-b border-border/40 flex flex-row items-center justify-between">
+            <CardHeader className="pb-1 md:pb-2 border-b border-border/40 flex flex-row items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-emerald-500" />
                 <CardTitle className="text-xs font-bold text-muted-foreground uppercase">Clienti</CardTitle>
               </div>
               <Users className="h-4 w-4 text-emerald-500" />
             </CardHeader>
-            <CardContent className="pt-4">
-              <div className="text-2xl font-black text-emerald-700">{kpis.clienti}</div>
+            <CardContent className="pt-3 md:pt-4">
+              <div className="text-lg md:text-2xl font-black text-emerald-700">{kpis.clienti}</div>
             </CardContent>
           </Card>
           <Card className="shadow-[var(--shadow-sm)] border-border/60">
-            <CardHeader className="pb-2 border-b border-border/40 flex flex-row items-center justify-between">
+            <CardHeader className="pb-1 md:pb-2 border-b border-border/40 flex flex-row items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-indigo-500" />
                 <CardTitle className="text-xs font-bold text-muted-foreground uppercase">Crediti Aperti</CardTitle>
               </div>
               <TrendingDown className="h-4 w-4 text-indigo-600" />
             </CardHeader>
-            <CardContent className="pt-4">
-              <div className="text-2xl font-black text-indigo-700">{formatEuro(kpis.totale_crediti)}</div>
+            <CardContent className="pt-3 md:pt-4">
+              <div className="text-lg md:text-2xl font-black text-indigo-700">{formatEuro(kpis.totale_crediti)}</div>
             </CardContent>
           </Card>
           <Card className="shadow-[var(--shadow-sm)] border-border/60">
-            <CardHeader className="pb-2 border-b border-border/40 flex flex-row items-center justify-between">
+            <CardHeader className="pb-1 md:pb-2 border-b border-border/40 flex flex-row items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-rose-500" />
                 <CardTitle className="text-xs font-bold text-muted-foreground uppercase">Debiti Aperti</CardTitle>
               </div>
               <Wallet className="h-4 w-4 text-rose-600" />
             </CardHeader>
-            <CardContent className="pt-4">
-              <div className="text-2xl font-black text-rose-700">{formatEuro(kpis.totale_debiti)}</div>
+            <CardContent className="pt-3 md:pt-4">
+              <div className="text-lg md:text-2xl font-black text-rose-700">{formatEuro(kpis.totale_debiti)}</div>
             </CardContent>
           </Card>
         </div>
@@ -216,63 +216,109 @@ export default async function AnagrafichePage({
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            <Table>
-              <TableHeader className="bg-zinc-50/50">
-                <TableRow>
-                  <TableHead className="w-[30%]">Ragione Sociale</TableHead>
-                  <TableHead>Identificativo</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Contatti</TableHead>
-                  <TableHead className="text-right">Azioni</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {result.data.length === 0 ? (
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader className="bg-zinc-50/50">
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-16 text-zinc-500">
-                      <div className="flex flex-col items-center justify-center gap-2">
-                        <Building2 className="h-8 w-8 text-zinc-300" />
-                        <p className="italic">Nessun soggetto trovato.</p>
-                      </div>
-                    </TableCell>
+                    <TableHead className="w-[30%]">Ragione Sociale</TableHead>
+                    <TableHead>Identificativo</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Contatti</TableHead>
+                    <TableHead className="text-right">Azioni</TableHead>
                   </TableRow>
-                ) : (
-                  result.data.map((s) => (
-                    <TableRow key={s.id} className="hover:bg-zinc-50/80 group transition-colors">
-                      <TableCell className="font-bold text-zinc-900">
-                        <Link href={`/anagrafiche/${s.id}`} className="hover:text-blue-600 transition-colors">
-                          {s.ragione_sociale}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-zinc-500 font-mono text-xs">
-                        <div className="flex flex-col gap-0.5">
-                          <span>PIVA: {s.partita_iva || '-'}</span>
-                          <span>CF: {s.codice_fiscale || '-'}</span>
+                </TableHeader>
+                <TableBody>
+                  {result.data.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-16 text-zinc-500">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <Building2 className="h-8 w-8 text-zinc-300" />
+                          <p className="italic">Nessun soggetto trovato.</p>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={s.tipo === 'cliente' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-orange-50 text-orange-700 border-orange-200'}>
-                          {s.tipo?.toUpperCase()}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-zinc-500 text-xs">
-                        <div className="flex flex-col gap-1">
-                          <span className="flex items-center gap-1.5"><Mail size={12} className="text-zinc-400" /> {s.email || '-'}</span>
-                          <span className="flex items-center gap-1.5"><Phone size={12} className="text-zinc-400" /> {s.telefono || '-'}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Link href={`/anagrafiche/${s.id}`}>
-                          <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 transition-colors">
-                            <ExternalLink size={14} className="mr-1.5" /> Dettaglio
-                          </Button>
-                        </Link>
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ) : (
+                    result.data.map((s) => (
+                      <TableRow key={s.id} className="hover:bg-zinc-50/80 group transition-colors">
+                        <TableCell className="font-bold text-zinc-900">
+                          <Link href={`/anagrafiche/${s.id}`} className="hover:text-blue-600 transition-colors">
+                            {s.ragione_sociale}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="text-zinc-500 font-mono text-xs">
+                          <div className="flex flex-col gap-0.5">
+                            <span>PIVA: {s.partita_iva || '-'}</span>
+                            <span>CF: {s.codice_fiscale || '-'}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={s.tipo === 'cliente' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-orange-50 text-orange-700 border-orange-200'}>
+                            {s.tipo?.toUpperCase()}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-zinc-500 text-xs">
+                          <div className="flex flex-col gap-1">
+                            <span className="flex items-center gap-1.5"><Mail size={12} className="text-zinc-400" /> {s.email || '-'}</span>
+                            <span className="flex items-center gap-1.5"><Phone size={12} className="text-zinc-400" /> {s.telefono || '-'}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Link href={`/anagrafiche/${s.id}`}>
+                            <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 transition-colors">
+                              <ExternalLink size={14} className="mr-1.5" /> Dettaglio
+                            </Button>
+                          </Link>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+
+            <div className="md:hidden divide-y divide-zinc-100">
+              {result.data.length === 0 ? (
+                <div className="text-center py-12 text-zinc-500">
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <Building2 className="h-8 w-8 text-zinc-300" />
+                    <p className="italic">Nessun soggetto trovato.</p>
+                  </div>
+                </div>
+              ) : (
+                result.data.map((s) => (
+                  <div key={s.id} className="p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <Link href={`/anagrafiche/${s.id}`} className="font-bold text-zinc-900 hover:text-blue-600 transition-colors line-clamp-2">
+                          {s.ragione_sociale}
+                        </Link>
+                      </div>
+                      <Badge variant="outline" className={`shrink-0 ${s.tipo === 'cliente' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>
+                        {s.tipo?.toUpperCase()}
+                      </Badge>
+                    </div>
+
+                    <div className="text-xs text-zinc-500 font-mono bg-zinc-50 rounded-lg border border-zinc-100 p-2">
+                      <div>PIVA: {s.partita_iva || '-'}</div>
+                      <div>CF: {s.codice_fiscale || '-'}</div>
+                    </div>
+
+                    <div className="text-xs text-zinc-500 space-y-1">
+                      <div className="flex items-center gap-1.5"><Mail size={12} className="text-zinc-400" /> {s.email || '-'}</div>
+                      <div className="flex items-center gap-1.5"><Phone size={12} className="text-zinc-400" /> {s.telefono || '-'}</div>
+                    </div>
+
+                    <div className="flex justify-end">
+                      <Link href={`/anagrafiche/${s.id}`}>
+                        <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 transition-colors">
+                          <ExternalLink size={14} className="mr-1.5" /> Dettaglio
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
 
             {/* Controlli Paginazione */}
             <div className="p-4 border-t border-zinc-100 bg-zinc-50/30">
