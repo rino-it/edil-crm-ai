@@ -226,3 +226,52 @@ export async function assegnaCantiereBulk(scadenzaIds: string[], cantiereId: str
 export async function inviaReminderWhatsApp(scadenzaId: string) {
   console.log("Invia reminder per scadenza", scadenzaId)
 }
+
+export async function registraIncassoFattura(scadenzaId: string, contoId: string, dataPagamento: string, metodoPagamento: string) {
+  const supabase = await createClient();
+
+  // 1. Recupera i dati della fattura
+  const { data: scadenza, error: errScad } = await supabase
+    .from('scadenze_pagamento')
+    .select('importo_totale, importo_pagato, fattura_riferimento')
+    .eq('id', scadenzaId)
+    .single();
+
+  if (errScad || !scadenza) throw new Error('Fattura non trovata');
+
+  const daIncassare = Number(scadenza.importo_totale) - Number(scadenza.importo_pagato || 0);
+
+  // 2. Chiudi la fattura
+  const { error: errUpdate } = await supabase.from('scadenze_pagamento').update({
+    stato: 'pagato',
+    importo_pagato: scadenza.importo_totale,
+    data_pagamento: dataPagamento,
+    metodo_pagamento: metodoPagamento
+  }).eq('id', scadenzaId);
+
+  if (errUpdate) throw new Error('Errore aggiornamento fattura');
+
+  // 3. Crea il movimento bancario manuale GIA' RICONCILIATO
+  await supabase.from('movimenti_banca').insert({
+    conto_banca_id: contoId,
+    data_operazione: dataPagamento,
+    importo: daIncassare, // Entrata positiva
+    descrizione: `Incasso manuale: ${scadenza.fattura_riferimento || 'Fattura Vendita'}`,
+    stato_riconciliazione: 'riconciliato',
+    scadenza_id: scadenzaId
+  });
+
+  // 4. Aumenta il saldo della banca (Il Data Zero viene rispettato)
+  const { data: conto } = await supabase.from('conti_banca').select('saldo_attuale').eq('id', contoId).single();
+  if (conto) {
+    await supabase.from('conti_banca').update({
+      saldo_attuale: Number(conto.saldo_attuale) + daIncassare
+    }).eq('id', contoId);
+  }
+
+  // Aggiorna la vista
+  revalidatePath('/scadenze');
+  revalidatePath('/finanza');
+  
+  return { success: true };
+}

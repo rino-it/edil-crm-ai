@@ -10,6 +10,7 @@ import { PaginatedResult } from "@/types/pagination"
 import { PaginationControls } from "@/components/ui/pagination-controls"
 import { WhatsAppReminderButton } from "@/app/finanza/components/WhatsAppReminderButton"
 import { CalendarLinkButton } from "@/app/finanza/components/CalendarLinkButton"
+import { IncassoManualeDialog } from "./IncassoManualeDialog"
 
 interface ScadenzeTableProps {
   data: ScadenzaWithSoggetto[];
@@ -124,11 +125,15 @@ export function ScadenzeTable({
                       )}
 
                       {showPagamentoActions && s.stato !== 'pagato' && (
-                        <Link href={`?pagamento_id=${s.id}`}>
-                          <Button variant="outline" size="sm" className="h-8 text-blue-600 border-blue-200 hover:bg-blue-50">
-                            <CheckCircle2 size={14} className="mr-1.5" /> Paga
-                          </Button>
-                        </Link>
+                        s.tipo === 'entrata' ? (
+                          <IncassoManualeDialog scadenza={s} />
+                        ) : (
+                          <Link href={`?pagamento_id=${s.id}`}>
+                            <Button variant="outline" size="sm" className="h-8 text-blue-600 border-blue-200 hover:bg-blue-50">
+                              <CheckCircle2 size={14} className="mr-1.5" /> Paga
+                            </Button>
+                          </Link>
+                        )
                       )}
                     </div>
                   </TableCell>
@@ -186,11 +191,17 @@ export function ScadenzeTable({
 
               <div className="flex gap-2">
                 {showPagamentoActions && s.stato !== 'pagato' && (
-                  <Link href={`?pagamento_id=${s.id}`} className="flex-1">
-                    <Button className="w-full h-11 bg-blue-600 font-bold rounded-xl shadow-md shadow-blue-100">
-                      Registra <ArrowRight size={16} className="ml-2" />
-                    </Button>
-                  </Link>
+                  s.tipo === 'entrata' ? (
+                    <div className="flex-1">
+                      <IncassoManualeDialog scadenza={s} />
+                    </div>
+                  ) : (
+                    <Link href={`?pagamento_id=${s.id}`} className="flex-1">
+                      <Button className="w-full h-11 bg-blue-600 font-bold rounded-xl shadow-md shadow-blue-100">
+                        Registra <ArrowRight size={16} className="ml-2" />
+                      </Button>
+                    </Link>
+                  )
                 )}
                 <Button variant="outline" className="h-11 w-12 rounded-xl border-zinc-200">
                   <MoreHorizontal size={18} className="text-zinc-400" />
