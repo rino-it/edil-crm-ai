@@ -35,7 +35,7 @@ export async function creaScadenza(formData: FormData) {
 
   revalidatePath('/scadenze')
   revalidatePath('/finanza')
-  redirect('/scadenze')
+  redirect('/scadenze?success=Scadenza+creata+con+successo')
 }
 
 /**
@@ -87,6 +87,7 @@ export async function segnaComePagato(formData: FormData) {
 
   revalidatePath('/scadenze')
   revalidatePath('/finanza')
+  redirect('/scadenze?success=Pagamento+registrato')
 }
 
 /**

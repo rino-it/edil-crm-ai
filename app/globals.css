@@ -218,3 +218,40 @@ html {
 .btn-hover:active {
   transform: translateY(0) scale(0.98);
 }
+
+/* ==========================================
+   Focus visible globale — ring morbido
+   ========================================== */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px oklch(0.6 0.15 250 / 20%);
+}
+
+/* ==========================================
+   Scrollbar custom (webkit)
+   ========================================== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: oklch(0.7 0 0 / 30%);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.5 0 0 / 50%);
+}
+
+/* ==========================================
+   Selection color
+   ========================================== */
+::selection {
+  background: oklch(0.7 0.15 250 / 30%);
+  color: inherit;
+}

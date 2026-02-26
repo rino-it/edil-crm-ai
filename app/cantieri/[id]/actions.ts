@@ -27,5 +27,5 @@ export async function aggiungiMovimento(formData: FormData) {
   }
 
   revalidatePath(`/cantieri/${cantiereId}`)
-  redirect(`/cantieri/${cantiereId}`)
+  redirect(`/cantieri/${cantiereId}?success=Spesa+aggiunta`)
 }

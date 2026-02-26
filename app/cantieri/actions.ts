@@ -37,7 +37,5 @@ export async function creaCantiere(formData: FormData) {
   // Sincronizza i dati
   revalidatePath('/cantieri')
   revalidatePath('/')
-  
-  // Ritorna alla Home (schermata principale) dopo il salvataggio
-  redirect('/')
+  redirect('/?success=Cantiere+creato+con+successo')
 }

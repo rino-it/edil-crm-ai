@@ -4,6 +4,9 @@ import "./globals.css";
 import { Sidebar } from "@/components/Sidebar";
 import NavbarMobile from "@/components/NavbarMobile";
 import { PageTransition } from "@/components/PageTransition";
+import { ScrollToTop } from "@/components/ScrollToTop";
+import { SearchParamsToast } from "@/components/SearchParamsToast";
+import { Toaster } from "@/components/ui/sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -51,6 +54,11 @@ export default function RootLayout({
           </div>
           
         </div>
+
+        {/* GLOBAL: Scroll-to-top + Toast + URL param feedback */}
+        <ScrollToTop />
+        <SearchParamsToast />
+        <Toaster position="bottom-right" richColors closeButton />
       </body>
     </html>
   );
