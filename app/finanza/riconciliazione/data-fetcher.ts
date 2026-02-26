@@ -1753,7 +1753,7 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
       continue;
     }
 
-// ==========================================
+    // ==========================================
     // 2. STEP GIROCONTI E CARTE DI CREDITO
     // ==========================================
     const regexGiroconto = /\b(giroconto|giro\s*(da|a|per|su)|addebito carta|carta del credito cooperativo|estratto conto carta)\b/i;
@@ -1762,7 +1762,11 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
     let contoMatchato = null;
 
     if (isGiroconto) {
-      // Cerca la controparte nei conti salvati (escludendo il conto da cui stiamo leggendo)
+      // Deduce la direzione matematica dal segno dell'importo
+      const isUscita = m.importo < 0;
+      const direzioneTesto = isUscita ? "Uscita verso" : "Entrata da";
+
+      // Cerca la controparte nei conti salvati
       for (const c of conti_banca) {
         // FIX CRASH: Salta se non c'è nome_conto o se è lo stesso conto che stiamo analizzando
         if (!c.nome_conto || c.id === m.conto_banca_id) continue;
@@ -1779,7 +1783,7 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
         const nomeBancaNorm = normalizzaNome(c.nome_banca);
         
         if ((nomeContoNorm.length > 3 && causaleNorm.includes(nomeContoNorm)) || 
-            (nomeBancaNorm.length > 3 && causaleNorm.includes(nomeBancaNorm))) {
+            (nomeBancaNorm && nomeBancaNorm.length >= 3 && causaleNorm.includes(nomeBancaNorm))) {
           contoMatchato = c;
           break;
         }
@@ -1795,28 +1799,25 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
         }
       }
 
-      // Deduce la direzione matematica dal segno dell'importo
-      const direzione = m.importo < 0 ? "Uscita verso" : "Entrata da";
-
       if (contoMatchato) {
         // Formattazione specifica se riconosce che è una carta
         if (contoMatchato.tipo_conto === 'credito' || contoMatchato.tipo_conto === 'prepagata') {
-          controparteGiroconto = m.importo < 0 
+          controparteGiroconto = isUscita 
             ? `Addebito saldo su ${contoMatchato.nome_banca} (${contoMatchato.nome_conto})` 
-            : `Ricarica/Storno da ${contoMatchato.nome_banca}`;
+            : `Ricarica/Storno da ${contoMatchato.nome_banca} (${contoMatchato.nome_conto})`;
         } else {
           // Formattazione per giroconto classico tra banche
-          controparteGiroconto = `Giroconto: ${direzione} ${contoMatchato.nome_banca} - ${contoMatchato.nome_conto}`;
+          controparteGiroconto = `Giroconto: ${direzioneTesto} ${contoMatchato.nome_banca} - ${contoMatchato.nome_conto}`;
         }
       } else {
-        // Se non trova il conto censito, usa i dati grezzi dell'XML se disponibili
+        // Nessun conto interno matchato, tenta con i dati XML/Testo grezzi
         let ibanTrovato = m.xml_iban_controparte || causale.match(/\bIT\d{2}[A-Z]\d{10}[A-Z0-9]{12}\b/i)?.[0];
         if (ibanTrovato) {
-          controparteGiroconto = `Giroconto: ${direzione} IBAN ${ibanTrovato}`;
+          controparteGiroconto = `Giroconto: ${direzioneTesto} IBAN ${ibanTrovato}`;
         } else if (m.xml_nome_controparte) {
-          controparteGiroconto = `Giroconto: ${direzione} ${m.xml_nome_controparte}`;
+          controparteGiroconto = `Giroconto: ${direzioneTesto} ${m.xml_nome_controparte}`;
         } else {
-          controparteGiroconto = `Giroconto (Controparte non determinata)`;
+          controparteGiroconto = `Giroconto (${direzioneTesto} controparte non identificata)`;
         }
       }
 
@@ -1826,7 +1827,7 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
         soggetto_id: null, 
         confidence: 0.99,
         motivo: controparteGiroconto.trim(), 
-        ragione_sociale: contoMatchato ? contoMatchato.nome_conto : "Giroconto / Carta", 
+        ragione_sociale: contoMatchato ? `${contoMatchato.nome_banca} ${contoMatchato.nome_conto}` : "Giroconto / Carta", 
         categoria: 'giroconto'
       });
       continue;
