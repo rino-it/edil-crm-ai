@@ -5,7 +5,9 @@ import { createClient } from '@/utils/supabase/server'
 import { createClient as createAdminClient } from "@supabase/supabase-js"
 import { parseCSVBanca, parseXMLBanca, importMovimentiBanca, confermaRiconciliazione } from '@/utils/data-fetcher'
 
-// --- AZIONI PER DOCUMENTI GENERICI ---
+// ==========================================
+// AZIONI PER DOCUMENTI GENERICI (NUVOLA)
+// ==========================================
 export async function uploadDocumentoBanca(formData: FormData) {
   const supabase = await createClient()
   const file = formData.get("file") as File
@@ -14,7 +16,6 @@ export async function uploadDocumentoBanca(formData: FormData) {
 
   if (!file || !conto_id) throw new Error("Dati mancanti")
 
-  // 1. Upload su Storage
   const filePath = `conti/${conto_id}/documenti/${anno}/${Date.now()}_${file.name}`
   const { error: storageErr } = await supabase.storage.from('documenti_finanza').upload(filePath, file)
   if (storageErr) {
@@ -22,10 +23,8 @@ export async function uploadDocumentoBanca(formData: FormData) {
     throw new Error(`Errore caricamento file: ${storageErr.message}`)
   }
 
-  // 2. Ottieni URL Pubblico
   const { data: { publicUrl } } = supabase.storage.from('documenti_finanza').getPublicUrl(filePath)
 
-  // 3. Salva a Database
   await supabase.from('documenti_banca').insert({
     conto_banca_id: conto_id, anno, nome_file: file.name, url_documento: publicUrl
   })
@@ -38,7 +37,63 @@ export async function getDocumentiBanca(conto_id: string, anno: number) {
   return data || []
 }
 
-// --- AZIONI PER ESTRATTI CONTO ---
+export async function rinominaDocumentoBanca(id: string, nuovoNome: string) {
+  const supabase = await createClient()
+  
+  let nomeFinale = nuovoNome
+  const { data: doc } = await supabase.from('documenti_banca').select('nome_file').eq('id', id).single()
+  
+  if (doc) {
+    const extMatch = doc.nome_file.match(/\.[0-9a-z]+$/i)
+    const originalExt = extMatch ? extMatch[0] : ''
+    if (originalExt && !nomeFinale.endsWith(originalExt)) {
+      nomeFinale += originalExt
+    }
+  }
+
+  const { error } = await supabase.from('documenti_banca').update({ nome_file: nomeFinale }).eq('id', id)
+  if (error) throw new Error("Impossibile rinominare il documento")
+  
+  revalidatePath('/finanza/riconciliazione')
+  return true
+}
+
+// ==========================================
+// AZIONI PER ESTRATTI CONTO (CALENDARIO)
+// ==========================================
+export async function uploadEstrattoConto(formData: FormData) {
+  const supabase = await createClient()
+  const file = formData.get("file") as File
+  const conto_id = formData.get("conto_id") as string
+  const anno = parseInt(formData.get("anno") as string)
+  const mese = parseInt(formData.get("mese") as string)
+
+  if (!file || !conto_id) throw new Error("Dati mancanti")
+
+  const filePath = `conti/${conto_id}/estratti/${anno}/${mese}/${Date.now()}_${file.name}`
+  const { error: storageErr } = await supabase.storage.from('documenti_finanza').upload(filePath, file)
+  if (storageErr) {
+    console.error("❌ ERRORE STORAGE SUPABASE:", storageErr)
+    throw new Error(`Errore caricamento file: ${storageErr.message}`)
+  }
+
+  const { data: { publicUrl } } = supabase.storage.from('documenti_finanza').getPublicUrl(filePath)
+
+  await supabase.from('estratti_conto').insert({
+    conto_banca_id: conto_id, anno, mese, nome_file: file.name, url_documento: publicUrl
+  })
+  revalidatePath('/finanza/riconciliazione')
+}
+
+export async function getEstrattiConto(conto_id: string, anno: number, mese: number) {
+  const supabase = await createClient()
+  const { data } = await supabase.from('estratti_conto').select('*').eq('conto_banca_id', conto_id).eq('anno', anno).eq('mese', mese).order('created_at', { ascending: false })
+  return data || []
+}
+
+// ==========================================
+// GESTIONE CONTI E CARTE
+// ==========================================
 export async function creaContoBanca(formData: FormData) {
   const nome_banca = formData.get("nome_banca") as string
   const nome_conto = formData.get("nome_conto") as string
@@ -61,7 +116,7 @@ export async function creaContoBanca(formData: FormData) {
     tipo_conto,
     plafond: tipo_conto === 'credito' ? plafond : null,
     giorno_addebito: tipo_conto === 'credito' ? giorno_addebito : null,
-    saldo_iniziale: tipo_conto === 'credito' ? 0 : saldo_iniziale, // La CdC parte da zero
+    saldo_iniziale: tipo_conto === 'credito' ? 0 : saldo_iniziale,
     saldo_attuale: tipo_conto === 'credito' ? 0 : saldo_iniziale
   })
 
@@ -73,6 +128,9 @@ export async function creaContoBanca(formData: FormData) {
   revalidatePath('/finanza/riconciliazione')
 }
 
+// ==========================================
+// IMPORTAZIONE MOVIMENTI
+// ==========================================
 export async function importaEstrattoConto(formData: FormData) {
   try {
     const file = formData.get('file') as File;
@@ -90,10 +148,8 @@ export async function importaEstrattoConto(formData: FormData) {
     
     if (fileName.endsWith('.xml')) {
       movimenti = parseXMLBanca(text);
-      console.log(`📦 XML: ${movimenti.length} movimenti estratti`);
     } else if (fileName.endsWith('.csv')) {
       movimenti = parseCSVBanca(text);
-      console.log(`📦 CSV: ${movimenti.length} movimenti estratti`);
     } else {
       throw new Error("Formato non supportato. Usa file .csv o .xml");
     }
@@ -102,7 +158,6 @@ export async function importaEstrattoConto(formData: FormData) {
       throw new Error("Nessun movimento valido trovato.");
     }
     
-    // Assegniamo esplicitamente il conto_banca_id a ogni movimento prima di salvarlo
     const movimentiConConto = movimenti.map(m => ({
       ...m,
       conto_banca_id: contoId
@@ -110,7 +165,6 @@ export async function importaEstrattoConto(formData: FormData) {
     
     const inseriti = await importMovimentiBanca(movimentiConConto, contoId);
 
-    // Salviamo la traccia dell'upload nell'archivio storico mensile
     const supabaseAdmin = createAdminClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -135,6 +189,9 @@ export async function importaEstrattoConto(formData: FormData) {
   }
 }
 
+// ==========================================
+// RICONCILIAZIONE (MATCHING)
+// ==========================================
 export async function handleConferma(formData: FormData) {
   try {
     const movimento_id = formData.get('movimento_id') as string;
@@ -152,9 +209,6 @@ export async function handleConferma(formData: FormData) {
       { auth: { persistSession: false } }
     );
 
-    // ===============================================
-    // CASO SPECIALE: Commissione, Giroconto, Stipendio
-    // ===============================================
     if (['commissione', 'giroconto', 'stipendio', 'leasing', 'ente_pubblico', 'cassa_edile', 'cessione_quinto', 'utenza', 'assicurazione'].includes(categoria)) {
       await supabaseAdmin
         .from('movimenti_banca')
@@ -164,11 +218,7 @@ export async function handleConferma(formData: FormData) {
           personale_id: personale_id || null
         })
         .eq('id', movimento_id);
-    } 
-    // ===============================================
-    // CASO A: Match Esatto Fattura
-    // ===============================================
-    else if (scadenza_id) {
+    } else if (scadenza_id) {
       await confermaRiconciliazione(
         movimento_id, 
         scadenza_id, 
@@ -176,11 +226,7 @@ export async function handleConferma(formData: FormData) {
         'confermato_utente',
         soggetto_id || undefined
       );
-    } 
-    // ===============================================
-    // CASO B: Allocazione Multipla / Acconto
-    // ===============================================
-    else if (soggetto_id) {
+    } else if (soggetto_id) {
       await supabaseAdmin
         .from('movimenti_banca')
         .update({ 
@@ -244,10 +290,9 @@ export async function matchManuale(formData: FormData) {
   return handleConferma(formData);
 }
 
-// ============================================================================
-// MOTORE DI ALLOCAZIONE INTELLIGENTE (Subset Sum Sicuro + FIFO)
-// ============================================================================
-
+// ==========================================
+// LOGICA INTERNA (PRIVATE)
+// ==========================================
 async function allocaPagamentoIntelligente(supabaseAdmin: any, soggetto_id: string, importo_pagato: number) {
   const { data: scadenzeAperte } = await supabaseAdmin
     .from('scadenze_pagamento')
@@ -277,8 +322,6 @@ async function allocaPagamentoIntelligente(supabaseAdmin: any, soggetto_id: stri
       return trovaCombinazioneEsatta(index + 1, sum, subset);
     }
     combinazioneEsatta = trovaCombinazioneEsatta(0, 0, []);
-  } else {
-    console.log(`⚠️ Troppe fatture (${items.length}), fallback su FIFO per evitare Timeout.`);
   }
 
   if (combinazioneEsatta) {
@@ -309,26 +352,4 @@ async function allocaPagamentoIntelligente(supabaseAdmin: any, soggetto_id: stri
       .update({ importo_pagato: nuovoPagatoEuro, stato: nuovoStato })
       .eq('id', scadenza.id);
   }
-}
-
-export async function rinominaDocumentoBanca(id: string, nuovoNome: string) {
-  const supabase = await createClient()
-  
-  // Aggiunge l'estensione originale se l'utente se la dimentica
-  let nomeFinale = nuovoNome
-  const { data: doc } = await supabase.from('documenti_banca').select('nome_file').eq('id', id).single()
-  
-  if (doc) {
-    const extMatch = doc.nome_file.match(/\.[0-9a-z]+$/i)
-    const originalExt = extMatch ? extMatch[0] : ''
-    if (originalExt && !nomeFinale.endsWith(originalExt)) {
-      nomeFinale += originalExt
-    }
-  }
-
-  const { error } = await supabase.from('documenti_banca').update({ nome_file: nomeFinale }).eq('id', id)
-  if (error) throw new Error("Impossibile rinominare il documento")
-  
-  revalidatePath('/finanza/riconciliazione')
-  return true
 }
