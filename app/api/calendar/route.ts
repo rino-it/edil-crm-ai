@@ -17,46 +17,97 @@ export async function GET(request: NextRequest) {
 
   if (scadenzaId) {
     const supabase = await createClient();
-    const { data: scadenza, error } = await supabase
-      .from('scadenze_pagamento')
-      .select(`
-        data_scadenza,
-        importo_totale,
-        importo_pagato,
-        fattura_riferimento,
-        tipo,
-        anagrafica_soggetti:soggetto_id (ragione_sociale),
-        cantieri:cantiere_id (codice, titolo)
-      `)
-      .eq('id', scadenzaId)
-      .single();
+    let scadenza: any = null;
+    let error: { message: string } | null = null;
 
-    if (!error && scadenza) {
-      data = scadenza.data_scadenza;
-      
-      // Supabase può restituire oggetti o array per le relazioni FK
-      const soggettoData = Array.isArray(scadenza.anagrafica_soggetti)
-        ? scadenza.anagrafica_soggetti[0]
-        : scadenza.anagrafica_soggetti;
-      const cantiereData = Array.isArray(scadenza.cantieri)
-        ? scadenza.cantieri[0]
-        : scadenza.cantieri;
-      
-      const soggetto = soggettoData?.ragione_sociale || "Soggetto N/D";
-      const fattura = scadenza.fattura_riferimento || "Senza Rif.";
-      const residuo = Number(scadenza.importo_totale) - Number(scadenza.importo_pagato || 0);
-      
-      // Formatta il titolo in base al tipo
-      const verbo = scadenza.tipo === 'entrata' ? 'Incasso' : 'Pagamento';
-      titolo = `${verbo} ${fattura} - ${soggetto}`;
-      
-      // Costruisce la descrizione dettagliata
-      descrizioneAggiuntiva = `\nImporto da saldare: €${residuo.toFixed(2)}\nTipo: ${scadenza.tipo.toUpperCase()}`;
-      
-      // Associa il cantiere se presente
-      if (cantiereData) {
-        cantiere = `${cantiereData.codice} - ${cantiereData.titolo}`;
+    try {
+      const result = await supabase
+        .from('scadenze_pagamento')
+        .select(`
+          data_scadenza,
+          importo_totale,
+          importo_pagato,
+          fattura_riferimento,
+          tipo,
+          anagrafica_soggetti:soggetto_id (ragione_sociale),
+          cantieri:cantiere_id (codice, titolo)
+        `)
+        .eq('id', scadenzaId)
+        .single();
+
+      scadenza = result.data;
+      error = result.error;
+    } catch (queryError) {
+      const message = queryError instanceof Error ? queryError.message : "Errore sconosciuto in query con join";
+      error = { message };
+      console.error("❌ Calendar API - Eccezione query con join:", message, "| scadenzaId:", scadenzaId);
+    }
+
+    // Fallback robusto: riprova senza join se la query completa fallisce
+    if (error) {
+      console.warn("⚠️ Calendar API - Query con join fallita, riprovo senza join:", error.message);
+      const { data: scadenzaBase, error: error2 } = await supabase
+        .from('scadenze_pagamento')
+        .select('data_scadenza, importo_totale, importo_pagato, fattura_riferimento, tipo')
+        .eq('id', scadenzaId)
+        .single();
+
+      if (!error2 && scadenzaBase) {
+        scadenza = { ...scadenzaBase, anagrafica_soggetti: null, cantieri: null };
+        error = null;
+      } else if (error2) {
+        error = error2;
       }
+    }
+
+    if (error) {
+      console.error("❌ Calendar API - Errore query scadenza:", error.message, "| scadenzaId:", scadenzaId);
+      return NextResponse.json(
+        { error: `Scadenza non trovata: ${error.message}` },
+        { status: 404 }
+      );
+    }
+
+    if (!scadenza) {
+      console.error("❌ Calendar API - Scadenza non trovata per ID:", scadenzaId);
+      return NextResponse.json(
+        { error: "Scadenza non trovata nel database." },
+        { status: 404 }
+      );
+    }
+
+    if (!scadenza.data_scadenza) {
+      console.error("❌ Calendar API - data_scadenza è null per ID:", scadenzaId);
+      return NextResponse.json(
+        { error: "Questa scadenza non ha una data impostata." },
+        { status: 400 }
+      );
+    }
+
+    data = scadenza.data_scadenza;
+
+    // Supabase può restituire oggetti o array per le relazioni FK
+    const soggettoData = Array.isArray(scadenza.anagrafica_soggetti)
+      ? scadenza.anagrafica_soggetti[0]
+      : scadenza.anagrafica_soggetti;
+    const cantiereData = Array.isArray(scadenza.cantieri)
+      ? scadenza.cantieri[0]
+      : scadenza.cantieri;
+
+    const soggetto = soggettoData?.ragione_sociale || "Soggetto N/D";
+    const fattura = scadenza.fattura_riferimento || "Senza Rif.";
+    const residuo = Number(scadenza.importo_totale) - Number(scadenza.importo_pagato || 0);
+
+    // Formatta il titolo in base al tipo
+    const verbo = scadenza.tipo === 'entrata' ? 'Incasso' : 'Pagamento';
+    titolo = `${verbo} ${fattura} - ${soggetto}`;
+
+    // Costruisce la descrizione dettagliata
+    descrizioneAggiuntiva = `\nImporto da saldare: €${residuo.toFixed(2)}\nTipo: ${scadenza.tipo.toUpperCase()}`;
+
+    // Associa il cantiere se presente
+    if (cantiereData) {
+      cantiere = `${cantiereData.codice} - ${cantiereData.titolo}`;
     }
   }
 
