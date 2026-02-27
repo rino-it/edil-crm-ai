@@ -179,6 +179,49 @@ export async function GET(request: Request) {
     }
   }
 
+  // ==========================================
+  // PARTE 5: ALERT SU DATA PIANIFICATA (10gg / 5gg)
+  // ==========================================
+  const limite10gg = new Date(oggi);
+  limite10gg.setDate(limite10gg.getDate() + 10);
+  const limite10ggStr = limite10gg.toISOString().split("T")[0];
+
+  const { data: scadenzePianificate } = await supabase
+    .from("scadenze_pagamento")
+    .select(`
+      id, tipo, fattura_riferimento, importo_totale, importo_pagato, data_pianificata,
+      soggetto:anagrafica_soggetti(ragione_sociale)
+    `)
+    .not("data_pianificata", "is", null)
+    .gte("data_pianificata", oggiStr)
+    .lte("data_pianificata", limite10ggStr)
+    .neq("stato", "pagato");
+
+  if (scadenzePianificate) {
+    for (const s of scadenzePianificate) {
+      const dataPian = new Date(s.data_pianificata);
+      const millisDiff = dataPian.getTime() - oggi.getTime();
+      const giorniMancanti = Math.floor(millisDiff / (1000 * 60 * 60 * 24));
+
+      if (giorniMancanti !== 10 && giorniMancanti !== 5) continue;
+
+      const residuo = Number(s.importo_totale) - Number(s.importo_pagato || 0);
+      const dataFmt = dataPian.toLocaleDateString("it-IT");
+      const nomeSog = (s.soggetto as any)?.ragione_sociale || "Sconosciuto";
+      const rif = s.fattura_riferimento || "N/D";
+      const tipoLabel = s.tipo === "entrata" ? "Incasso" : "Pagamento";
+
+      const msgPianificata = `📅 *Alert Pianificazione (${giorniMancanti}gg)*\n${tipoLabel} pianificato tra ${giorniMancanti} giorni\nSoggetto: *${nomeSog}*\nFattura: ${rif}\nImporto residuo: €${residuo.toFixed(2)}\nData pianificata: ${dataFmt}\n\nApri Programmazione Cashflow: ${siteUrl}/finanza/programmazione`;
+
+      try {
+        await sendWhatsAppMessage(adminWhatsapp, msgPianificata);
+        notificatiTotali++;
+      } catch (err) {
+        errori.push(`Pianificata-${s.id}-${giorniMancanti}gg`);
+      }
+    }
+  }
+
   return NextResponse.json({
     success: true,
     notificati_totali: notificatiTotali,

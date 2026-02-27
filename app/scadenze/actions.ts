@@ -275,3 +275,23 @@ export async function registraIncassoFattura(scadenzaId: string, contoId: string
   
   return { success: true };
 }
+
+export async function riprogrammaScadenza(scadenzaId: string, nuovaData: string) {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from('scadenze_pagamento')
+    .update({ data_pianificata: nuovaData })
+    .eq('id', scadenzaId);
+
+  if (error) {
+    console.error('❌ Errore riprogrammaScadenza:', error);
+    throw new Error('Errore durante la riprogrammazione');
+  }
+
+  revalidatePath('/scadenze');
+  revalidatePath('/finanza');
+  revalidatePath('/finanza/programmazione');
+
+  return { success: true };
+}

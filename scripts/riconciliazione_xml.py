@@ -118,20 +118,47 @@ def parse_and_upload(percorso_file):
         if not res_insert.data: return
         fattura_id = res_insert.data[0]['id'] 
 
-        # --- [PUNTO 3.5] AUTO-GENERAZIONE SCADENZA ---
-        data_scad = calcola_data_scadenza(data_fattura, condizioni_pag)
-        supabase.table("scadenze_pagamento").insert({
-            "tipo": "uscita",
-            "soggetto_id": soggetto_id,
-            "fattura_riferimento": numero_fattura,
-            "importo_totale": importo_totale,
-            "importo_pagato": 0,
-            "data_emissione": data_fattura,
-            "data_scadenza": data_scad,
-            "stato": "da_pagare",
-            "descrizione": f"Fattura n. {numero_fattura} da {ragione_sociale}"
-        }).execute()
-        print(f"   📅 Scadenziario: Scadenza {data_scad} generata.")
+        # --- [PUNTO 3.5] AUTO-GENERAZIONE SCADENZE (SUPPORTO MULTI-RATA) ---
+        rate_xml = body.findall(".//DettaglioPagamento")
+
+        if rate_xml:
+            # L'XML contiene rate esplicite: creiamo una scadenza per ogni rata
+            for i, rata in enumerate(rate_xml):
+                importo_rata = float(rata.findtext('ImportoPagamento', '0'))
+                data_scad_rata = rata.findtext('DataScadenzaPagamento')
+
+                if not data_scad_rata:
+                    data_scad_rata = calcola_data_scadenza(data_fattura, condizioni_pag)
+
+                supabase.table("scadenze_pagamento").insert({
+                    "tipo": "uscita",
+                    "soggetto_id": soggetto_id,
+                    "fattura_riferimento": numero_fattura,
+                    "importo_totale": importo_rata,
+                    "importo_pagato": 0,
+                    "data_emissione": data_fattura,
+                    "data_scadenza": data_scad_rata,
+                    "data_pianificata": data_scad_rata,
+                    "stato": "da_pagare",
+                    "descrizione": f"Fattura n. {numero_fattura} da {ragione_sociale} (Rata {i+1}/{len(rate_xml)})"
+                }).execute()
+                print(f"   📅 Rata {i+1}/{len(rate_xml)}: €{importo_rata} scade {data_scad_rata}")
+        else:
+            # Nessuna rata nell'XML: fallback al calcolo basato su condizioni
+            data_scad = calcola_data_scadenza(data_fattura, condizioni_pag)
+            supabase.table("scadenze_pagamento").insert({
+                "tipo": "uscita",
+                "soggetto_id": soggetto_id,
+                "fattura_riferimento": numero_fattura,
+                "importo_totale": importo_totale,
+                "importo_pagato": 0,
+                "data_emissione": data_fattura,
+                "data_scadenza": data_scad,
+                "data_pianificata": data_scad,
+                "stato": "da_pagare",
+                "descrizione": f"Fattura n. {numero_fattura} da {ragione_sociale}"
+            }).execute()
+            print(f"   📅 Scadenziario: Scadenza {data_scad} generata.")
 
         # --- LOGICA DDT (Mantenuta integra) ---
         ddt_line_map = {}

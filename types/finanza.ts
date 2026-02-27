@@ -6,6 +6,7 @@ export interface ScadenzaPagamento {
   importo_totale: number;
   importo_pagato: number;
   data_scadenza: string;
+  data_pianificata?: string;
   data_emissione?: string;
   data_pagamento?: string;
   tipo: 'entrata' | 'uscita';

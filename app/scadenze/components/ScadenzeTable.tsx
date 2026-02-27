@@ -113,7 +113,7 @@ export function ScadenzeTable({
                       )}
 
                       {s.data_scadenza ? (
-                        <CalendarLinkButton scadenzaId={s.id} />
+                        <CalendarLinkButton scadenza={s} />
                       ) : (
                         <button
                           disabled

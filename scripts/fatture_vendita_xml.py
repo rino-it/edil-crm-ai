@@ -148,35 +148,76 @@ def main():
             if righe_da_inserire:
                 supabase.table('fatture_vendita_righe').insert(righe_da_inserire).execute()
 
-            # 6. AUTO-GENERAZIONE SCADENZA CON CONTROLLO IDEMPOTENZA
-            dati_pagamento = root.find('.//DettaglioPagamento')
-            data_scadenza = dati_pagamento.findtext('DataScadenzaPagamento') if dati_pagamento is not None else None
-            
-            if not data_scadenza:
+            # 6. AUTO-GENERAZIONE SCADENZE CON SUPPORTO MULTI-RATA
+            rate_xml = root.findall('.//DettaglioPagamento')
+            scadenza_id = None
+
+            if rate_xml:
+                for i, rata in enumerate(rate_xml):
+                    importo_rata = float(rata.findtext('ImportoPagamento', '0'))
+                    data_scadenza = rata.findtext('DataScadenzaPagamento')
+
+                    if not data_scadenza:
+                        dt_fattura = datetime.strptime(data_fattura, "%Y-%m-%d")
+                        data_scadenza = (dt_fattura + timedelta(days=30)).strftime("%Y-%m-%d")
+
+                    check_scadenza_rata = supabase.table('scadenze_pagamento') \
+                        .select('id') \
+                        .eq('fattura_riferimento', numero_fattura) \
+                        .eq('soggetto_id', soggetto_id) \
+                        .eq('data_scadenza', data_scadenza) \
+                        .eq('importo_totale', importo_rata) \
+                        .eq('tipo', 'entrata') \
+                        .execute()
+
+                    if len(check_scadenza_rata.data) > 0:
+                        scadenza_rata_id = check_scadenza_rata.data[0]['id']
+                        supabase.table('scadenze_pagamento').update({"fattura_vendita_id": fattura_id}).eq('id', scadenza_rata_id).execute()
+                    else:
+                        nuova_scadenza = {
+                            "soggetto_id": soggetto_id,
+                            "fattura_vendita_id": fattura_id,
+                            "fattura_riferimento": numero_fattura,
+                            "importo_totale": importo_rata,
+                            "importo_pagato": 0,
+                            "data_emissione": data_fattura,
+                            "data_scadenza": data_scadenza,
+                            "data_pianificata": data_scadenza,
+                            "tipo": "entrata",
+                            "stato": "da_pagare",
+                            "descrizione": f"Fattura di Vendita n. {numero_fattura} (Rata {i+1}/{len(rate_xml)})"
+                        }
+                        res_scadenza = supabase.table('scadenze_pagamento').insert(nuova_scadenza).execute()
+                        scadenza_rata_id = res_scadenza.data[0]['id']
+
+                    if scadenza_id is None:
+                        scadenza_id = scadenza_rata_id
+            else:
                 dt_fattura = datetime.strptime(data_fattura, "%Y-%m-%d")
                 data_scadenza = (dt_fattura + timedelta(days=30)).strftime("%Y-%m-%d")
 
-            check_scadenza = supabase.table('scadenze_pagamento').select('id').eq('fattura_riferimento', numero_fattura).eq('soggetto_id', soggetto_id).execute()
-            
-            if len(check_scadenza.data) > 0:
-                print(f"⚠️ Scadenza già presente per fattura {numero_fattura}. La ricollego alla fattura.")
-                scadenza_id = check_scadenza.data[0]['id']
-                supabase.table('scadenze_pagamento').update({"fattura_vendita_id": fattura_id}).eq('id', scadenza_id).execute()
-            else:
-                nuova_scadenza = {
-                    "soggetto_id": soggetto_id,
-                    "fattura_vendita_id": fattura_id,
-                    "fattura_riferimento": numero_fattura,
-                    "importo_totale": importo_totale,
-                    "importo_pagato": 0,
-                    "data_emissione": data_fattura,
-                    "data_scadenza": data_scadenza,
-                    "tipo": "entrata",
-                    "stato": "da_pagare",
-                    "descrizione": f"Fattura di Vendita n. {numero_fattura}"
-                }
-                res_scadenza = supabase.table('scadenze_pagamento').insert(nuova_scadenza).execute()
-                scadenza_id = res_scadenza.data[0]['id']
+                check_scadenza = supabase.table('scadenze_pagamento').select('id').eq('fattura_riferimento', numero_fattura).eq('soggetto_id', soggetto_id).execute()
+
+                if len(check_scadenza.data) > 0:
+                    print(f"⚠️ Scadenza già presente per fattura {numero_fattura}. La ricollego alla fattura.")
+                    scadenza_id = check_scadenza.data[0]['id']
+                    supabase.table('scadenze_pagamento').update({"fattura_vendita_id": fattura_id}).eq('id', scadenza_id).execute()
+                else:
+                    nuova_scadenza = {
+                        "soggetto_id": soggetto_id,
+                        "fattura_vendita_id": fattura_id,
+                        "fattura_riferimento": numero_fattura,
+                        "importo_totale": importo_totale,
+                        "importo_pagato": 0,
+                        "data_emissione": data_fattura,
+                        "data_scadenza": data_scadenza,
+                        "data_pianificata": data_scadenza,
+                        "tipo": "entrata",
+                        "stato": "da_pagare",
+                        "descrizione": f"Fattura di Vendita n. {numero_fattura}"
+                    }
+                    res_scadenza = supabase.table('scadenze_pagamento').insert(nuova_scadenza).execute()
+                    scadenza_id = res_scadenza.data[0]['id']
 
             supabase.table('fatture_vendita').update({"scadenza_id": scadenza_id}).eq('id', fattura_id).execute()
 
