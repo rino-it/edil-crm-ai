@@ -113,10 +113,31 @@ def row_get(row: pd.Series, *keys: str) -> Any:
 
 
 def is_saldato(val: Any) -> bool:
-    """True se la colonna Sdo/S.do contiene x (pagato)."""
+    """True se la colonna Sdo/S.do è compilata (= pagato).
+    Accetta: 'x', '✓', 'si/sì/yes/1/true' oppure qualsiasi numero non-zero.
+    """
     if val is None:
         return False
-    return str(val).strip().lower() in ("x", "\u2713", "si", "s\u00ec", "yes", "1", "true")
+    # Valore NaN di pandas
+    try:
+        import math
+        if math.isnan(float(val)):
+            return False
+    except (TypeError, ValueError):
+        pass
+    s = str(val).strip().lower()
+    if s in ("", "nan", "none", "0", "0.0"):
+        return False
+    # Marcatori testuali espliciti
+    if s in ("x", "\u2713", "si", "s\u00ec", "yes", "true"):
+        return True
+    # Valore numerico non-zero (es. importo saldato come 1500.00)
+    try:
+        return float(s) != 0
+    except ValueError:
+        pass
+    # Qualsiasi altra stringa non vuota = compilata = saldato
+    return True
 
 
 def genera_id(soggetto_id: str | None, fattura_norm: str, importo: float) -> str:
@@ -200,6 +221,10 @@ def leggi_report_xml(xls: pd.ExcelFile) -> list[dict[str, Any]]:
         fattura_norm = norm_invoice(fattura_raw)
         if not fattura_norm:
             fattura_norm = f"spesa_{re.sub(chr(91) + chr(94) + 'a-z0-9' + chr(93), '', fornitore)}_{idx}"
+        # SKIP: non importare fatture già pagate (S.do compilato)
+        sdo = is_saldato(row_get(row, "S.do", "Sdo", "SDO", "saldo", "Saldo"))
+        if sdo:
+            continue
         righe.append({
             "_fonte": "report_xml",
             "_idx": idx,
@@ -209,7 +234,7 @@ def leggi_report_xml(xls: pd.ExcelFile) -> list[dict[str, Any]]:
             "importo_totale": importo,
             "data_emissione": get_date(row_get(row, "Data", "DATA", "data emissione")),
             "data_scadenza": get_date(row_get(row, "Scadenza", "SCADENZA")),
-            "sdo": is_saldato(row_get(row, "S.do", "Sdo", "SDO", "saldo", "Saldo")),
+            "sdo": sdo,
             "importo_pagato": get_float(row_get(row, "Importo pag.", "Importo pagamento", "IMPORTO PAG")),
             "data_pagamento": get_date(row_get(row, "Data Pag.", "Data pagamento", "DATA PAG")),
             "metodo": norm(row_get(row, "Mod.Pag", "Mod. Pag", "Modalita pagamento") or ""),
@@ -330,7 +355,10 @@ def costruisci_riga(
     if sdo and importo_pagato == 0:
         importo_pagato = importo_totale
 
-    stato = calcola_stato(sdo, importo_pagato, importo_totale, r["data_scadenza"])
+    # Fallback data_scadenza: scadenza -> emissione -> oggi (NOT NULL in DB)
+    data_scad = r["data_scadenza"] or r["data_emissione"] or OGGI
+
+    stato = calcola_stato(sdo, importo_pagato, importo_totale, data_scad)
     uuid_id = genera_id(soggetto_id, r["fattura_norm"], importo_totale)
 
     payload: dict[str, Any] = {
@@ -341,8 +369,8 @@ def costruisci_riga(
         "importo_totale": importo_totale,
         "importo_pagato": importo_pagato,
         "data_emissione": r["data_emissione"],
-        "data_scadenza": r["data_scadenza"],
-        "data_pianificata": r["data_scadenza"],  # solo per INSERT - non sovrascritta nell'update
+        "data_scadenza": data_scad,
+        "data_pianificata": data_scad,  # solo per INSERT - non sovrascritta nell'update
         "data_pagamento": r["data_pagamento"],
         "stato": stato,
         "metodo_pagamento": r["metodo"] or None,
@@ -437,10 +465,21 @@ def run_sync(dry_run: bool = False) -> None:
 
     print(f"\nInvio {len(righe_db)} righe a Supabase...")
 
+    # Dedup UUID nel batch: se due fornitore diversi → stesso soggetto_id via fuzzy
+    # → stesso UUID → teniamo solo l'ultimo (MAIN vince già nel merge)
+    righe_db_dedup: dict[str, dict] = {}
+    for r in righe_db:
+        righe_db_dedup[r["id"]] = r
+    righe_db = list(righe_db_dedup.values())
+    print(f"  Dopo dedup UUID        : {len(righe_db)} righe uniche")
+
     ids_da_inviare = [r["id"] for r in righe_db]
     esistenti: set[str] = set()
-    for i in range(0, len(ids_da_inviare), CHUNK_SIZE):
-        chunk_ids = ids_da_inviare[i : i + CHUNK_SIZE]
+    # CHECK_CHUNK piccolo (50) per restare sotto il limite URL di PostgREST (~8KB)
+    # Con 500 UUID × 36 char = ~19KB → request troncata silenziosamente
+    CHECK_CHUNK = 50
+    for i in range(0, len(ids_da_inviare), CHECK_CHUNK):
+        chunk_ids = ids_da_inviare[i : i + CHECK_CHUNK]
         res_check = (
             supabase.table("scadenze_pagamento")
             .select("id")

@@ -12,6 +12,7 @@ import { DEFAULT_PAGE_SIZE } from '@/types/pagination'
 import { PaginationControls } from '@/components/ui/pagination-controls'
 import { Building2, Users, Wallet, TrendingDown, Plus, Search, Mail, Phone, ExternalLink } from "lucide-react"
 import Link from 'next/link'
+import { RefreshButton } from './components/RefreshButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,17 +55,20 @@ export default async function AnagrafichePage({
             <p className="text-muted-foreground">Gestione centralizzata fornitori e clienti dell'azienda.</p>
           </div>
           
-          {!nuovo ? (
-            <Link href="/anagrafiche?nuovo=true">
-              <Button className="bg-blue-600 hover:bg-blue-700">
-                <Plus className="mr-2 h-4 w-4" /> Nuovo Soggetto
-              </Button>
-            </Link>
-          ) : (
-            <Link href="/anagrafiche">
-              <Button variant="outline">Annulla Creazione</Button>
-            </Link>
-          )}
+          <div className="flex items-center gap-2">
+            <RefreshButton />
+            {!nuovo ? (
+              <Link href="/anagrafiche?nuovo=true">
+                <Button className="bg-blue-600 hover:bg-blue-700">
+                  <Plus className="mr-2 h-4 w-4" /> Nuovo Soggetto
+                </Button>
+              </Link>
+            ) : (
+              <Link href="/anagrafiche">
+                <Button variant="outline">Annulla Creazione</Button>
+              </Link>
+            )}
+          </div>
         </div>
 
         {/* Banner Errore */}

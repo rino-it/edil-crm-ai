@@ -1,0 +1,150 @@
+
+
+Here's the step-by-step fix plan for the `data_scadenza` NULL error.
+
+## Root Cause Analysis
+
+The error from the traceback:
+```
+null value in column "data_scadenza" of relation "scadenze_pagamento" violates not-null constraint
+```
+
+The failing row: `(875214ef-e0c0-52fe-acb7-7113d0f3863d, uscita, ..., 85.0, 85.0, 2025-10-09, null, null, pagato, ...)`
+
+This means some Excel rows have a `data_emissione` (2025-10-09) but **no** `Scadenza` value. The DB column `data_scadenza` has a `NOT NULL` constraint, so the insert fails.
+
+## Fix Plan — Step by Step
+
+### Step 1: Add fallback logic in [`costruisci_riga()`](scripts/sync_excel_supabase.py:311)
+
+**Where:** Line 344 of [`sync_excel_supabase.py`](scripts/sync_excel_supabase.py:344)
+
+**Current code (line 344):**
+```python
+"data_scadenza": r["data_scadenza"],
+```
+
+**Replace with this fallback chain:**
+```python
+"data_scadenza": r["data_scadenza"] or r["data_emissione"] or OGGI,
+```
+
+**Logic:**
+1. If `data_scadenza` exists in Excel → use it
+2. If missing, use `data_emissione` (the `del` / `Data` column) as fallback
+3. If both are missing → use today's date (`OGGI`, already defined at line 46)
+
+### Step 2: Apply the same fallback to `data_pianificata`
+
+**Where:** Line 345
+
+**Current code:**
+```python
+"data_pianificata": r["data_scadenza"],
+```
+
+**Replace with:**
+```python
+"data_pianificata": r["data_scadenza"] or r["data_emissione"] or OGGI,
+```
+
+This ensures `data_pianificata` also never gets a NULL value (it mirrors `data_scadenza` on first insert).
+
+### Step 3: Also fix the `calcola_stato()` call
+
+**Where:** Line 333
+
+**Current code:**
+```python
+stato = calcola_stato(sdo, importo_pagato, importo_totale, r["data_scadenza"])
+```
+
+**Replace with:**
+```python
+data_scad_effettiva = r["data_scadenza"] or r["data_emissione"] or OGGI
+stato = calcola_stato(sdo, importo_pagato, importo_totale, data_scad_effettiva)
+```
+
+This ensures the stato calculation also uses the resolved date (otherwise a row with `data_scadenza=None` that's not paid would get `da_pagare` instead of `scaduto` even if the emissione date is in the past).
+
+### Step 4: Refactor — extract the fallback into a single variable
+
+To keep it clean, the full change in [`costruisci_riga()`](scripts/sync_excel_supabase.py:311) should look like this:
+
+**Add after line 327 (after `importo_totale = r["importo_totale"]`):**
+```python
+# Fallback data_scadenza: scadenza -> emissione -> oggi
+data_scad = r["data_scadenza"] or r["data_emissione"] or OGGI
+```
+
+**Then use `data_scad` in all three places:**
+- Line 333: `stato = calcola_stato(sdo, importo_pagato, importo_totale, data_scad)`
+- Line 344: `"data_scadenza": data_scad,`
+- Line 345: `"data_pianificata": data_scad,`
+
+### Step 5: Re-run the script
+
+After applying the fix, run the `.bat` again:
+```
+run_sync_excel_supabase.bat
+```
+
+The 1134 rows should now all insert successfully because no row will ever have `data_scadenza = null`.
+
+---
+
+### Summary of changes — single file, single function
+
+| File | Function | Line(s) | Change |
+|------|----------|---------|--------|
+| [`sync_excel_supabase.py`](scripts/sync_excel_supabase.py:327) | `costruisci_riga()` | After 327 | Add `data_scad = r["data_scadenza"] or r["data_emissione"] or OGGI` |
+| [`sync_excel_supabase.py`](scripts/sync_excel_supabase.py:333) | `costruisci_riga()` | 333 | Use `data_scad` in `calcola_stato()` |
+| [`sync_excel_supabase.py`](scripts/sync_excel_supabase.py:344) | `costruisci_riga()` | 344 | `"data_scadenza": data_scad,` |
+| [`sync_excel_supabase.py`](scripts/sync_excel_supabase.py:345) | `costruisci_riga()` | 345 | `"data_pianificata": data_scad,` |
+
+That's it — 4 line changes in 1 function. No other files need modification.
+
+## Piano Fix: NULL `data_scadenza` — Step by Step
+
+### Problema
+L'errore `null value in column "data_scadenza" violates not-null constraint` si verifica perché alcune righe Excel non hanno la colonna `Scadenza` compilata. Il DB richiede `data_scadenza NOT NULL`.
+
+### Fix — 4 modifiche in [`costruisci_riga()`](scripts/sync_excel_supabase.py:311)
+
+**Step 1:** Dopo la riga 327 (`importo_totale = r["importo_totale"]`), aggiungi:
+```python
+# Fallback data_scadenza: scadenza -> emissione -> oggi
+data_scad = r["data_scadenza"] or r["data_emissione"] or OGGI
+```
+
+**Step 2:** Riga 333 — cambia:
+```python
+# DA:
+stato = calcola_stato(sdo, importo_pagato, importo_totale, r["data_scadenza"])
+# A:
+stato = calcola_stato(sdo, importo_pagato, importo_totale, data_scad)
+```
+
+**Step 3:** Riga 344 — cambia:
+```python
+# DA:
+"data_scadenza": r["data_scadenza"],
+# A:
+"data_scadenza": data_scad,
+```
+
+**Step 4:** Riga 345 — cambia:
+```python
+# DA:
+"data_pianificata": r["data_scadenza"],
+# A:
+"data_pianificata": data_scad,
+```
+
+### Logica Fallback
+1. Se `Scadenza` esiste nell'Excel → usa quella
+2. Se manca, usa `data_emissione` (colonna `del` / `Data`)
+3. Se mancano entrambe → usa la data di oggi (`OGGI` definita a riga 46)
+
+### Dopo il fix
+Rilancia `run_sync_excel_supabase.bat` — le 1134 righe dovrebbero inserirsi tutte senza errori.
