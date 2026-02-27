@@ -405,7 +405,7 @@ def run_sync(dry_run: bool = False) -> None:
     print(f"  Fogli disponibili: {xls.sheet_names}")
 
     righe_main = leggi_main(xls)
-    print(f"\n  MAIN       -> {len(righe_main)} righe valide")
+    print(f"\n  MAIN -> {len(righe_main)} righe valide")
 
     merged = righe_main  # SOLO MAIN, niente REPORT XML
     print(f"  Righe da processare -> {len(merged)}")
@@ -503,6 +503,30 @@ def run_sync(dry_run: bool = False) -> None:
     print(f"\nSincronizzazione completata.")
     print(f"  - {len(nuovi)} nuove scadenze create")
     print(f"  - {len(da_aggiornare)} scadenze aggiornate (saldi)")
+
+    # RICONCILIAZIONE: elimina scadenze uscita obsolete (non più presenti in MAIN)
+    # Le scadenze tipo='entrata' (fatture vendita) NON vengono toccate.
+    ids_attesi = set(r["id"] for r in righe_db)
+    print(f"\nRiconciliazione uscite...")
+
+    all_uscite_res = (
+        supabase.table("scadenze_pagamento")
+        .select("id")
+        .eq("tipo", "uscita")
+        .execute()
+    )
+    ids_db = set(r["id"] for r in all_uscite_res.data)
+
+    ids_da_eliminare = ids_db - ids_attesi
+    if ids_da_eliminare:
+        print(f"  Scadenze obsolete da eliminare: {len(ids_da_eliminare)}")
+        lista_da_eliminare = list(ids_da_eliminare)
+        for i in range(0, len(lista_da_eliminare), CHUNK_SIZE):
+            chunk = lista_da_eliminare[i : i + CHUNK_SIZE]
+            supabase.table("scadenze_pagamento").delete().in_("id", chunk).execute()
+        print(f"  Eliminate {len(ids_da_eliminare)} scadenze obsolete")
+    else:
+        print(f"  Nessuna scadenza obsoleta da eliminare")
 
 
 # ==========================================
