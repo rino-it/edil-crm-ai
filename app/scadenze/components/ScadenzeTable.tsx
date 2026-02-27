@@ -50,6 +50,7 @@ export function ScadenzeTable({
               {showCantiereColumn && <TableHead className="font-semibold">Cantiere</TableHead>}
               <TableHead className="text-right font-semibold">Totale</TableHead>
               <TableHead className="text-right font-semibold">Residuo</TableHead>
+              <TableHead className="font-semibold">Emissione</TableHead>
               <TableHead className="font-semibold">Scadenza</TableHead>
               <TableHead className="font-semibold">Stato</TableHead>
               <TableHead className="text-right font-semibold">Azioni</TableHead>
@@ -82,6 +83,10 @@ export function ScadenzeTable({
                   
                   <TableCell className={`text-right font-black ${importoResiduo > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                     {formatEuro(importoResiduo)}
+                  </TableCell>
+                  
+                  <TableCell className="text-sm text-zinc-500">
+                    {s.data_emissione ? new Date(s.data_emissione).toLocaleDateString('it-IT') : '-'}
                   </TableCell>
                   
                   <TableCell className="text-sm font-medium">
@@ -174,17 +179,23 @@ export function ScadenzeTable({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 bg-zinc-50 p-3 rounded-xl border border-zinc-100">
+              <div className="grid grid-cols-3 gap-2 bg-zinc-50 p-3 rounded-xl border border-zinc-100">
                 <div>
-                  <div className="text-[9px] font-bold text-zinc-400 uppercase">Residuo</div>
-                  <div className={`text-sm font-black ${importoResiduo > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                    {formatEuro(importoResiduo)}
+                  <div className="text-[9px] font-bold text-zinc-400 uppercase">Emissione</div>
+                  <div className="text-sm font-bold text-zinc-700">
+                    {s.data_emissione ? new Date(s.data_emissione).toLocaleDateString('it-IT') : '-'}
                   </div>
                 </div>
                 <div>
                   <div className="text-[9px] font-bold text-zinc-400 uppercase">Scadenza</div>
                   <div className="text-sm font-bold text-zinc-700">
                     {new Date(s.data_scadenza).toLocaleDateString('it-IT')}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[9px] font-bold text-zinc-400 uppercase">Residuo</div>
+                  <div className={`text-sm font-black ${importoResiduo > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                    {formatEuro(importoResiduo)}
                   </div>
                 </div>
               </div>

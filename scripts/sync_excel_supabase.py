@@ -292,42 +292,31 @@ def merge_fogli(
     righe_main: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """
-    Unisce REPORT XML e MAIN.
-    Chiave: fornitore + fattura_norm + importo arrotondato.
-    MAIN vince per dati di pagamento.
+    MAIN è la fonte primaria (rate, pagamenti parziali, tutto).
+    REPORT XML è supplementare: includi solo fatture NON coperte da MAIN,
+    identificate per (fornitore, data_emissione).
     """
-    def chiave(r: dict) -> tuple:
-        return (r["fornitore"], r["fattura_norm"], round(r["importo_totale"], 2))
-
-    idx_main: dict[tuple, dict[str, Any]] = {}
+    # 1. Costruire indice MAIN: set di (fornitore, data_emissione)
+    copertura_main: set[tuple[str, str | None]] = set()
     for r in righe_main:
-        idx_main[chiave(r)] = r
+        copertura_main.add((r["fornitore"], r["data_emissione"]))
 
-    merged: dict[tuple, dict[str, Any]] = {}
+    # 2. Partire con TUTTE le righe MAIN
+    merged: list[dict[str, Any]] = [{**r, "_fonte": "main"} for r in righe_main]
 
+    # 3. Aggiungere da REPORT XML solo fatture NON coperte da MAIN
+    n_skip = 0
     for r in righe_rx:
-        k = chiave(r)
-        main_row = idx_main.get(k)
-        if main_row:
-            r = {
-                **r,
-                "sdo": main_row["sdo"] or r["sdo"],
-                "importo_pagato": main_row["importo_pagato"] or r["importo_pagato"],
-                "data_pagamento": main_row["data_pagamento"] or r["data_pagamento"],
-                "metodo": main_row["metodo"] or r["metodo"],
-                "cantiere": main_row["cantiere"] or r["cantiere"],
-                "note": main_row["note"] or r["note"],
-                "data_scadenza": r["data_scadenza"] or main_row["data_scadenza"],
-                "_fonte": "merge",
-            }
-        merged[k] = r
+        chiave_rx = (r["fornitore"], r["data_emissione"])
+        if chiave_rx in copertura_main:
+            n_skip += 1
+            continue  # MAIN copre già questa fattura (anche se con rate diverse)
+        merged.append({**r, "_fonte": "report_xml_solo"})
 
-    for r in righe_main:
-        k = chiave(r)
-        if k not in merged:
-            merged[k] = {**r, "_fonte": "main_solo"}
+    print(f"  REPORT XML saltate (coperte da MAIN): {n_skip}")
+    print(f"  REPORT XML aggiunte (nuove)          : {len(merged) - len(righe_main)}")
 
-    return list(merged.values())
+    return merged
 
 
 # ==========================================
@@ -415,13 +404,11 @@ def run_sync(dry_run: bool = False) -> None:
     xls = pd.ExcelFile(FILE_EXCEL)
     print(f"  Fogli disponibili: {xls.sheet_names}")
 
-    righe_rx = leggi_report_xml(xls)
     righe_main = leggi_main(xls)
-    print(f"\n  REPORT XML -> {len(righe_rx)} righe valide")
-    print(f"  MAIN       -> {len(righe_main)} righe valide")
+    print(f"\n  MAIN       -> {len(righe_main)} righe valide")
 
-    merged = merge_fogli(righe_rx, righe_main)
-    print(f"  Dopo merge -> {len(merged)} righe uniche")
+    merged = righe_main  # SOLO MAIN, niente REPORT XML
+    print(f"  Righe da processare -> {len(merged)}")
 
     print("\nCostruzione payload DB...")
     mancanti_soggetti: list[str] = []

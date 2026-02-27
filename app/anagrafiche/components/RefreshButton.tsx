@@ -1,16 +1,14 @@
 'use client'
-import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { RefreshCw } from 'lucide-react'
 import { useTransition } from 'react'
 
 export function RefreshButton() {
-  const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
   const handleRefresh = () => {
     startTransition(() => {
-      router.refresh() // Riesegue il server component, ri-fetch da Supabase
+      window.location.reload() // Hard reload, bypassa ogni cache
     })
   }
 
