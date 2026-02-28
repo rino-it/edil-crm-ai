@@ -63,7 +63,7 @@ export default async function FinanzaPage() {
               </div>
             </CardHeader>
             <CardContent className="pt-3 md:pt-4">
-              <div className={`text-lg md:text-2xl font-black ${kpis.cassa_attuale < kpis.soglia_alert ? 'text-rose-600' : 'text-foreground'}`}>
+              <div className={`text-lg md:text-2xl font-black ${kpis.cassa_attuale < 0 ? 'text-rose-600' : 'text-foreground'}`}>
                 {formatEuro(kpis.cassa_attuale)}
               </div>
             </CardContent>
@@ -75,17 +75,17 @@ export default async function FinanzaPage() {
                 <div className="flex items-center justify-between gap-2">
                   <div className="h-2 w-2 rounded-full bg-emerald-500" />
                   <CardTitle className="text-xs font-bold text-muted-foreground uppercase flex-1">
-                    Tot. Emesso
+                    Da Incassare
                   </CardTitle>
                   <TrendingUp className="h-4 w-4 text-emerald-500" />
                 </div>
               </CardHeader>
               <CardContent className="pt-3 md:pt-4">
                 <div className="text-lg md:text-2xl font-black text-emerald-700 flex items-center gap-2">
-                  {formatEuro(kpis.fatturato)}
+                  {formatEuro(kpis.da_incassare)}
                   <ArrowRight size={14} className="text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
-                <p className="text-[10px] text-muted-foreground mt-1">Da Incassare &rarr;</p>
+                <p className="text-[10px] text-muted-foreground mt-1">Crediti aperti &rarr;</p>
               </CardContent>
             </Card>
           </Link>
@@ -96,17 +96,17 @@ export default async function FinanzaPage() {
                 <div className="flex items-center justify-between gap-2">
                   <div className="h-2 w-2 rounded-full bg-rose-500" />
                   <CardTitle className="text-xs font-bold text-muted-foreground uppercase flex-1">
-                    Tot. Impegnato
+                    Esposizione Fornitori
                   </CardTitle>
                   <TrendingDown className="h-4 w-4 text-rose-500" />
                 </div>
               </CardHeader>
               <CardContent className="pt-3 md:pt-4">
                 <div className="text-lg md:text-2xl font-black text-rose-700 flex items-center gap-2">
-                  {formatEuro(kpis.costi)}
+                  {formatEuro(kpis.esposizione_fornitori)}
                   <ArrowRight size={14} className="text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
-                <p className="text-[10px] text-muted-foreground mt-1">Da Pagare &rarr;</p>
+                <p className="text-[10px] text-muted-foreground mt-1">Debiti aperti &rarr;</p>
               </CardContent>
             </Card>
           </Link>
@@ -122,8 +122,8 @@ export default async function FinanzaPage() {
               </div>
             </CardHeader>
             <CardContent className="pt-3 md:pt-4">
-              <div className={`text-lg md:text-2xl font-black ${kpis.margine >= 0 ? 'text-indigo-700' : 'text-rose-600'}`}>
-                {formatEuro(kpis.margine)}
+              <div className={`text-lg md:text-2xl font-black ${kpis.bilancio_globale >= 0 ? 'text-indigo-700' : 'text-rose-600'}`}>
+                {formatEuro(kpis.bilancio_globale)}
               </div>
             </CardContent>
           </Card>
@@ -165,7 +165,7 @@ export default async function FinanzaPage() {
               <CardDescription>Il punto iniziale include il peso di <strong>tutti i debiti/crediti scaduti nel passato</strong>.</CardDescription>
             </CardHeader>
             <CardContent className="pt-2">
-              <CashflowChart data={cashflowData} soglia={kpis.soglia_alert} />
+              <CashflowChart data={cashflowData} />
             </CardContent>
           </Card>
 

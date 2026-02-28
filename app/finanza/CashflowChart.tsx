@@ -11,10 +11,9 @@ export interface CashflowPoint {
 
 interface CashflowChartProps {
   data: CashflowPoint[];
-  soglia: number;
 }
 
-export default function CashflowChart({ data, soglia }: CashflowChartProps) {
+export default function CashflowChart({ data }: CashflowChartProps) {
   const [hovered, setHovered] = useState<CashflowPoint | null>(null);
 
   // Dimensioni interne dell'SVG (il viewBox lo renderà responsive)
@@ -26,26 +25,20 @@ export default function CashflowChart({ data, soglia }: CashflowChartProps) {
 
   // Calcolo dei valori minimi e massimi per scalare l'asse Y
   const minSaldo = useMemo(() => {
-    const min = Math.min(...data.map(d => d.saldo), soglia);
+    const min = Math.min(...data.map(d => d.saldo));
     return min < 0 ? min * 1.1 : min * 0.9; // 10% di margine visivo inferiore
-  }, [data, soglia]);
+  }, [data]);
 
   const maxSaldo = useMemo(() => {
-    const max = Math.max(...data.map(d => d.saldo), soglia);
+    const max = Math.max(...data.map(d => d.saldo));
     return max > 0 ? max * 1.1 : max * 1.1; // 10% di margine visivo superiore
-  }, [data, soglia]);
+  }, [data]);
 
   const yRange = maxSaldo - minSaldo || 1; // Previene divisioni per zero
 
   // Funzioni di conversione Valore -> Coordinate SVG
   const getX = (index: number) => padding.left + (index * (drawWidth / Math.max(data.length - 1, 1)));
   const getY = (value: number) => padding.top + drawHeight - ((value - minSaldo) / yRange) * drawHeight;
-
-  // Coordinata Y della soglia di allerta
-  const sogliaY = getY(soglia);
-  
-  // Calcolo percentuale per il gradiente dell'area (cambia colore sotto la soglia)
-  const thresholdPercent = Math.max(0, Math.min(100, ((sogliaY - padding.top) / drawHeight) * 100));
 
   // Generazione dei tracciati vettoriali (Paths)
   const linePath = data.map((d, i) => `${i === 0 ? 'M' : 'L'} ${getX(i)} ${getY(d.saldo)}`).join(' ');
@@ -73,11 +66,11 @@ export default function CashflowChart({ data, soglia }: CashflowChartProps) {
         className="w-full h-full overflow-visible"
       >
         <defs>
-          {/* Gradiente dinamico: Verde sopra la soglia, Rosso sotto */}
+          {/* Gradiente dinamico: Verde sopra 0, Rosso sotto */}
           <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#22c55e" stopOpacity="0.4" />
-            <stop offset={`${thresholdPercent}%`} stopColor="#22c55e" stopOpacity="0.05" />
-            <stop offset={`${thresholdPercent}%`} stopColor="#ef4444" stopOpacity="0.1" />
+            <stop offset={`${Math.max(0, Math.min(100, ((getY(0) - padding.top) / drawHeight) * 100))}%`} stopColor="#22c55e" stopOpacity="0.05" />
+            <stop offset={`${Math.max(0, Math.min(100, ((getY(0) - padding.top) / drawHeight) * 100))}%`} stopColor="#ef4444" stopOpacity="0.1" />
             <stop offset="100%" stopColor="#ef4444" stopOpacity="0.5" />
           </linearGradient>
         </defs>
@@ -85,21 +78,6 @@ export default function CashflowChart({ data, soglia }: CashflowChartProps) {
         {/* Assi Cartesiani */}
         <line x1={padding.left} y1={padding.top + drawHeight} x2={width - padding.right} y2={padding.top + drawHeight} stroke="#e5e7eb" strokeWidth="1" />
         <line x1={padding.left} y1={padding.top} x2={padding.left} y2={padding.top + drawHeight} stroke="#e5e7eb" strokeWidth="1" />
-
-        {/* Linea Soglia di Allerta */}
-        <line 
-          x1={padding.left} 
-          y1={sogliaY} 
-          x2={width - padding.right} 
-          y2={sogliaY} 
-          stroke="#ef4444" 
-          strokeWidth="2" 
-          strokeDasharray="6,4" 
-          opacity="0.6" 
-        />
-        <text x={padding.left + 5} y={sogliaY - 8} fill="#ef4444" fontSize="11" fontWeight="bold" opacity="0.8">
-          Soglia Alert ({formatEuro(soglia)})
-        </text>
 
         {/* Etichette Asse Y (Importi) */}
         <text x={padding.left - 10} y={getY(maxSaldo)} fill="#9ca3af" fontSize="11" textAnchor="end" alignmentBaseline="middle">{formatEuro(maxSaldo)}</text>
@@ -130,8 +108,8 @@ export default function CashflowChart({ data, soglia }: CashflowChartProps) {
             cx={getX(i)}
             cy={getY(d.saldo)}
             r={hovered?.data === d.data ? 7 : 4}
-            fill={d.saldo < soglia ? "#ef4444" : "#ffffff"}
-            stroke={d.saldo < soglia ? "#ef4444" : "#0f172a"}
+            fill={d.saldo < 0 ? "#ef4444" : "#ffffff"}
+            stroke={d.saldo < 0 ? "#ef4444" : "#0f172a"}
             strokeWidth="2"
             className="transition-all duration-200 cursor-pointer origin-center"
             style={{ transformOrigin: `${getX(i)}px ${getY(d.saldo)}px` }}
@@ -154,7 +132,7 @@ export default function CashflowChart({ data, soglia }: CashflowChartProps) {
           <div className="font-bold mb-1.5 border-b border-zinc-700 pb-1.5">{new Date(hovered.data).toLocaleDateString('it-IT')}</div>
           <div className="flex justify-between gap-6 mb-1">
             <span className="text-zinc-400">Saldo stimato:</span>
-            <span className={`font-bold ${hovered.saldo < soglia ? "text-red-400" : "text-emerald-400"}`}>
+            <span className={`font-bold ${hovered.saldo < 0 ? "text-red-400" : "text-emerald-400"}`}>
               {formatEuro(hovered.saldo)}
             </span>
           </div>

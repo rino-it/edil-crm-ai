@@ -1045,45 +1045,40 @@ export async function getAgingAnalysis() {
 
 export async function getKPIFinanziariGlob() {
   const supabase = getSupabaseAdmin();
-  
-  const { data: params } = await supabase
-    .from('parametri_globali')
-    .select('soglia_alert_cassa')
-    .single();
 
-  const soglia_alert = params?.soglia_alert_cassa || 5000;
-
-  // 1. LA VERITÀ ASSOLUTA: La cassa è SOLO la somma dei saldi bancari reali ad oggi
+  // 1. Cassa reale = somma saldi bancari
   const { data: conti } = await supabase
     .from('conti_banca')
     .select('saldo_attuale')
     .eq('attivo', true);
-    
   const cassa_attuale = conti?.reduce((acc, c) => acc + (Number(c.saldo_attuale) || 0), 0) || 0;
 
-  // 2. Volumi globali di business (Fatturato e Costi)
+  // 2. Scadenze aperte (non pagate) → importo RESIDUO
   const { data: scadenze } = await supabase
     .from('scadenze_pagamento')
-    .select('tipo, importo_totale');
+    .select('tipo, importo_totale, importo_pagato')
+    .neq('stato', 'pagato');
 
-  let fatturato = 0;
-  let costi = 0;
+  let da_incassare = 0;
+  let esposizione_fornitori = 0;
 
   if (scadenze) {
     scadenze.forEach(s => {
-      const totale = Number(s.importo_totale) || 0;
-      if (s.tipo === 'entrata') fatturato += totale;
-      else if (s.tipo === 'uscita') costi += totale;
+      const residuo = (Number(s.importo_totale) || 0) - (Number(s.importo_pagato) || 0);
+      if (residuo <= 0) return;
+      if (s.tipo === 'entrata') da_incassare += residuo;
+      else if (s.tipo === 'uscita') esposizione_fornitori += residuo;
     });
   }
 
-  const margine = fatturato - costi;
-  
-  // Calcolo reale dei giorni medi di incasso
-  let dso = 30;
-  try { dso = await calcolaDSO(); } catch(e) {} 
+  // 3. Bilancio = ciò che ci devono + ciò che abbiamo - ciò che dobbiamo
+  const bilancio_globale = da_incassare + cassa_attuale - esposizione_fornitori;
 
-  return { cassa_attuale, fatturato, costi, margine, dso, soglia_alert };
+  // 4. DSO (invariato)
+  let dso = 30;
+  try { dso = await calcolaDSO(); } catch(e) {}
+
+  return { cassa_attuale, da_incassare, esposizione_fornitori, bilancio_globale, dso };
 }
 
 export async function getAgingAnalysisData(tipo: 'entrata' | 'uscita' = 'entrata') {
