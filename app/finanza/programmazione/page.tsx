@@ -1,9 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle, TrendingUp, Wallet } from "lucide-react"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getCashflowProjection } from '@/utils/data-fetcher'
 import ProgrammazioneChart from './ProgrammazioneChart'
+import { CashflowTable } from './CashflowTable'
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 
@@ -74,35 +74,7 @@ export default async function ProgrammazionePage() {
           <CardTitle>Dettaglio Numerico</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader className="bg-zinc-50">
-              <TableRow>
-                <TableHead>Settimana</TableHead>
-                <TableHead className="text-right">Entrate Previste</TableHead>
-                <TableHead className="text-right">Uscite Previste</TableHead>
-                <TableHead className="text-right">Saldo Netto Periodo</TableHead>
-                <TableHead className="text-right font-bold">Liquidità Finale</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.weeks.map((w: any, i: number) => {
-                const netto = w.entrate - w.uscite;
-                return (
-                  <TableRow key={i} className="hover:bg-zinc-50/50">
-                    <TableCell className="font-medium text-sm">{w.weekLabel}</TableCell>
-                    <TableCell className="text-right text-emerald-600 font-mono">{formatEuro(w.entrate)}</TableCell>
-                    <TableCell className="text-right text-rose-600 font-mono">{formatEuro(w.uscite)}</TableCell>
-                    <TableCell className={`text-right font-mono font-bold ${netto > 0 ? 'text-emerald-600' : netto < 0 ? 'text-rose-600' : 'text-zinc-400'}`}>
-                      {netto > 0 ? '+' : ''}{formatEuro(netto)}
-                    </TableCell>
-                    <TableCell className={`text-right font-mono font-black text-lg ${w.saldoPrevisto < 0 ? 'text-red-600 bg-red-50' : 'text-blue-900'}`}>
-                      {formatEuro(w.saldoPrevisto)}
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
+          <CashflowTable weeks={data.weeks} />
         </CardContent>
       </Card>
 

@@ -509,20 +509,46 @@ def run_sync(dry_run: bool = False) -> None:
     ids_attesi = set(r["id"] for r in righe_db)
     print(f"\nRiconciliazione uscite...")
 
-    all_uscite_res = (
-        supabase.table("scadenze_pagamento")
-        .select("id")
-        .eq("tipo", "uscita")
-        .execute()
-    )
-    ids_db = set(r["id"] for r in all_uscite_res.data)
+    # Bug1 fix: Supabase restituisce max 1000 righe senza paginazione.
+    # Paginare con range() per recuperare TUTTI gli ID uscita.
+    ids_db: set[str] = set()
+    PAGE_SIZE = 1000
+    offset = 0
+    while True:
+        res_page = (
+            supabase.table("scadenze_pagamento")
+            .select("id")
+            .eq("tipo", "uscita")
+            .range(offset, offset + PAGE_SIZE - 1)
+            .execute()
+        )
+        for row in res_page.data:
+            ids_db.add(row["id"])
+        if len(res_page.data) < PAGE_SIZE:
+            break
+        offset += PAGE_SIZE
+    print(f"  Uscite totali nel DB: {len(ids_db)}")
 
     ids_da_eliminare = ids_db - ids_attesi
     if ids_da_eliminare:
+        # FK guard: escludere ID ancora referenziati in fatture_vendita.scadenza_id
+        fv_res = (
+            supabase.table("fatture_vendita")
+            .select("scadenza_id")
+            .not_.is_("scadenza_id", "null")
+            .execute()
+        )
+        ids_fk_protetti = set(r["scadenza_id"] for r in fv_res.data if r.get("scadenza_id"))
+        ids_da_eliminare -= ids_fk_protetti
+        if ids_fk_protetti:
+            print(f"  Protetti da FK (fatture_vendita): {len(ids_fk_protetti)}")
+
         print(f"  Scadenze obsolete da eliminare: {len(ids_da_eliminare)}")
         lista_da_eliminare = list(ids_da_eliminare)
-        for i in range(0, len(lista_da_eliminare), CHUNK_SIZE):
-            chunk = lista_da_eliminare[i : i + CHUNK_SIZE]
+        # Bug2 fix: CHECK_CHUNK=50 per DELETE (stesso limite URL di PostgREST)
+        DEL_CHUNK = 50
+        for i in range(0, len(lista_da_eliminare), DEL_CHUNK):
+            chunk = lista_da_eliminare[i : i + DEL_CHUNK]
             supabase.table("scadenze_pagamento").delete().in_("id", chunk).execute()
         print(f"  Eliminate {len(ids_da_eliminare)} scadenze obsolete")
     else:
