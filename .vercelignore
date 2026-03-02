@@ -1,0 +1,6 @@
+scripts/
+plans/
+*.py
+*.bat
+*.txt
+supabase/
