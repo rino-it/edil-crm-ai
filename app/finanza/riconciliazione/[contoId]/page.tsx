@@ -1,11 +1,12 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { getMovimentiPaginati, getScadenzeApertePerMatch } from '@/utils/data-fetcher'
+import { getMovimentiPaginati, getScadenzeApertePerMatch, getSpeseBancarieConto } from '@/utils/data-fetcher'
 import ClientRiconciliazione from '../ClientRiconciliazione'
 import { DEFAULT_PAGE_SIZE } from '@/types/pagination'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, Landmark } from 'lucide-react'
+import { SpeseBancarieSection } from '../components/SpeseBancarieSection'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,7 +33,12 @@ export default async function DettaglioContoPage({
   const search = resolvedSearchParams.search
   
   // Di default mostriamo solo quelli da riconciliare, ma l'utente potrà cambiare il filtro
-  const stato = resolvedSearchParams.stato || 'non_riconciliato' 
+  const stato = resolvedSearchParams.stato || 'non_riconciliato'
+
+  // Anno per le spese bancarie (default: anno corrente)
+  const annoCorrente = new Date().getFullYear()
+  const annoSpese = anno || annoCorrente
+  const anniDisponibili = [annoCorrente, annoCorrente - 1, annoCorrente - 2]
 
   // 1. Recupero Dettagli del singolo Conto
   const { data: conto, error: errConto } = await supabase
@@ -56,6 +62,9 @@ export default async function DettaglioContoPage({
   const scadenzeEntrata = await getScadenzeApertePerMatch('entrata')
   const scadenzeUscita = await getScadenzeApertePerMatch('uscita')
   const scadenzeAperte = [...scadenzeEntrata, ...scadenzeUscita]
+
+  // 4. Fetch Spese Bancarie per questo conto
+  const speseMensili = await getSpeseBancarieConto(contoId, annoSpese)
 
   const formatEuro = (val: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val)
 
@@ -92,6 +101,13 @@ export default async function DettaglioContoPage({
           pagination={result} 
         />
       </div>
+
+      {/* Sezione Spese e Commissioni Bancarie */}
+      <SpeseBancarieSection
+        speseMensili={speseMensili}
+        annoSelezionato={annoSpese}
+        anni={anniDisponibili}
+      />
       
     </div>
   )

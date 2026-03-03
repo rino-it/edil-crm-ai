@@ -37,24 +37,34 @@ OGGI = date.today().isoformat()
 # Se il nome fornitore contiene una di queste keyword (case-insensitive),
 # la riga viene trattata come Costo Fisso: creata da zero con data_pianificata.
 # Tutte le altre righe sono Fornitori Normali (Binario 1): solo update, no insert.
-COSTI_FISSI_KEYWORDS = [
-    "stipend",      # Stipendi, Stipendio
-    "salario", "salari",
-    "mutuo", "mutui",
-    "finanziament",  # Finanziamento, Finanziamenti
-    "leasing",
-    "affitto", "locazione", "canone",
-    "f24", "irpef", "ires", "iva", "inps", "inail",
-    "tassa", "tasse", "tribut",
-    "assicurazion", "polizza",
-    "contribut",    # Contributi
-    "rata ", "rate ",  # "rata mutuo" etc. (con spazio per evitare false matches)
+TOKEN_FISSI_ESATTI = {
+    "f24", "iva", "inps", "inail", "irpef", "ires", "imu", "tari", "tasi"
+}
+
+STEM_FISSI = [
+    "stipend", "salari", "cedolin", "paghe",
+    "mutu", "finanziament", "leasing",
+    "affitt", "locazion", "canon",
+    "tass", "tribut", "contribut",
+    "assicurazion", "polizz",
+    "rata", "rate",
 ]
 
-def is_costo_fisso(nome: str) -> bool:
-    """True se il nome fornitore/voce corrisponde a un costo fisso."""
-    nome_lower = nome.lower()
-    return any(kw in nome_lower for kw in COSTI_FISSI_KEYWORDS)
+def is_costo_fisso(testo: str) -> bool:
+    """True se il testo contiene segnali affidabili di costo fisso."""
+    txt = norm(testo)
+    if not txt:
+        return False
+
+    tokens = [t for t in re.split(r"[^a-z0-9]+", txt) if t]
+    if any(t in TOKEN_FISSI_ESATTI for t in tokens):
+        return True
+
+    for t in tokens:
+        if any(t.startswith(stem) for stem in STEM_FISSI):
+            return True
+
+    return False
 
 
 # ─── COLUMN MAPPING (nomi reali dal CSV) ─────────────────────────────────────
@@ -180,8 +190,8 @@ def genera_id(soggetto_id: str | None, fattura_norm: str, importo: float, data_s
     return str(uuid5(NAMESPACE_OID, raw))
 
 
-def match_soggetto(nome_csv: str, dizionario: dict[str, str]) -> str | None:
-    """Fuzzy match contro anagrafica_soggetti (soglia 85)."""
+def match_soggetto(nome_csv: str, dizionario: dict[str, str], score_cutoff: int = 85) -> str | None:
+    """Fuzzy match contro anagrafica_soggetti (soglia configurabile)."""
     try:
         from thefuzz import process
     except ImportError:
@@ -189,7 +199,7 @@ def match_soggetto(nome_csv: str, dizionario: dict[str, str]) -> str | None:
     nome_pulito = norm(nome_csv).upper()
     if not nome_pulito:
         return None
-    risultato = process.extractOne(nome_pulito, list(dizionario.keys()), score_cutoff=85)
+    risultato = process.extractOne(nome_pulito, list(dizionario.keys()), score_cutoff=score_cutoff)
     return dizionario[risultato[0]] if risultato else None
 
 
@@ -321,7 +331,15 @@ def run_import(dry_run: bool = False):
             stato          = "da_pagare"
             importo_pagato = abs(importo_pagato_csv)
 
-        soggetto_id = match_soggetto(fornitore_raw, dizionario_nomi)
+        testo_classificazione = " | ".join([
+            fornitore_raw,
+            appunti,
+            note,
+            fattura_raw,
+        ])
+        binario = 2 if is_costo_fisso(testo_classificazione) else 1
+
+        soggetto_id = match_soggetto(fornitore_raw, dizionario_nomi, score_cutoff=80 if binario == 2 else 85)
         if not soggetto_id:
             mancanti.append(fornitore_raw)
             continue
@@ -334,7 +352,6 @@ def run_import(dry_run: bool = False):
         note_completa = " | ".join(x for x in [appunti, note] if x).strip(" |") or None
 
         # ── BINARIO: Costo Fisso vs Fornitore Normale ─────────────────────────
-        binario = 2 if is_costo_fisso(fornitore_raw) else 1
 
         record: dict = {
             "id":                  uuid_id,

@@ -10,7 +10,7 @@ import { createClient } from "@/utils/supabase/server";
 import { getDocumentiPersonale } from "@/utils/data-fetcher";
 import DocumentiClient from "./DocumentiClient";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, FileText } from "lucide-react";
+import { ArrowLeft, FileText, Wallet } from "lucide-react";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -54,12 +54,24 @@ export default async function DocumentiPersonalePage({ params }: PageProps) {
       <div className="max-w-4xl mx-auto space-y-6">
 
         {/* HEADER */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center justify-between gap-3">
           <Link href="/personale">
             <Button variant="ghost" size="sm" className="gap-2">
               <ArrowLeft className="h-4 w-4" /> Torna al Personale
             </Button>
           </Link>
+          <div className="flex items-center gap-2">
+            <Link href={`/personale/${id}/documenti`}>
+              <Button variant="outline" size="sm" className="gap-2 border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100">
+                <FileText className="h-4 w-4" /> Documenti
+              </Button>
+            </Link>
+            <Link href={`/personale/${id}/pagamenti`}>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Wallet className="h-4 w-4" /> Pagamenti
+              </Button>
+            </Link>
+          </div>
         </div>
 
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">

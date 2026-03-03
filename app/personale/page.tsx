@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Users, Euro, Phone, Trash2, FileText, AlertTriangle } from "lucide-react"
+import { Users, Euro, Phone, Trash2, FileText, AlertTriangle, Wallet } from "lucide-react"
 import Link from "next/link"
 
 export default async function PersonalePage() {
@@ -131,6 +131,16 @@ export default async function PersonalePage() {
                               </TableCell>
                               <TableCell className="text-right">
                                 <div className="flex items-center justify-end gap-1">
+                                  <Link href={`/personale/${p.id}/pagamenti`}>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50"
+                                      title="Storico pagamenti"
+                                    >
+                                      <Wallet className="h-4 w-4" />
+                                    </Button>
+                                  </Link>
                                   {/* Link documenti */}
                                   <Link href={`/personale/${p.id}/documenti`}>
                                     <Button
@@ -191,6 +201,16 @@ export default async function PersonalePage() {
                             )}
 
                             <div className="flex items-center gap-1">
+                              <Link href={`/personale/${p.id}/pagamenti`}>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50"
+                                  title="Storico pagamenti"
+                                >
+                                  <Wallet className="h-4 w-4" />
+                                </Button>
+                              </Link>
                               <Link href={`/personale/${p.id}/documenti`}>
                                 <Button
                                   variant="ghost"

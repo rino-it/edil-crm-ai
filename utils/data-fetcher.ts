@@ -1572,13 +1572,23 @@ export async function confermaRiconciliazione(
   ai_motivo?: string
 ) {
   const supabase = getSupabaseAdmin();
+  let resolvedSoggettoId = soggetto_id;
+
+  if (!resolvedSoggettoId && scadenza_id) {
+    const { data: scad } = await supabase
+      .from('scadenze_pagamento')
+      .select('soggetto_id')
+      .eq('id', scadenza_id)
+      .single();
+    if (scad?.soggetto_id) resolvedSoggettoId = scad.soggetto_id;
+  }
   
   const updateData: any = { 
     stato: 'riconciliato', 
     scadenza_id: scadenza_id 
   };
   
-  if (soggetto_id) updateData.soggetto_id = soggetto_id;
+  if (resolvedSoggettoId) updateData.soggetto_id = resolvedSoggettoId;
   if (tipo_match === 'auto_ai') updateData.auto_riconciliato = true;
   
   await supabase
@@ -1680,6 +1690,63 @@ export async function getStoricoPaymentsSoggetto(
 
   // Deleghiamo l'esecuzione e il calcolo del count all'helper infrastrutturale
   return await executePaginatedQuery(query, pagination);
+}
+
+export async function getStoricoPagamentiPersonale(
+  personale_id: string,
+  pagination: PaginationParams
+): Promise<PaginatedResult<any>> {
+  const supabase = getSupabaseAdmin();
+
+  const query = supabase
+    .from('movimenti_banca')
+    .select(`
+      id,
+      data_operazione,
+      descrizione,
+      importo,
+      stato_riconciliazione,
+      personale_id,
+      categoria_dedotta,
+      conto_banca_id,
+      conti_banca (
+        nome_banca,
+        nome_conto
+      )
+    `, { count: 'exact' })
+    .eq('personale_id', personale_id)
+    .eq('stato_riconciliazione', 'riconciliato')
+    .order('data_operazione', { ascending: false });
+
+  return await executePaginatedQuery(query, pagination);
+}
+
+export async function getKPIPersonale(personale_id: string) {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from('movimenti_banca')
+    .select('importo, data_operazione')
+    .eq('personale_id', personale_id)
+    .eq('stato_riconciliazione', 'riconciliato')
+    .order('data_operazione', { ascending: false });
+
+  const kpi = {
+    totale_pagato: 0,
+    num_pagamenti: 0,
+    ultimo_pagamento: null as string | null,
+  };
+
+  if (error || !data || data.length === 0) {
+    if (error) console.error('❌ Errore getKPIPersonale:', error);
+    return kpi;
+  }
+
+  kpi.totale_pagato = data.reduce((acc, row) => acc + Math.abs(Number(row.importo) || 0), 0);
+  kpi.num_pagamenti = data.length;
+  kpi.ultimo_pagamento = data[0]?.data_operazione || null;
+
+  return kpi;
 }
 
 export async function getEsposizioneSoggetto(soggetto_id: string) {
@@ -2527,4 +2594,80 @@ export async function getScadenzeSoggetto(soggettoId: string) {
     return [];
   }
   return data || [];
+}
+
+// ==========================================
+// BLOCCO D: COMMISSIONI BANCARIE (SPESE)
+// ==========================================
+
+export interface SpesaMensile {
+  mese: string;
+  totale: number;
+  conteggio: number;
+}
+
+export async function getSpeseBancarieConto(conto_banca_id: string, anno?: number): Promise<SpesaMensile[]> {
+  const supabase = getSupabaseAdmin();
+  let query = supabase
+    .from('movimenti_banca')
+    .select('importo, data_operazione, categoria_dedotta')
+    .eq('conto_banca_id', conto_banca_id)
+    .eq('categoria_dedotta', 'commissione');
+
+  if (anno) {
+    query = query
+      .gte('data_operazione', `${anno}-01-01`)
+      .lte('data_operazione', `${anno}-12-31T23:59:59`);
+  }
+
+  const { data, error } = await query;
+  if (error || !data) return [];
+
+  const grouped = data.reduce((acc: Record<string, SpesaMensile>, curr: any) => {
+    const mese = curr.data_operazione.substring(0, 7);
+    if (!acc[mese]) acc[mese] = { mese, totale: 0, conteggio: 0 };
+    acc[mese].totale += Math.abs(curr.importo || 0);
+    acc[mese].conteggio += 1;
+    return acc;
+  }, {});
+
+  return Object.values(grouped).sort((a, b) => b.mese.localeCompare(a.mese));
+}
+
+export async function getDettaglioSpeseBancarie(
+  conto_banca_id: string,
+  pagination: PaginationParams,
+  anno?: number
+): Promise<PaginatedResult<any>> {
+  const supabase = getSupabaseAdmin();
+  let query = supabase
+    .from('movimenti_banca')
+    .select('id, data_operazione, descrizione, importo', { count: 'exact' })
+    .eq('conto_banca_id', conto_banca_id)
+    .eq('categoria_dedotta', 'commissione');
+
+  if (anno) {
+    query = query
+      .gte('data_operazione', `${anno}-01-01`)
+      .lte('data_operazione', `${anno}-12-31T23:59:59`);
+  }
+
+  query = query.order('data_operazione', { ascending: false });
+
+  return await executePaginatedQuery(query, pagination);
+}
+
+export async function getTotaleSpeseBancarieGlobale(anno: number): Promise<number> {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from('movimenti_banca')
+    .select('importo')
+    .eq('categoria_dedotta', 'commissione')
+    .gte('data_operazione', `${anno}-01-01`)
+    .lte('data_operazione', `${anno}-12-31T23:59:59`);
+
+  if (error || !data) return 0;
+
+  return data.reduce((acc: number, curr: any) => acc + Math.abs(curr.importo || 0), 0);
 }
