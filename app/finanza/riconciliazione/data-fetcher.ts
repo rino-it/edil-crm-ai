@@ -1631,14 +1631,14 @@ export async function getStoricoPaymentsSoggetto(
       data_operazione,
       descrizione,
       importo,
-      stato,
+      stato_riconciliazione,
       scadenza_id,
       scadenze_pagamento (
         fattura_riferimento,
         importo_totale
       )
     `, { count: 'exact' }) // Obbligatorio per la paginazione
-    .eq('stato', 'riconciliato')
+    .eq('stato_riconciliazione', 'riconciliato')
     .eq('soggetto_id', soggetto_id)
     .order('data_operazione', { ascending: false });
 

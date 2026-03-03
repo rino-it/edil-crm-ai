@@ -607,11 +607,14 @@ export async function matchBatchRiconciliazioneBancaria(movimenti: any[], scaden
     t: s.tipo === 'uscita' ? 'U' : 'E'
   }));
 
-  // FIX 1B: Comprimere i dati dei movimenti
+  // FIX 1B: Comprimere i dati dei movimenti + includi campi XML strutturati
   const movimentiCompatti = movimenti.map(m => ({
     i: m.id,
     imp: m.importo,
-    c: (m.descrizione || '').substring(0, 200) // Limita la descrizione a 200 caratteri
+    c: (m.descrizione || '').substring(0, 200), // Causale testuale (max 200 chars)
+    xn: m.xml_nome_controparte || null,          // Nome controparte da XML (più affidabile del testo)
+    xi: m.xml_iban_controparte || null,          // IBAN controparte da XML
+    xp: m.xml_piva_controparte || null           // P.IVA controparte da XML
   }));
 
   // FIX 1C e 5B: Comprimere le istruzioni e imporre velocità

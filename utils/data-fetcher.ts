@@ -1698,14 +1698,14 @@ export async function getStoricoPaymentsSoggetto(
       data_operazione,
       descrizione,
       importo,
-      stato,
+      stato_riconciliazione,
       scadenza_id,
       scadenze_pagamento (
         fattura_riferimento,
         importo_totale
       )
     `, { count: 'exact' }) // Obbligatorio per la paginazione
-    .eq('stato', 'riconciliato')
+    .eq('stato_riconciliazione', 'riconciliato')
     .eq('soggetto_id', soggetto_id)
     .order('data_operazione', { ascending: false });
 
@@ -1817,6 +1817,30 @@ export async function getFattureAperteSoggetto(
   return await executePaginatedQuery(query, pagination);
 }
 
+// Mappa alias nomi commerciali → nomi legali (e viceversa)
+// Usata per brand con nomi diversi tra database e XML bancari
+const BRAND_ALIASES: Record<string, string[]> = {
+  'tim':              ['telecom italia', 'telecomitalia', 'tim spa'],
+  'telecom italia':   ['tim', 'tim spa', 'telecomitalia'],
+  'enel':             ['enel energia', 'enel servizio elettrico', 'acea distribuzione'],
+  'eni':              ['eni plenitude', 'eni gas e luce'],
+  'q8':               ['kuwait petroleum', 'ip motor oil'],
+  'kuwait petroleum': ['q8', 'q8 petroleum'],
+  'vodafone':         ['vodafone italia', 'vodafone omnitel'],
+  'fastweb':          ['fastweb spa', 'fastweb network'],
+  'wind':             ['wind tre', 'windtre', '3 italia'],
+  'windtre':          ['wind tre', 'wind', '3 italia'],
+};
+
+// Controlla se due nomi normalizzati matchano diretti o tramite alias
+function matchNomeConAlias(nomeA: string, nomeB: string): boolean {
+  if (nomeA.includes(nomeB) || nomeB.includes(nomeA)) return true;
+  const aliasA = BRAND_ALIASES[nomeA] || [];
+  const aliasB = BRAND_ALIASES[nomeB] || [];
+  return aliasA.some(a => nomeB.includes(a) || a.includes(nomeB)) ||
+         aliasB.some(a => nomeA.includes(a) || a.includes(nomeA));
+}
+
 export function normalizzaNome(nome: string): string {
   if (!nome) return '';
   return nome
@@ -1843,14 +1867,27 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
     const causaleNoSpazi = causaleNorm.replace(/\s/g, ''); 
 
     // ==========================================
-    // ZERO. Pre-Filtro Costi Bancari e Tasse
+    // ZERO. Pre-Filtro Commissioni Bancarie Pure
     // ==========================================
-    const regexBanca = /\b(bollo|comm\.?|commissioni?|canone|tenuta conto|spese|competenz[ea]|imposta|f24)\b/i;
+    const regexBanca = /\b(bollo|comm\.?|commissioni?|canone|tenuta conto|spese\s+bancari[e]?|competenz[ea])\b/i;
     if (regexBanca.test(causale)) {
       matchati.push({
         movimento_id: m.id, scadenza_id: null, soggetto_id: null, confidence: 0.99,
-        motivo: `Pre-match Veloce: Rilevata Spesa Bancaria/Imposta`,
-        ragione_sociale: "Banca / Imposte (Spesa Interna)", categoria: 'commissione'
+        motivo: `Pre-match Veloce: Commissione Bancaria`,
+        ragione_sociale: "Commissione Bancaria", categoria: 'commissione'
+      });
+      continue;
+    }
+
+    // ==========================================
+    // 0.5. Pre-Filtro F24 / Tributi Erariali
+    // ==========================================
+    const regexF24 = /\b(delega unificata|mod\.?\s*f24|pag.*f24|f24\s|agenzia\s*(delle\s*)?entrate|tribut[io]\s+erariali?)\b/i;
+    if (regexF24.test(causale) || (m.xml_causale && regexF24.test(m.xml_causale))) {
+      matchati.push({
+        movimento_id: m.id, scadenza_id: null, soggetto_id: null, confidence: 0.99,
+        motivo: `Pre-match Veloce: F24 / Tributo Erariale`,
+        ragione_sociale: "F24 / Erario", categoria: 'f24'
       });
       continue;
     }
@@ -1945,6 +1982,12 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
         }
       }
 
+      // Distingui carte di credito/prepagate da semplici giroconti
+      const categoriaGiro = contoMatchato &&
+        (contoMatchato.tipo_conto === 'credito' || contoMatchato.tipo_conto === 'prepagata')
+          ? 'carta_credito'
+          : 'giroconto';
+
       matchati.push({
         movimento_id: m.id, 
         scadenza_id: null, 
@@ -1952,7 +1995,7 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
         confidence: 0.99,
         motivo: controparteGiroconto.trim(), 
         ragione_sociale: contoMatchato ? `${contoMatchato.nome_banca} ${contoMatchato.nome_conto}` : "Giroconto / Carta", 
-        categoria: 'giroconto'
+        categoria: categoriaGiro
       });
       continue;
     }
@@ -2033,7 +2076,8 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
       const nomeXml = normalizzaNome(m.xml_nome_controparte);
       for (const s of soggetti) {
         const nomeDb = normalizzaNome(s.ragione_sociale);
-        if (nomeDb.length >= 4 && (nomeXml.includes(nomeDb) || nomeDb.includes(nomeXml))) {
+        // Soglia 3 (non 4) per catturare brand corti come "TIM"
+        if (nomeDb.length >= 3 && matchNomeConAlias(nomeXml, nomeDb)) {
           foundSoggetto = s;
           console.log(`   💎 XML Match: Nome '${m.xml_nome_controparte}' → ${s.ragione_sociale}`);
           break;
@@ -2082,10 +2126,12 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
       if (!foundSoggetto) {
         for (const s of soggetti) {
           const nomeNorm = normalizzaNome(s.ragione_sociale);
-          if (nomeNorm.length >= 4) {
+          // Soglia 3 (non 4) per catturare brand corti come "TIM"
+          if (nomeNorm.length >= 3) {
             const nomeNoSpazi = nomeNorm.replace(/\s/g, ''); 
-            // Controllo elastico: cerca sia la stringa normata sia quella collassata senza spazi
-            if (causaleNorm.includes(nomeNorm) || causaleNoSpazi.includes(nomeNoSpazi)) {
+            // Controllo elastico: cerca la stringa normata, quella senza spazi, o alias di brand
+            if (causaleNorm.includes(nomeNorm) || causaleNoSpazi.includes(nomeNoSpazi) ||
+                matchNomeConAlias(causaleNorm, nomeNorm)) {
               foundSoggetto = s;
               break;
             }

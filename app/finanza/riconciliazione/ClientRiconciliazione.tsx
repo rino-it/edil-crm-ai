@@ -17,14 +17,16 @@ const BADGE_MAP: Record<string, { icon: string; label: string; className: string
   stipendio:         { icon: '💼', label: 'Stipendio',       className: 'bg-purple-100 text-purple-800' },
   commissione:       { icon: '🏦', label: 'Comm. Banca',     className: 'bg-zinc-100 text-zinc-700' },
   giroconto:         { icon: '🔄', label: 'Giroconto',       className: 'bg-cyan-100 text-cyan-800' },
+  carta_credito:     { icon: '💳', label: 'Carta Credito',   className: 'bg-violet-100 text-violet-800' },
+  f24:               { icon: '🏛️', label: 'F24/Imposte',     className: 'bg-red-100 text-red-800' },
   sepa:              { icon: '⚡', label: 'SEPA/SDD',        className: 'bg-orange-100 text-orange-800' },
   entrata:           { icon: '💰', label: 'Entrata',         className: 'bg-emerald-100 text-emerald-800' },
-  // NUOVI — Soggetti Speciali
+  utenza:            { icon: '💡', label: 'Utenza',          className: 'bg-teal-100 text-teal-800' },
+  // Soggetti Speciali
   leasing:           { icon: '🚗', label: 'Leasing',         className: 'bg-amber-100 text-amber-800' },
   ente_pubblico:     { icon: '🏛️', label: 'Ente/PagoPA',     className: 'bg-red-100 text-red-800' },
   cassa_edile:       { icon: '🏗️', label: 'Cassa Edile',     className: 'bg-yellow-100 text-yellow-800' },
   cessione_quinto:   { icon: '💳', label: 'Cessione Quinto', className: 'bg-pink-100 text-pink-800' },
-  utenza:            { icon: '💡', label: 'Utenza',          className: 'bg-teal-100 text-teal-800' },
   assicurazione:     { icon: '🛡️', label: 'Assicurazione',   className: 'bg-indigo-100 text-indigo-800' },
 };
 
@@ -50,6 +52,9 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
   
   const [movimentiLocali, setMovimentiLocali] = useState(movimenti);
   const [manualSelections, setManualSelections] = useState<Record<string, string>>({});
+  // filtro testo e categoria override per il match manuale
+  const [manualFilters, setManualFilters] = useState<Record<string, string>>({});
+  const [manualCategorie, setManualCategorie] = useState<Record<string, string>>({});
 
   // STEP 6: Stato e logica per la barra di ricerca
   const [searchTerm, setSearchTerm] = useState('');
@@ -328,36 +333,70 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
                               </form>
                             </>
                           ) : (
-                            <form action={handleConferma} className="flex gap-2 items-center">
+                            <form action={handleConferma} className="flex flex-col gap-1 items-end">
                               <input type="hidden" name="movimento_id" value={m.id} />
                               <input type="hidden" name="importo" value={Math.abs(m.importo)} />
-                              <input type="hidden" name="categoria" value="fattura" />
-                              
-                              <select 
-                                name="scadenza_id" 
-                                required 
-                                className="h-8 text-xs border border-zinc-200 rounded px-2 w-[150px] outline-none"
-                                onChange={(e) => {
-                                  const selected = scadenzeAperte.find(s => s.id === e.target.value);
-                                  if (selected) {
-                                    setManualSelections(prev => ({ ...prev, [m.id]: selected.soggetto_id || '' }));
-                                  }
-                                }}
-                              >
-                                <option value="">Seleziona manuale...</option>
-                                {scadenzeAperte
-                                  .filter(s => (m.importo > 0 ? s.tipo === 'entrata' : s.tipo === 'uscita'))
-                                  .map(s => (
-                                    <option key={s.id} value={s.id}>
-                                      {s.soggetto?.ragione_sociale || s.anagrafica_soggetti?.ragione_sociale} - {formatEuro(s.importo_totale)}
-                                    </option>
-                                  ))}
-                              </select>
                               <input type="hidden" name="soggetto_id" value={manualSelections[m.id] || ''} />
 
-                              <Button size="sm" type="submit" variant="secondary" className="h-8 px-2" title="Collega">
-                                <Search className="h-4 w-4" />
-                              </Button>
+                              {/* Riga 1: filtro testo + categoria */}
+                              <div className="flex gap-1.5 items-center w-full">
+                                <input
+                                  type="text"
+                                  placeholder="Cerca fornitore..."
+                                  className="h-7 text-xs border border-zinc-200 rounded px-2 w-[130px] outline-none"
+                                  value={manualFilters[m.id] || ''}
+                                  onChange={(e) => setManualFilters(prev => ({ ...prev, [m.id]: e.target.value }))}
+                                />
+                                <select
+                                  name="categoria"
+                                  className="h-7 text-xs border border-zinc-200 rounded px-1 w-[120px] outline-none"
+                                  value={manualCategorie[m.id] || 'fattura'}
+                                  onChange={(e) => setManualCategorie(prev => ({ ...prev, [m.id]: e.target.value }))}
+                                >
+                                  <option value="fattura">📄 Fattura</option>
+                                  <option value="utenza">💡 Utenza</option>
+                                  <option value="leasing">🚗 Leasing</option>
+                                  <option value="f24">🏦 F24/Imposte</option>
+                                  <option value="commissione">🏦 Comm. Banca</option>
+                                  <option value="assicurazione">🛡️ Assicurazione</option>
+                                  <option value="carta_credito">💳 Carta Credito</option>
+                                  <option value="sepa">⚡ SEPA/SDD</option>
+                                  <option value="giroconto">🔄 Giroconto</option>
+                                </select>
+                              </div>
+
+                              {/* Riga 2: select scadenza + conferma */}
+                              <div className="flex gap-1.5 items-center w-full">
+                                <select
+                                  name="scadenza_id"
+                                  className="h-7 text-xs border border-zinc-200 rounded px-2 flex-1 min-w-0 outline-none"
+                                  onChange={(e) => {
+                                    const selected = scadenzeAperte.find(s => s.id === e.target.value);
+                                    if (selected) {
+                                      setManualSelections(prev => ({ ...prev, [m.id]: selected.soggetto_id || '' }));
+                                    } else {
+                                      setManualSelections(prev => ({ ...prev, [m.id]: '' }));
+                                    }
+                                  }}
+                                >
+                                  <option value="">— Solo categoria (senza scadenza) —</option>
+                                  {scadenzeAperte
+                                    .filter(s => {
+                                      const dirOk = m.importo > 0 ? s.tipo === 'entrata' : s.tipo === 'uscita';
+                                      const filtro = (manualFilters[m.id] || '').toLowerCase();
+                                      const nome = (s.soggetto?.ragione_sociale || s.anagrafica_soggetti?.ragione_sociale || '').toLowerCase();
+                                      return dirOk && (!filtro || nome.includes(filtro));
+                                    })
+                                    .map(s => (
+                                      <option key={s.id} value={s.id}>
+                                        {s.soggetto?.ragione_sociale || s.anagrafica_soggetti?.ragione_sociale} — {formatEuro(s.importo_totale)}
+                                      </option>
+                                    ))}
+                                </select>
+                                <Button size="sm" type="submit" variant="secondary" className="h-7 px-2 shrink-0" title="Collega">
+                                  <Search className="h-4 w-4" />
+                                </Button>
+                              </div>
                             </form>
                           )}
                         </div>

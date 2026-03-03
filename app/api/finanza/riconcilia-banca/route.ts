@@ -38,10 +38,10 @@ export async function POST(request: Request) {
 
     if (errorPersonale) console.error("❌ Errore Personale:", errorPersonale);
 
-    // 4. Estrai Conti Banca Aziendali (Per i Giroconti)
+    // 4. Estrai Conti Banca Aziendali (Per i Giroconti e Carte di Credito)
     const { data: conti_banca, error: errorConti } = await supabase
       .from('conti_banca')
-      .select('id, nome_banca, iban');
+      .select('id, nome_banca, nome_conto, iban, tipo_conto');
 
     const scadenzeSafe = scadenzeAperte || [];
     const soggettiSafe = soggetti || [];
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
           const bHasFatt = b.fattura_riferimento ? 1 : 0;
           return bHasFatt - aHasFatt; // fatture con riferimento prima
         })
-        .slice(0, 20); // Limite drastico per abbattere i token
+        .slice(0, 40); // Limite per abbattere i token (40 scadenze compresse restano ben sotto i limiti Gemini)
       
       console.log(`🤖 AI: ${nonMatchati.length} mov. da analizzare. Scadenze: ${scadenzePerAI.length}/${scadenzeSafe.length} (filtrate per tipo e priorità fattura)`);
       
@@ -98,12 +98,16 @@ export async function POST(request: Request) {
       const tempoImpiegato = ((Date.now() - startTime) / 1000).toFixed(1);
       console.log(`🤖 Risposta AI ricevuta in ${tempoImpiegato} secondi.`);
 
+      const CATEGORIE_VALIDE = new Set(['fattura', 'utenza', 'leasing', 'f24', 'sepa', 'entrata', 'commissione', 'giroconto', 'carta_credito', 'stipendio', 'ente_pubblico', 'assicurazione', 'cassa_edile', 'cessione_quinto']);
       risultatiAI = risultatiAI.map(res => {
         if (res.soggetto_id && !res.ragione_sociale) {
           const s = soggettiSafe.find(sog => sog.id === res.soggetto_id);
           if (s) res.ragione_sociale = s.ragione_sociale;
         }
-        res.categoria = 'fattura';
+        // Preserva la categoria suggerita dall'AI; fallback a 'fattura' solo se mancante/invalida
+        if (!res.categoria || !CATEGORIE_VALIDE.has(res.categoria)) {
+          res.categoria = 'fattura';
+        }
         return res;
       });
     } else {
