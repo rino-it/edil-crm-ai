@@ -43,6 +43,9 @@ export default function CashflowChart({ data }: CashflowChartProps) {
   // Generazione dei tracciati vettoriali (Paths)
   const linePath = data.map((d, i) => `${i === 0 ? 'M' : 'L'} ${getX(i)} ${getY(d.saldo)}`).join(' ');
   const areaPath = `${linePath} L ${getX(data.length - 1)} ${padding.top + drawHeight} L ${padding.left} ${padding.top + drawHeight} Z`;
+  const hoveredIndex = hovered ? data.findIndex(d => d.data === hovered.data) : -1;
+  const rawTooltipLeft = hoveredIndex >= 0 ? (hoveredIndex / Math.max(data.length - 1, 1)) * 100 : 50;
+  const tooltipLeft = Math.max(8, Math.min(92, rawTooltipLeft));
 
   const formatEuro = (val: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
   const formatDate = (dateStr: string) => {
@@ -59,11 +62,11 @@ export default function CashflowChart({ data }: CashflowChartProps) {
   }
 
   return (
-    <div className="relative w-full h-full min-h-[350px]">
+    <div className="relative w-full h-full min-h-[350px] overflow-hidden">
       <svg 
         viewBox={`0 0 ${width} ${height}`} 
-        preserveAspectRatio="none"
-        className="w-full h-full overflow-visible"
+        preserveAspectRatio="xMidYMid meet"
+        className="w-full h-full"
       >
         <defs>
           {/* Gradiente dinamico: Verde sopra 0, Rosso sotto */}
@@ -124,8 +127,7 @@ export default function CashflowChart({ data }: CashflowChartProps) {
         <div 
           className="absolute bg-zinc-900 text-white p-3 rounded-lg shadow-xl text-xs z-10 transform -translate-x-1/2 pointer-events-none transition-opacity animate-in fade-in"
           style={{
-            // Posiziona il tooltip in modo responsive sopra il punto
-            left: `calc(${(data.findIndex(d => d.data === hovered.data) / Math.max(data.length - 1, 1)) * 100}% * ${(drawWidth) / width} + ${padding.left / width * 100}%)`,
+            left: `${tooltipLeft}%`,
             top: '0px'
           }}
         >
