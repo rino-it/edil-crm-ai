@@ -109,17 +109,40 @@ def get_float(s) -> float:
         return 0.0
 
 
-def get_date(s) -> str | None:
-    """Prova vari formati data → ISO string o None."""
+def get_date(s, force_future: bool = False) -> str | None:
+    """Prova vari formati data → ISO string o None.
+    Se force_future=True e la data è nel passato, sposta all'anno prossimo.
+    Supporta anche formato dd/mm senza anno."""
     if not s:
         return None
     s = str(s).strip()
+
+    parsed = None
+    # Prova formati con anno
     for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d.%m.%Y"):
         try:
-            return datetime.strptime(s, fmt).date().isoformat()
+            parsed = datetime.strptime(s, fmt).date()
+            break
         except ValueError:
             continue
-    return None
+
+    # Prova formato senza anno: dd/mm
+    if parsed is None:
+        for fmt in ("%d/%m", "%d-%m"):
+            try:
+                parsed = datetime.strptime(s, fmt).date().replace(year=date.today().year)
+                break
+            except ValueError:
+                continue
+
+    if parsed is None:
+        return None
+
+    # Se force_future e la data è nel passato, sposta all'anno prossimo
+    if force_future and parsed < date.today():
+        parsed = parsed.replace(year=date.today().year + 1)
+
+    return parsed.isoformat()
 
 
 def genera_id(soggetto_id: str | None, fattura_norm: str, importo: float, data_scadenza: str = "") -> str:
@@ -257,7 +280,8 @@ def run_import(dry_run: bool = False):
         note               = (row.get(COL_NOTE)     or "").strip()
         appunti            = (row.get(COL_APPUNTI)  or "").strip()
 
-        # ── Calcolo stato ──────────────────────────────────────────
+        # ── Calcolo stato da foglio MAIN ──────────────────────────
+        # Sdo=x → fattura già saldata (esclusa dal cashflow)
         if sdo in ("x", "X"):
             stato          = "pagato"
             importo_pagato = abs(importo_pagato_csv) if importo_pagato_csv else abs(importo)
@@ -266,6 +290,7 @@ def run_import(dry_run: bool = False):
             stato          = "pagato"
             importo_pagato = abs(importo)
         elif data_scadenza < OGGI:
+            # Scaduta e non pagata → arretrato aperto
             stato          = "scaduto"
             importo_pagato = abs(importo_pagato_csv)
         else:
@@ -282,7 +307,10 @@ def run_import(dry_run: bool = False):
         # UUID5 include data_scadenza → rate split della stessa fattura → ID distinti
         uuid_id = genera_id(soggetto_id, fattura_norm, abs(importo), data_scadenza)
 
-        note_completa = " | ".join(x for x in ["pivot", appunti, note] if x).strip(" |")
+        # Descrizione per identificare la sorgente
+        descrizione_pivot = f"Schedulazione Pivot: {fornitore_raw}"
+        # Note: solo appunti e note operative (senza "pivot" hardcoded)
+        note_completa = " | ".join(x for x in [appunti, note] if x).strip(" |") or None
 
         record: dict = {
             "id":                  uuid_id,
@@ -297,7 +325,8 @@ def run_import(dry_run: bool = False):
             "data_pianificata":    data_scadenza,
             "stato":               stato,
             "metodo_pagamento":    modalita or None,
-            "note":                note_completa or None,
+            "descrizione":         descrizione_pivot,
+            "note":                note_completa,
         }
         if cantiere_id:
             record["cantiere_id"] = cantiere_id
@@ -364,6 +393,7 @@ def run_import(dry_run: bool = False):
         "data_emissione",
         "soggetto_id",
         "cantiere_id",
+        "descrizione",
         "note",
     }
     upd_ok = 0

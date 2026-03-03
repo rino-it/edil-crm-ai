@@ -2129,70 +2129,80 @@ export async function getScadenzePaginated(
 // ============================================================
 // FASE 3: CASHFLOW PROJECTION
 // ============================================================
-import { addDays, startOfWeek, format, isBefore } from 'date-fns';
+import { addDays, startOfWeek, endOfWeek, format, isBefore } from 'date-fns';
 import { it } from 'date-fns/locale';
 
 export interface CashflowWeek {
   weekLabel: string;
+  weekStart: string;
   entrate: number;
   uscite: number;
   saldoPrevisto: number;
+  dettagli: Array<{ id: string; ragione_sociale: string; fattura_riferimento: string | null; data_effettiva: string; importo_residuo: number; tipo: 'entrata' | 'uscita' }>;
 }
 
 export interface CashflowProjection {
   saldoAttuale: number;
   weeks: CashflowWeek[];
+  daPianificare: CashflowWeek | null;
   hasNegativeWeeks: boolean;
 }
 
 export async function getCashflowProjection(days = 90): Promise<CashflowProjection> {
   const supabase = getSupabaseAdmin();
 
-  // 1. Recupero Saldo Attuale Totale (Somma dei conti attivi)
   const { data: conti } = await supabase.from('conti_banca').select('saldo_attuale');
   const saldoAttuale = conti?.reduce((acc, c) => acc + (Number(c.saldo_attuale) || 0), 0) || 0;
 
-  // 2. Recupero Scadenze Aperte
   const endDate = addDays(new Date(), days).toISOString().split('T')[0];
   const { data: scadenze } = await supabase
     .from('scadenze_pagamento')
-    .select('tipo, importo_totale, importo_pagato, data_scadenza, stato')
+    .select('id, tipo, importo_totale, importo_pagato, data_scadenza, data_pianificata, stato, fattura_riferimento, anagrafica_soggetti:soggetto_id (ragione_sociale)')
     .neq('stato', 'pagato')
     .lte('data_scadenza', endDate);
 
   const safeScadenze = scadenze || [];
-
-  // 3. Aggregazione per Settimana
-  const weeksMap = new Map<string, { entrate: number; uscite: number }>();
+  type WeekBucket = { entrate: number; uscite: number; dettagli: any[]; weekStart: Date };
+  const weeksMap = new Map<string, WeekBucket>();
   const today = new Date();
+  const pastLabel = 'Da Pianificare';
+  weeksMap.set(pastLabel, { entrate: 0, uscite: 0, dettagli: [], weekStart: new Date(0) });
 
-  // Pre-popoliamo le prossime 12 settimane per avere un grafico continuo
-  for (let i = 0; i < (days / 7); i++) {
-    const weekStart = startOfWeek(addDays(today, i * 7), { weekStartsOn: 1 });
-    const label = `Sett ${format(weekStart, 'w')} (${format(weekStart, 'dd MMM', { locale: it })})`;
-    weeksMap.set(label, { entrate: 0, uscite: 0 });
+  for (let i = 0; i < Math.ceil(days / 7); i++) {
+    const ws = startOfWeek(addDays(today, i * 7), { weekStartsOn: 1 });
+    const we = endOfWeek(ws, { weekStartsOn: 1 });
+    const label = `Dal ${format(ws, 'dd/MM')} al ${format(we, 'dd/MM')}`;
+    if (!weeksMap.has(label)) weeksMap.set(label, { entrate: 0, uscite: 0, dettagli: [], weekStart: ws });
   }
 
-  // Smistiamo le scadenze
-  safeScadenze.forEach(s => {
+  safeScadenze.forEach((s: any) => {
     const residuo = Number(s.importo_totale) - Number(s.importo_pagato || 0);
     if (residuo <= 0) return;
-
-    // Se è scaduta, la consideriamo come "impatto immediato" nella settimana corrente
-    let dScadenza = new Date(s.data_scadenza);
-    if (isBefore(dScadenza, today)) dScadenza = today;
-
-    const weekStart = startOfWeek(dScadenza, { weekStartsOn: 1 });
-    const label = `Sett ${format(weekStart, 'w')} (${format(weekStart, 'dd MMM', { locale: it })})`;
-
+    const dataStr = s.data_pianificata || s.data_scadenza;
+    const dScadenza = new Date(dataStr);
+    const detail = { id: s.id, ragione_sociale: s.anagrafica_soggetti?.ragione_sociale || 'N/D', fattura_riferimento: s.fattura_riferimento ?? null, data_effettiva: dataStr, importo_residuo: residuo, tipo: s.tipo };
+    if (isBefore(dScadenza, startOfWeek(today, { weekStartsOn: 1 }))) {
+      const past = weeksMap.get(pastLabel)!;
+      if (s.tipo === 'entrata') past.entrate += residuo; else past.uscite += residuo;
+      past.dettagli.push(detail);
+      return;
+    }
+    const ws = startOfWeek(dScadenza, { weekStartsOn: 1 });
+    const we = endOfWeek(ws, { weekStartsOn: 1 });
+    const label = `Dal ${format(ws, 'dd/MM')} al ${format(we, 'dd/MM')}`;
     if (weeksMap.has(label)) {
       const current = weeksMap.get(label)!;
-      if (s.tipo === 'entrata') current.entrate += residuo;
-      else current.uscite += residuo;
+      if (s.tipo === 'entrata') current.entrate += residuo; else current.uscite += residuo;
+      current.dettagli.push(detail);
     }
   });
 
-  // 4. Calcolo Saldo Progressivo
+  const daPianificareData = weeksMap.get(pastLabel);
+  weeksMap.delete(pastLabel);
+  const daPianificare: CashflowWeek | null = daPianificareData && (daPianificareData.entrate > 0 || daPianificareData.uscite > 0)
+    ? { weekLabel: 'Da Pianificare', weekStart: new Date(0).toISOString(), entrate: daPianificareData.entrate, uscite: daPianificareData.uscite, saldoPrevisto: 0, dettagli: daPianificareData.dettagli }
+    : null;
+
   let runningBalance = saldoAttuale;
   let hasNegativeWeeks = false;
   const weeks: CashflowWeek[] = [];
@@ -2201,19 +2211,10 @@ export async function getCashflowProjection(days = 90): Promise<CashflowProjecti
     runningBalance += vals.entrate;
     runningBalance -= vals.uscite;
     if (runningBalance < 0) hasNegativeWeeks = true;
-
-    weeks.push({
-      weekLabel,
-      entrate: vals.entrate,
-      uscite: vals.uscite,
-      saldoPrevisto: runningBalance
-    });
+    weeks.push({ weekLabel, weekStart: vals.weekStart.toISOString(), entrate: vals.entrate, uscite: vals.uscite, saldoPrevisto: runningBalance, dettagli: vals.dettagli });
   });
 
-  return { saldoAttuale, weeks, hasNegativeWeeks };
-}
-
-// ============================================================
+  return { saldoAttuale, weeks, daPianificare, hasNegativeWeeks };
 // FASE 5: RICONCILIAZIONE E CONTI BANCA
 // ============================================================
 

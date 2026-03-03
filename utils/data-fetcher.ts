@@ -2165,6 +2165,7 @@ import { addDays, startOfWeek, endOfWeek, format, isBefore } from 'date-fns';
 import { it } from 'date-fns/locale';
 
 export interface CashflowDetailRow {
+  id: string;                   // scadenze_pagamento.id per la server action
   ragione_sociale: string;
   fattura_riferimento: string | null;
   data_effettiva: string;       // data usata per il posizionamento
@@ -2184,6 +2185,7 @@ export interface CashflowWeek {
 export interface CashflowProjection {
   saldoAttuale: number;
   weeks: CashflowWeek[];
+  daPianificare: CashflowWeek | null;   // bucket separato: non influenza il saldo
   hasNegativeWeeks: boolean;
 }
 
@@ -2199,7 +2201,7 @@ export async function getCashflowProjection(days = 90): Promise<CashflowProjecti
   const { data: scadenze } = await supabase
     .from('scadenze_pagamento')
     .select(`
-      tipo, importo_totale, importo_pagato, data_scadenza, data_pianificata, stato,
+      id, tipo, importo_totale, importo_pagato, data_scadenza, data_pianificata, stato,
       fattura_riferimento,
       anagrafica_soggetti:soggetto_id (ragione_sociale)
     `)
@@ -2213,8 +2215,8 @@ export async function getCashflowProjection(days = 90): Promise<CashflowProjecti
   const weeksMap = new Map<string, WeekBucket>();
   const today = new Date();
 
-  // Riga speciale per fatture scadute nel passato
-  const pastLabel = "Scaduto Precedente";
+  // Bucket separato per fatture senza data pianificata certa (non influenza il saldo)
+  const pastLabel = "Da Pianificare";
   weeksMap.set(pastLabel, { entrate: 0, uscite: 0, dettagli: [], weekStart: new Date(0) });
 
   // Pre-popoliamo le prossime settimane con label "Dal dd/MM al dd/MM"
@@ -2237,6 +2239,7 @@ export async function getCashflowProjection(days = 90): Promise<CashflowProjecti
     const dScadenza = new Date(dataStr);
 
     const detail: CashflowDetailRow = {
+      id: (s as any).id,
       ragione_sociale: (s as any).anagrafica_soggetti?.ragione_sociale || 'N/D',
       fattura_riferimento: s.fattura_riferimento ?? null,
       data_effettiva: dataStr,
@@ -2266,15 +2269,28 @@ export async function getCashflowProjection(days = 90): Promise<CashflowProjecti
     }
   });
 
-  // 4. Calcolo Saldo Progressivo
+  // 4. Estrai il bucket "Da Pianificare" PRIMA del calcolo del saldo (non deve influenzare la linea blu)
+  const daPianificareData = weeksMap.get(pastLabel);
+  weeksMap.delete(pastLabel);
+
+  const daPianificare: CashflowWeek | null =
+    daPianificareData && (daPianificareData.entrate > 0 || daPianificareData.uscite > 0)
+      ? {
+          weekLabel: 'Da Pianificare',
+          weekStart: new Date(0).toISOString(),
+          entrate: daPianificareData.entrate,
+          uscite: daPianificareData.uscite,
+          saldoPrevisto: 0,   // non significativo: è fuori dal flusso
+          dettagli: daPianificareData.dettagli.sort((a, b) => a.data_effettiva.localeCompare(b.data_effettiva)),
+        }
+      : null;
+
+  // 5. Calcolo Saldo Progressivo (solo settimane future)
   let runningBalance = saldoAttuale;
   let hasNegativeWeeks = false;
   const weeks: CashflowWeek[] = [];
 
   Array.from(weeksMap.entries()).forEach(([weekLabel, vals]) => {
-    // Salta "Scaduto Precedente" se vuoto
-    if (weekLabel === pastLabel && vals.entrate === 0 && vals.uscite === 0) return;
-
     runningBalance += vals.entrate;
     runningBalance -= vals.uscite;
     if (runningBalance < 0) hasNegativeWeeks = true;
@@ -2289,7 +2305,7 @@ export async function getCashflowProjection(days = 90): Promise<CashflowProjecti
     });
   });
 
-  return { saldoAttuale, weeks, hasNegativeWeeks };
+  return { saldoAttuale, weeks, daPianificare, hasNegativeWeeks };
 }
 
 // ============================================================

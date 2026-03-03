@@ -68,13 +68,13 @@ export default async function ProgrammazionePage() {
         </CardContent>
       </Card>
 
-      {/* Tabella Dettaglio Settimanale */}
+      {/* Tabella Dettaglio Settimanale (include il bucket Da Pianificare) */}
       <Card className="shadow-sm">
         <CardHeader>
           <CardTitle>Dettaglio Numerico</CardTitle>
         </CardHeader>
         <CardContent>
-          <CashflowTable weeks={data.weeks} />
+          <CashflowTable weeks={data.weeks} daPianificare={data.daPianificare} />
         </CardContent>
       </Card>
 
