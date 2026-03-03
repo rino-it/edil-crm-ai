@@ -2215,6 +2215,9 @@ export async function getCashflowProjection(days = 90): Promise<CashflowProjecti
   });
 
   return { saldoAttuale, weeks, daPianificare, hasNegativeWeeks };
+}
+
+// ============================================================
 // FASE 5: RICONCILIAZIONE E CONTI BANCA
 // ============================================================
 
