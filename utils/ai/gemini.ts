@@ -636,6 +636,7 @@ REGOLE:
 - Cerca nome fornitore/cliente nella causale (ignora Srl/SpA, case-insensitive). Supera differenze come "Italia" vs "Italy".
 - Cerca numero fattura (FT/FATT + numero).
 - Confronta importo movimento con residuo scadenza.
+- La data del movimento puo' essere diversa dalla data_scadenza: NON escludere il match solo per differenze di data.
 - confidence: 0.95+ se fattura/importo esatto, 0.70-0.94 se solo nome, <0.40 se niente.
 
 RISPONDI ESCLUSIVAMENTE con array JSON:

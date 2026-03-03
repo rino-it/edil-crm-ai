@@ -1872,6 +1872,11 @@ function matchNomeConAlias(nomeA: string, nomeB: string): boolean {
          aliasB.some(a => nomeA.includes(a) || a.includes(nomeA));
 }
 
+// Normalizza riferimenti fattura per matching robusto (rimuove spazi, punti, slash, trattini)
+function normalizzaRiferimentoFattura(valore: string): string {
+  return (valore || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
 export function normalizzaNome(nome: string): string {
   if (!nome) return '';
   return nome
@@ -2120,10 +2125,13 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
     // STEP 0: NINJA MATCH GLOBALE FATTURA
     // ==========================================
     if (!foundScadenza) {
+      const causalePerMatchFattura = normalizzaRiferimentoFattura(`${causale} ${m.xml_causale || ''}`);
       for (const s of scadenzeAperte) {
         if (!s.fattura_riferimento || s.fattura_riferimento.trim().length < 4) continue;
         const fatturaRif = s.fattura_riferimento.toUpperCase();
-        if (causale.includes(fatturaRif) || (m.xml_causale && m.xml_causale.toUpperCase().includes(fatturaRif))) {
+        const fatturaRifNorm = normalizzaRiferimentoFattura(fatturaRif);
+        if ((causale.includes(fatturaRif) || (m.xml_causale && m.xml_causale.toUpperCase().includes(fatturaRif))) ||
+            (fatturaRifNorm.length >= 4 && causalePerMatchFattura.includes(fatturaRifNorm))) {
           foundScadenza = s;
           foundSoggetto = soggetti.find(sog => sog.id === s.soggetto_id) || null;
           console.log(`   🥷 NINJA MATCH! Trovata fattura esatta: ${fatturaRif}`);
@@ -2176,6 +2184,7 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
     // ==========================================
     if (foundSoggetto && !foundScadenza) {
       const scadenzeSoggetto = scadenzeAperte.filter(s => s.soggetto_id === foundSoggetto.id);
+      const causalePerMatchFattura = normalizzaRiferimentoFattura(`${causale} ${m.xml_causale || ''}`);
 
       // FIX 4C: Regex Fattura Potenziata per tracciati CBI (es. FATTURA_0000...)
       const regexFattura = /(?:FATT\.?|FT\.?|FATTURA[_]?|FAT)\s*(?:N\.?\s*)?([A-Z]{0,3}\/?(?:\d{4}\/)?[\d]+)/gi;
@@ -2189,11 +2198,21 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
         );
       }
 
+      // STEP 4a-bis: match diretto robusto del fattura_riferimento nella causale normalizzata
+      if (!foundScadenza) {
+        foundScadenza = scadenzeSoggetto.find(s => {
+          if (!s.fattura_riferimento || s.fattura_riferimento.trim().length < 4) return false;
+          const rifNorm = normalizzaRiferimentoFattura(s.fattura_riferimento);
+          return rifNorm.length >= 4 && causalePerMatchFattura.includes(rifNorm);
+        });
+      }
+
       if (!foundScadenza) {
         const importoAssoluto = Math.abs(m.importo);
+        const tolleranzaImporto = 0.5; // gestisce micro-differenze dovute a arrotondamenti/commissioni
         foundScadenza = scadenzeSoggetto.find(s => {
           const residuo = Number(s.importo_totale) - Number(s.importo_pagato || 0);
-          return Math.abs(residuo - importoAssoluto) < 0.01;
+          return Math.abs(residuo - importoAssoluto) <= tolleranzaImporto;
         });
       }
     }
