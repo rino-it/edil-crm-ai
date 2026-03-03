@@ -53,7 +53,7 @@ export default async function DashboardRiconciliazionePage() {
       </div>
 
       {/* KPI Globali */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="shadow-[var(--shadow-sm)] border-border/60">
           <CardHeader className="pb-2 border-b border-border/40">
             <div className="flex items-center justify-between gap-2">
@@ -78,14 +78,12 @@ export default async function DashboardRiconciliazionePage() {
           </CardContent>
         </Card>
 
-        {/* NUOVA CARD GIROCONTI */}
-        <GirocontiDialog giroconti={storicoGiroconti} />
-
-        {/* NUOVA CARD F24/ERARIO */}
-        <F24Dialog f24={storicoF24} />
-
-        {/* NUOVA CARD FINANZIAMENTI SOCIO */}
-        <FinanziamentiSocioDialog movimenti={storicoFinanziamentiSocio} />
+        {/* Stack compatto: Storici speciali */}
+        <div className="flex flex-col gap-2">
+          <GirocontiDialog giroconti={storicoGiroconti} />
+          <F24Dialog f24={storicoF24} />
+          <FinanziamentiSocioDialog movimenti={storicoFinanziamentiSocio} />
+        </div>
 
         {/* NUOVA CARD: COSTO GESTIONE CONTI */}
         <Card className="shadow-[var(--shadow-sm)] border-border/60">
