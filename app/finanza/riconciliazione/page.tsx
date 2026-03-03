@@ -1,7 +1,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { getContiSummary, getStoricoGiroconti, getTotaleSpeseBancarieGlobale } from '@/utils/data-fetcher'
+import { getContiSummary, getStoricoF24, getStoricoFinanziamentiSocio, getStoricoGiroconti, getTotaleSpeseBancarieGlobale } from '@/utils/data-fetcher'
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Landmark, ArrowRight, Upload, Plus, AlertCircle, Receipt } from 'lucide-react'
@@ -10,6 +10,8 @@ import { AggiungiContoDialog } from './components/AggiungiContoDialog'
 import { DocumentiContoDialog } from './components/DocumentiContoDialog'
 import { EstrattiContoMeseDialog } from './components/EstrattiContoMeseDialog'
 import { GirocontiDialog } from './components/GirocontiDialog'
+import { F24Dialog } from './components/F24Dialog'
+import { FinanziamentiSocioDialog } from './components/FinanziamentiSocioDialog'
 import { StaggeredGrid } from '@/components/StaggeredGrid'
 
 export const dynamic = 'force-dynamic'
@@ -19,15 +21,19 @@ export default async function DashboardRiconciliazionePage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // Recupera i dati di tutti i conti (funzione creata nello Step 5.6)
-  const conti = await getContiSummary()
+  // Recupera KPI e storici in parallelo
+  const annoCorrente = new Date().getFullYear()
+  const [conti, storicoGiroconti, storicoF24, storicoFinanziamentiSocio, totaleCommissioni] = await Promise.all([
+    getContiSummary(),
+    getStoricoGiroconti(),
+    getStoricoF24(),
+    getStoricoFinanziamentiSocio(),
+    getTotaleSpeseBancarieGlobale(annoCorrente),
+  ])
 
   // Calcolo KPI Globali
   const totaleSaldo = conti.reduce((acc, c) => acc + (c.saldo_attuale || 0), 0)
   const totaleDaRiconciliare = conti.reduce((acc, c) => acc + (c.movimenti_da_riconciliare || 0), 0)
-  const storicoGiroconti = await getStoricoGiroconti()
-  const annoCorrente = new Date().getFullYear()
-  const totaleCommissioni = await getTotaleSpeseBancarieGlobale(annoCorrente)
 
   const formatEuro = (val: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val)
 
@@ -47,7 +53,7 @@ export default async function DashboardRiconciliazionePage() {
       </div>
 
       {/* KPI Globali */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4">
         <Card className="shadow-[var(--shadow-sm)] border-border/60">
           <CardHeader className="pb-2 border-b border-border/40">
             <div className="flex items-center justify-between gap-2">
@@ -88,6 +94,12 @@ export default async function DashboardRiconciliazionePage() {
 
         {/* NUOVA CARD GIROCONTI */}
         <GirocontiDialog giroconti={storicoGiroconti} />
+
+        {/* NUOVA CARD F24/ERARIO */}
+        <F24Dialog f24={storicoF24} />
+
+        {/* NUOVA CARD FINANZIAMENTI SOCIO */}
+        <FinanziamentiSocioDialog movimenti={storicoFinanziamentiSocio} />
 
         {/* NUOVA CARD: COSTO GESTIONE CONTI */}
         <Card className="shadow-[var(--shadow-sm)] border-border/60">

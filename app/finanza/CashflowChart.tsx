@@ -23,15 +23,18 @@ export default function CashflowChart({ data }: CashflowChartProps) {
   const drawWidth = width - padding.left - padding.right;
   const drawHeight = height - padding.top - padding.bottom;
 
-  // Calcolo dei valori minimi e massimi per scalare l'asse Y
-  const minSaldo = useMemo(() => {
-    const min = Math.min(...data.map(d => d.saldo));
-    return min < 0 ? min * 1.1 : min * 0.9; // 10% di margine visivo inferiore
-  }, [data]);
+  // Calcolo min/max Y basato sulla varianza reale del saldo
+  const { minSaldo, maxSaldo } = useMemo(() => {
+    const values = data.map(d => d.saldo);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const variance = max - min || 1;
+    const padding = variance * 0.15;
 
-  const maxSaldo = useMemo(() => {
-    const max = Math.max(...data.map(d => d.saldo));
-    return max > 0 ? max * 1.1 : max * 1.1; // 10% di margine visivo superiore
+    return {
+      minSaldo: min - padding,
+      maxSaldo: max + padding,
+    };
   }, [data]);
 
   const yRange = maxSaldo - minSaldo || 1; // Previene divisioni per zero

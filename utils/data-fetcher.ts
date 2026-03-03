@@ -1699,6 +1699,8 @@ export async function getStoricoPaymentsSoggetto(
       descrizione,
       importo,
       stato_riconciliazione,
+      categoria_dedotta,
+      ai_motivo,
       scadenza_id,
       scadenze_pagamento (
         fattura_riferimento,
@@ -1778,25 +1780,54 @@ export async function getEsposizioneSoggetto(soggetto_id: string) {
     .select('importo_totale, importo_pagato, stato')
     .eq('soggetto_id', soggetto_id);
 
-  const info = { totale_fatture: 0, totale_pagato: 0, totale_da_pagare: 0, fatture_aperte: 0 };
+  const info = {
+    totale_fatture: 0,
+    totale_pagato: 0,
+    totale_da_pagare: 0,
+    fatture_aperte: 0,
+    totale_acconti: 0,
+  };
 
   if (error || !data) {
     console.error("❌ Errore getEsposizioneSoggetto:", error);
-    return info;
+  } else {
+    data.forEach(s => {
+      const totale = Number(s.importo_totale) || 0;
+      const pagato = Number(s.importo_pagato) || 0;
+
+      info.totale_fatture += totale;
+      info.totale_pagato += pagato;
+      if (s.stato !== 'pagato') {
+        info.fatture_aperte += 1;
+      }
+    });
   }
 
-  data.forEach(s => {
-    const totale = Number(s.importo_totale) || 0;
-    const pagato = Number(s.importo_pagato) || 0;
+  const { data: movimenti, error: movErr } = await supabase
+    .from('movimenti_banca')
+    .select('importo')
+    .eq('soggetto_id', soggetto_id)
+    .eq('stato_riconciliazione', 'riconciliato')
+    .eq('categoria_dedotta', 'fattura');
 
-    info.totale_fatture += totale;
-    info.totale_pagato += pagato;
-    if (s.stato !== 'pagato') {
-      info.fatture_aperte += 1;
-    }
-  });
+  if (movErr) {
+    console.error("❌ Errore calcolo acconti movimenti:", movErr);
+  }
 
-  info.totale_da_pagare = info.totale_fatture - info.totale_pagato;
+  const totaleMovimentiRiconciliati = (movimenti || []).reduce(
+    (acc, m) => acc + Math.abs(Number(m.importo) || 0),
+    0
+  );
+
+  info.totale_acconti = Math.max(
+    0,
+    Math.round((totaleMovimentiRiconciliati - info.totale_pagato) * 100) / 100
+  );
+
+  info.totale_da_pagare = Math.max(
+    0,
+    Math.round((info.totale_fatture - info.totale_pagato - info.totale_acconti) * 100) / 100
+  );
 
   return info;
 }
@@ -2648,11 +2679,47 @@ export async function getStoricoGiroconti() {
   return data || [];
 }
 
+export async function getStoricoF24() {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from('movimenti_banca')
+    .select('*, conti_banca(nome_banca, nome_conto)')
+    .eq('categoria_dedotta', 'f24')
+    .eq('stato_riconciliazione', 'riconciliato')
+    .order('data_operazione', { ascending: false });
+
+  if (error) {
+    console.error("❌ Errore storico F24:", error);
+    return [];
+  }
+
+  return data || [];
+}
+
+export async function getStoricoFinanziamentiSocio() {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from('movimenti_banca')
+    .select('*, conti_banca(nome_banca, nome_conto)')
+    .eq('categoria_dedotta', 'finanziamento_socio')
+    .eq('stato_riconciliazione', 'riconciliato')
+    .order('data_operazione', { ascending: false });
+
+  if (error) {
+    console.error("❌ Errore storico finanziamenti socio:", error);
+    return [];
+  }
+
+  return data || [];
+}
+
 export async function getScadenzeSoggetto(soggettoId: string) {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from('scadenze_pagamento')
-    .select('id, tipo, importo_totale, importo_pagato, data_scadenza, data_pianificata, stato, fattura_riferimento')
+    .select('id, tipo, importo_totale, importo_pagato, data_scadenza, data_pianificata, stato, fattura_riferimento, descrizione')
     .eq('soggetto_id', soggettoId)
     .order('data_pianificata', { ascending: true }); // Ordina per la data operativa che abbiamo creato
 

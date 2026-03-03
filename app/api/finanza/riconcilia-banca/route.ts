@@ -98,7 +98,7 @@ export async function POST(request: Request) {
       const tempoImpiegato = ((Date.now() - startTime) / 1000).toFixed(1);
       console.log(`🤖 Risposta AI ricevuta in ${tempoImpiegato} secondi.`);
 
-      const CATEGORIE_VALIDE = new Set(['fattura', 'utenza', 'leasing', 'f24', 'sepa', 'entrata', 'commissione', 'giroconto', 'carta_credito', 'stipendio', 'ente_pubblico', 'assicurazione', 'cassa_edile', 'cessione_quinto']);
+      const CATEGORIE_VALIDE = new Set(['fattura', 'utenza', 'leasing', 'f24', 'sepa', 'entrata', 'commissione', 'giroconto', 'carta_credito', 'stipendio', 'ente_pubblico', 'assicurazione', 'cassa_edile', 'cessione_quinto', 'finanziamento_socio']);
       risultatiAI = risultatiAI.map(res => {
         if (res.soggetto_id && !res.ragione_sociale) {
           const s = soggettiSafe.find(sog => sog.id === res.soggetto_id);

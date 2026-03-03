@@ -255,9 +255,26 @@ export default async function SoggettoDetailPage({
                   </div>
                   <div>
                     <p className="text-zinc-500 text-xs">Totale Saldato</p>
-                    <p className="text-sm font-semibold text-emerald-400">{formatEuro(esposizione.totale_pagato)}</p>
+                    <p className="text-sm font-semibold text-emerald-400">{formatEuro(esposizione.totale_pagato + (esposizione.totale_acconti || 0))}</p>
                   </div>
                 </div>
+
+                {esposizione.totale_acconti > 0 && (
+                  <div className="border-t border-zinc-800 pt-4">
+                    <div className="flex items-center gap-2">
+                      <p className="text-zinc-400 text-xs">Acconti Disponibili</p>
+                      <Badge variant="outline" className="bg-amber-100 text-amber-800 border-none text-[10px]">
+                        Da allocare
+                      </Badge>
+                    </div>
+                    <p className="text-lg font-semibold text-amber-500">
+                      {formatEuro(esposizione.totale_acconti)}
+                    </p>
+                    <p className="text-zinc-500 text-[10px] mt-1">
+                      Pagamenti riconciliati non ancora collegati a fatture
+                    </p>
+                  </div>
+                )}
 
                 <div className="border-t border-zinc-800 pt-4">
                   <p className="text-zinc-400 text-xs">Fatture Aperte</p>
@@ -307,7 +324,14 @@ export default async function SoggettoDetailPage({
                   <tbody className="divide-y divide-zinc-100">
                     {scadenze.map((s: any) => (
                       <tr key={s.id} className="hover:bg-zinc-50/50 transition-colors duration-150 group">
-                        <td className="p-4 font-medium text-zinc-900">{s.fattura_riferimento || 'N/D'}</td>
+                        <td className="p-4 font-medium text-zinc-900">
+                          <span
+                            className="cursor-help border-b border-dotted border-zinc-400"
+                            title={s.descrizione || 'Nessuna descrizione disponibile'}
+                          >
+                            {s.fattura_riferimento || 'N/D'}
+                          </span>
+                        </td>
                         <td className="p-4">
                           <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase ${s.tipo === 'entrata' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
                             {s.tipo}
@@ -423,7 +447,13 @@ export default async function SoggettoDetailPage({
                   <TableRow><TableCell colSpan={5} className="text-center py-8 text-zinc-400">Nessun pagamento registrato.</TableCell></TableRow>
                 ) : (
                   storicoPagamenti.data.map((m: any) => {
-                    const isAcconto = !m.scadenza_id;
+                    const isSenzaScadenza = !m.scadenza_id;
+                    const isAllocatoAutomaticamente =
+                      isSenzaScadenza &&
+                      m.categoria_dedotta === 'fattura' &&
+                      typeof m.ai_motivo === 'string' &&
+                      m.ai_motivo.toLowerCase().includes('allocato automaticamente');
+                    const isAcconto = isSenzaScadenza && !isAllocatoAutomaticamente;
                     const fattura = m.scadenze_pagamento ? m.scadenze_pagamento.fattura_riferimento : 'Nessuna';
                     return (
                       <TableRow key={m.id} className="hover:bg-zinc-50/50">
@@ -434,7 +464,13 @@ export default async function SoggettoDetailPage({
                           {m.descrizione}
                         </TableCell>
                         <TableCell className="text-sm font-medium">
-                          {isAcconto ? <span className="text-zinc-400 italic">Acconto Generico</span> : fattura}
+                          {isAcconto ? (
+                            <span className="text-zinc-400 italic">Acconto Generico</span>
+                          ) : isAllocatoAutomaticamente ? (
+                            <span className="text-sky-600 italic">Allocato Automaticamente</span>
+                          ) : (
+                            fattura
+                          )}
                         </TableCell>
                         <TableCell className={`text-right font-bold ${m.importo > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                           {formatEuro(m.importo)}
@@ -442,6 +478,8 @@ export default async function SoggettoDetailPage({
                         <TableCell>
                           {isAcconto ? (
                             <Badge variant="outline" className="bg-amber-100 text-amber-800 border-none">Acconto</Badge>
+                          ) : isAllocatoAutomaticamente ? (
+                            <Badge variant="outline" className="bg-sky-100 text-sky-800 border-none">Allocato Auto</Badge>
                           ) : (
                             <Badge variant="outline" className="bg-emerald-100 text-emerald-800 border-none">Saldato</Badge>
                           )}

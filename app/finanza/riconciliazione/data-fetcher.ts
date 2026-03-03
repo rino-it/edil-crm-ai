@@ -2408,3 +2408,39 @@ export async function getStoricoGiroconti() {
   
   return data || [];
 }
+
+export async function getStoricoF24() {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from('movimenti_banca')
+    .select('*, conti_banca(nome_banca, nome_conto)')
+    .eq('categoria_dedotta', 'f24')
+    .eq('stato_riconciliazione', 'riconciliato')
+    .order('data_operazione', { ascending: false });
+
+  if (error) {
+    console.error("❌ Errore storico F24:", error);
+    return [];
+  }
+
+  return data || [];
+}
+
+export async function getStoricoFinanziamentiSocio() {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from('movimenti_banca')
+    .select('*, conti_banca(nome_banca, nome_conto)')
+    .eq('categoria_dedotta', 'finanziamento_socio')
+    .eq('stato_riconciliazione', 'riconciliato')
+    .order('data_operazione', { ascending: false });
+
+  if (error) {
+    console.error("❌ Errore storico finanziamenti socio:", error);
+    return [];
+  }
+
+  return data || [];
+}

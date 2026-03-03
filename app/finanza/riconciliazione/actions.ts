@@ -256,7 +256,7 @@ export async function handleConferma(formData: FormData) {
     // Nota: il saldo viene già aggiornato all'import CSV; qui aggiorniamo solo lo stato riconciliazione.
     // Per categorie speciali (commissione, stipendio, ecc.) il movimento è già nel saldo — nessun doppio conteggio.
 
-    if (['commissione', 'giroconto', 'carta_credito', 'stipendio', 'leasing', 'ente_pubblico', 'cassa_edile', 'cessione_quinto', 'utenza', 'assicurazione', 'f24'].includes(categoria)) {
+    if (['commissione', 'giroconto', 'carta_credito', 'stipendio', 'leasing', 'ente_pubblico', 'cassa_edile', 'cessione_quinto', 'utenza', 'assicurazione', 'f24', 'finanziamento_socio'].includes(categoria)) {
       await supabaseAdmin
         .from('movimenti_banca')
         .update({ 
@@ -283,7 +283,7 @@ export async function handleConferma(formData: FormData) {
         })
         .eq('id', movimento_id);
 
-      await allocaPagamentoIntelligente(supabaseAdmin, soggetto_id, importo);
+      await allocaPagamentoIntelligente(supabaseAdmin, soggetto_id, importo, movimento_id);
       
     } else {
       throw new Error("Dati insufficienti per confermare (manca scadenza, soggetto o categoria valida).");
@@ -340,7 +340,7 @@ export async function matchManuale(formData: FormData) {
 // ==========================================
 // LOGICA INTERNA (PRIVATE)
 // ==========================================
-async function allocaPagamentoIntelligente(supabaseAdmin: any, soggetto_id: string, importo_pagato: number) {
+async function allocaPagamentoIntelligente(supabaseAdmin: any, soggetto_id: string, importo_pagato: number, movimento_id: string) {
   const { data: scadenzeAperte } = await supabaseAdmin
     .from('scadenze_pagamento')
     .select('id, importo_totale, importo_pagato, stato')
@@ -348,7 +348,13 @@ async function allocaPagamentoIntelligente(supabaseAdmin: any, soggetto_id: stri
     .neq('stato', 'pagato')
     .order('data_scadenza', { ascending: true });
 
-  if (!scadenzeAperte || scadenzeAperte.length === 0) return;
+  if (!scadenzeAperte || scadenzeAperte.length === 0) {
+    await supabaseAdmin
+      .from('movimenti_banca')
+      .update({ ai_motivo: 'Acconto non allocato: nessuna fattura aperta disponibile' })
+      .eq('id', movimento_id);
+    return;
+  }
 
   const targetCents = Math.round(importo_pagato * 100);
   const items = scadenzeAperte.map((s: any) => ({
@@ -372,22 +378,36 @@ async function allocaPagamentoIntelligente(supabaseAdmin: any, soggetto_id: stri
   }
 
   if (combinazioneEsatta) {
+    const primaScadenzaId = combinazioneEsatta[0]?.id || null;
     for (const scadenza of combinazioneEsatta) {
       await supabaseAdmin
         .from('scadenze_pagamento')
         .update({ importo_pagato: scadenza.importo_totale, stato: 'pagato' })
         .eq('id', scadenza.id);
     }
+
+    if (primaScadenzaId) {
+      await supabaseAdmin
+        .from('movimenti_banca')
+        .update({ scadenza_id: primaScadenzaId, ai_motivo: 'Allocato automaticamente (combinazione esatta)' })
+        .eq('id', movimento_id);
+    }
     return;
   }
 
   let budgetResiduoCents = targetCents;
+  let primaScadenzaId: string | null = null;
 
   for (const scadenza of items) {
     if (budgetResiduoCents <= 0) break;
 
     const daPagareCents = Math.min(scadenza.residuoCents, budgetResiduoCents);
+    if (daPagareCents <= 0) continue;
     budgetResiduoCents -= daPagareCents;
+
+    if (!primaScadenzaId) {
+      primaScadenzaId = scadenza.id;
+    }
 
     const vecchioPagatoEuro = Number(scadenza.importo_pagato || 0);
     const nuovoPagatoEuro = vecchioPagatoEuro + (daPagareCents / 100);
@@ -398,6 +418,18 @@ async function allocaPagamentoIntelligente(supabaseAdmin: any, soggetto_id: stri
       .from('scadenze_pagamento')
       .update({ importo_pagato: nuovoPagatoEuro, stato: nuovoStato })
       .eq('id', scadenza.id);
+  }
+
+  if (primaScadenzaId) {
+    await supabaseAdmin
+      .from('movimenti_banca')
+      .update({ scadenza_id: primaScadenzaId, ai_motivo: 'Allocato automaticamente (FIFO)' })
+      .eq('id', movimento_id);
+  } else {
+    await supabaseAdmin
+      .from('movimenti_banca')
+      .update({ ai_motivo: 'Acconto non allocato: importo senza capienza su fatture aperte' })
+      .eq('id', movimento_id);
   }
 }
 

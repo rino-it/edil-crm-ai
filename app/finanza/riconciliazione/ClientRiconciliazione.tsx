@@ -19,6 +19,7 @@ const BADGE_MAP: Record<string, { icon: string; label: string; className: string
   giroconto:         { icon: '🔄', label: 'Giroconto',       className: 'bg-cyan-100 text-cyan-800' },
   carta_credito:     { icon: '💳', label: 'Carta Credito',   className: 'bg-violet-100 text-violet-800' },
   f24:               { icon: '🏛️', label: 'F24/Imposte',     className: 'bg-red-100 text-red-800' },
+  finanziamento_socio: { icon: '🤝', label: 'Fin. Socio',      className: 'bg-lime-100 text-lime-800' },
   sepa:              { icon: '⚡', label: 'SEPA/SDD',        className: 'bg-orange-100 text-orange-800' },
   entrata:           { icon: '💰', label: 'Entrata',         className: 'bg-emerald-100 text-emerald-800' },
   utenza:            { icon: '💡', label: 'Utenza',          className: 'bg-teal-100 text-teal-800' },
@@ -157,7 +158,37 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
 
   const handleConferma = async (formData: FormData) => {
     const movId = formData.get('movimento_id') as string;
-    await confermaAction(formData);
+    const scadenzaId = (formData.get('scadenza_id') as string) || '';
+    const soggettoId = (formData.get('soggetto_id') as string) || '';
+    const categoria = (formData.get('categoria') as string) || 'fattura';
+
+    const categorieSpeciali = [
+      'commissione',
+      'giroconto',
+      'carta_credito',
+      'stipendio',
+      'leasing',
+      'ente_pubblico',
+      'cassa_edile',
+      'cessione_quinto',
+      'utenza',
+      'assicurazione',
+      'f24',
+      'finanziamento_socio',
+    ];
+
+    const isSpeciale = categorieSpeciali.includes(categoria);
+
+    // Per i casi non-speciali serve almeno scadenza o soggetto; altrimenti non inviare/rimuovere
+    if (!isSpeciale && !scadenzaId && !soggettoId) {
+      return;
+    }
+
+    const result = await confermaAction(formData);
+    if ((result as any)?.error) {
+      return;
+    }
+
     setMovimentiLocali(prev => prev.filter(m => m.id !== movId));
   }
 
@@ -360,6 +391,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
                                   <option value="commissione">🏦 Comm. Banca</option>
                                   <option value="assicurazione">🛡️ Assicurazione</option>
                                   <option value="carta_credito">💳 Carta Credito</option>
+                                  <option value="finanziamento_socio">🤝 Fin. Socio</option>
                                   <option value="sepa">⚡ SEPA/SDD</option>
                                   <option value="giroconto">🔄 Giroconto</option>
                                 </select>
@@ -393,8 +425,11 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
                                       </option>
                                     ))}
                                 </select>
-                                <Button size="sm" type="submit" variant="secondary" className="h-7 px-2 shrink-0" title="Collega">
+                                <Button size="sm" type="button" variant="secondary" className="h-7 px-2 shrink-0" title="Filtra risultati">
                                   <Search className="h-4 w-4" />
+                                </Button>
+                                <Button size="sm" type="submit" className="h-7 px-2 shrink-0 bg-emerald-600 hover:bg-emerald-700" title="Conferma Collegamento">
+                                  <Check className="h-4 w-4" />
                                 </Button>
                               </div>
                             </form>
