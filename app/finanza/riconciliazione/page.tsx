@@ -53,7 +53,7 @@ export default async function DashboardRiconciliazionePage() {
       </div>
 
       {/* KPI Globali */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
         <Card className="shadow-[var(--shadow-sm)] border-border/60">
           <CardHeader className="pb-2 border-b border-border/40">
             <div className="flex items-center justify-between gap-2">
@@ -75,20 +75,6 @@ export default async function DashboardRiconciliazionePage() {
           </CardHeader>
           <CardContent className="pt-4">
             <div className="text-3xl font-black text-orange-700">{totaleDaRiconciliare} <span className="text-sm font-medium">mov.</span></div>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-[var(--shadow-sm)] border-border/60">
-          <CardHeader className="pb-2 border-b border-border/40">
-            <div className="flex items-center justify-between gap-2">
-              <div className="h-2 w-2 rounded-full bg-emerald-500" />
-              <CardTitle className="text-xs font-bold text-muted-foreground uppercase flex-1">Stato Allineamento</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-4">
-            <div className="text-lg font-bold text-emerald-700">
-              {totaleDaRiconciliare === 0 ? 'Tutto Allineato ✅' : 'Allineamento Richiesto ⚠️'}
-            </div>
           </CardContent>
         </Card>
 
@@ -121,7 +107,15 @@ export default async function DashboardRiconciliazionePage() {
 
       {/* Grid Conti Bancari */}
       <div className="space-y-4">
-        <h2 className="text-xl font-bold text-foreground">I tuoi Conti Correnti</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xl font-bold text-foreground">I tuoi Conti Correnti</h2>
+          {totaleDaRiconciliare === 0 && (
+            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              Allineato
+            </div>
+          )}
+        </div>
         <StaggeredGrid className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {conti.map(conto => (
             <Card key={conto.id} className="shadow-[var(--shadow-sm)] border-border/60 card-hover flex flex-col">
