@@ -181,7 +181,9 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
 
     // FIX: auto-risoluzione soggetto/scadenza dal filtro testo se l'utente non ha selezionato dal dropdown
     if (!isSpeciale && !scadenzaId && !soggettoId) {
-      const filtro = (manualFilters[movId] || '').toLowerCase().trim();
+      // Prima prova dal form submit (più affidabile), fallback allo state locale
+      const filtroDaForm = ((formData.get('manual_filter') as string) || '').toLowerCase().trim();
+      const filtro = filtroDaForm || (manualFilters[movId] || '').toLowerCase().trim();
 
       if (filtro && filtro.length >= 3) {
         const movimento = movimentiLocali.find(m => m.id === movId);
@@ -212,6 +214,24 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
           if (scadenzaMatch?.id) {
             scadenzaId = scadenzaMatch.id;
             formData.set('scadenza_id', scadenzaId);
+          }
+        }
+
+        // Fallback robusto: se i soggetti sono multipli, scegli la scadenza più vicina per importo
+        if (!soggettoId && !scadenzaId && matchingScadenze.length > 0) {
+          const candidati = matchingScadenze
+            .map(s => {
+              const residuo = Number(s.importo_totale) - Number(s.importo_pagato || 0);
+              return { s, diff: Math.abs(residuo - importoMovimento) };
+            })
+            .sort((a, b) => a.diff - b.diff);
+
+          const best = candidati[0];
+          if (best && best.diff <= 1.0) {
+            scadenzaId = best.s.id;
+            soggettoId = best.s.soggetto_id || '';
+            if (scadenzaId) formData.set('scadenza_id', scadenzaId);
+            if (soggettoId) formData.set('soggetto_id', soggettoId);
           }
         }
       }
@@ -411,6 +431,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
                               <div className="flex gap-1.5 items-center w-full">
                                 <input
                                   type="text"
+                                  name="manual_filter"
                                   placeholder="Cerca fornitore..."
                                   className="h-7 text-xs border border-zinc-200 rounded px-2 w-[130px] outline-none"
                                   value={manualFilters[m.id] || ''}
