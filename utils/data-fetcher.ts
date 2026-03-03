@@ -1223,10 +1223,11 @@ export async function getCashflowPrevisionale(giorni: number = 90): Promise<any[
   const cashflow: any[] = [];
   const mappaGiorni: Record<string, { entrate: number, uscite: number }> = {};
 
-  // Raggruppa per giorno futuro (con o senza data_pianificata esplicita, purché >= oggi)
-  const future = scadenze.filter(s => new Date(s.data_pianificata || s.data_scadenza) >= dataInizio);
+  // Raggruppa per giorno futuro: solo items con data_pianificata esplicitamente impostata
+  // Senza data_pianificata → parcheggio, esclusi dalla proiezione
+  const future = scadenze.filter(s => s.data_pianificata && new Date(s.data_pianificata) >= dataInizio);
   future.forEach(s => {
-    const dataIso = (s.data_pianificata || s.data_scadenza).split('T')[0];
+    const dataIso = s.data_pianificata!.split('T')[0];
     if (!mappaGiorni[dataIso]) mappaGiorni[dataIso] = { entrate: 0, uscite: 0 };
     
     const importo = Number(s.importo_totale) - Number(s.importo_pagato || 0);
@@ -2237,20 +2238,30 @@ export async function getCashflowProjection(days = 90): Promise<CashflowProjecti
     const residuo = Number(s.importo_totale) - Number(s.importo_pagato || 0);
     if (residuo <= 0) return;
 
-    // Priorità: data_pianificata → data_scadenza
-    const dataStr = (s as any).data_pianificata || s.data_scadenza;
-    const dScadenza = new Date(dataStr);
+    const dataPianificata = (s as any).data_pianificata as string | null | undefined;
 
+    // Regola del parcheggio: senza data_pianificata esplicita → "Da Pianificare", sempre
     const detail: CashflowDetailRow = {
       id: (s as any).id,
       ragione_sociale: (s as any).anagrafica_soggetti?.ragione_sociale || 'N/D',
       fattura_riferimento: s.fattura_riferimento ?? null,
-      data_effettiva: dataStr,
+      data_effettiva: dataPianificata || s.data_scadenza,
       importo_residuo: residuo,
       tipo: s.tipo as 'entrata' | 'uscita',
     };
 
-    // Fatture scadute prima dell'inizio della settimana corrente → riga speciale
+    if (!dataPianificata) {
+      // Nessuna data pianificata → parcheggio
+      const past = weeksMap.get(pastLabel)!;
+      if (s.tipo === 'entrata') past.entrate += residuo;
+      else past.uscite += residuo;
+      past.dettagli.push(detail);
+      return;
+    }
+
+    const dScadenza = new Date(dataPianificata);
+
+    // data_pianificata nel passato (prima della settimana corrente) → parcheggio
     if (isBefore(dScadenza, startOfWeek(today, { weekStartsOn: 1 }))) {
       const past = weeksMap.get(pastLabel)!;
       if (s.tipo === 'entrata') past.entrate += residuo;
@@ -2259,7 +2270,7 @@ export async function getCashflowProjection(days = 90): Promise<CashflowProjecti
       return;
     }
 
-    // Altrimenti → settimana corretta
+    // data_pianificata futura → settimana corretta
     const ws = startOfWeek(dScadenza, { weekStartsOn: 1 });
     const we = endOfWeek(ws, { weekStartsOn: 1 });
     const label = `Dal ${format(ws, 'dd/MM')} al ${format(we, 'dd/MM')}`;

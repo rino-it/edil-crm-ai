@@ -33,6 +33,30 @@ UPSERT_CHUNK = 100
 
 OGGI = date.today().isoformat()
 
+# ─── COSTI FISSI: keyword che identificano il Binario 2 ─────────────────────
+# Se il nome fornitore contiene una di queste keyword (case-insensitive),
+# la riga viene trattata come Costo Fisso: creata da zero con data_pianificata.
+# Tutte le altre righe sono Fornitori Normali (Binario 1): solo update, no insert.
+COSTI_FISSI_KEYWORDS = [
+    "stipend",      # Stipendi, Stipendio
+    "salario", "salari",
+    "mutuo", "mutui",
+    "finanziament",  # Finanziamento, Finanziamenti
+    "leasing",
+    "affitto", "locazione", "canone",
+    "f24", "irpef", "ires", "iva", "inps", "inail",
+    "tassa", "tasse", "tribut",
+    "assicurazion", "polizza",
+    "contribut",    # Contributi
+    "rata ", "rate ",  # "rata mutuo" etc. (con spazio per evitare false matches)
+]
+
+def is_costo_fisso(nome: str) -> bool:
+    """True se il nome fornitore/voce corrisponde a un costo fisso."""
+    nome_lower = nome.lower()
+    return any(kw in nome_lower for kw in COSTI_FISSI_KEYWORDS)
+
+
 # ─── COLUMN MAPPING (nomi reali dal CSV) ─────────────────────────────────────
 COL_APPUNTI   = "APPUNTI"
 COL_FORNITORE = "fornitore"
@@ -307,10 +331,10 @@ def run_import(dry_run: bool = False):
         # UUID5 include data_scadenza → rate split della stessa fattura → ID distinti
         uuid_id = genera_id(soggetto_id, fattura_norm, abs(importo), data_scadenza)
 
-        # Descrizione per identificare la sorgente
-        descrizione_pivot = f"Schedulazione Pivot: {fornitore_raw}"
-        # Note: solo appunti e note operative (senza "pivot" hardcoded)
         note_completa = " | ".join(x for x in [appunti, note] if x).strip(" |") or None
+
+        # ── BINARIO: Costo Fisso vs Fornitore Normale ─────────────────────────
+        binario = 2 if is_costo_fisso(fornitore_raw) else 1
 
         record: dict = {
             "id":                  uuid_id,
@@ -321,13 +345,18 @@ def run_import(dry_run: bool = False):
             "importo_pagato":      importo_pagato,
             "data_emissione":      data_emissione,
             "data_scadenza":       data_scadenza,
-            # ← CHIAVE: spalma le fatture nelle settimane corrette del cashflow
-            "data_pianificata":    data_scadenza,
             "stato":               stato,
             "metodo_pagamento":    modalita or None,
-            "descrizione":         descrizione_pivot,
+            "descrizione":         f"{'Costo Fisso' if binario == 2 else 'Fornitore'} Pivot: {fornitore_raw}",
             "note":                note_completa,
+            "_binario":            binario,   # campo interno, non inviato al DB
         }
+
+        # Binario 2 (Costi Fissi): imposta data_pianificata → entra nella proiezione
+        # Binario 1 (Fornitori): NO data_pianificata → parcheggio, solo update se esiste
+        if binario == 2:
+            record["data_pianificata"] = data_scadenza
+
         if cantiere_id:
             record["cantiere_id"] = cantiere_id
         if data_pagamento:
@@ -341,22 +370,38 @@ def run_import(dry_run: bool = False):
         dedup[r["id"]] = r
     righe_db = list(dedup.values())
 
+    b1 = [r for r in righe_db if r["_binario"] == 1]
+    b2 = [r for r in righe_db if r["_binario"] == 2]
+
     print(f"\nRiepilogo analisi:")
-    print(f"  Righe valide         : {len(righe_db)}")
-    print(f"  Note di credito      : {nc_count}")
-    print(f"  Soggetti non trovati : {len(set(mancanti))}")
+    print(f"  Righe valide              : {len(righe_db)}")
+    print(f"  Binario 1 (Fornitori)     : {len(b1)} — solo update se esiste, no insert")
+    print(f"  Binario 2 (Costi Fissi)   : {len(b2)} — insert + update con data_pianificata")
+    print(f"  Note di credito           : {nc_count}")
+    print(f"  Soggetti non trovati      : {len(set(mancanti))}")
     if mancanti:
         for n in sorted(set(mancanti))[:15]:
             print(f"    - {n}")
         if len(set(mancanti)) > 15:
             print(f"    ... e altri {len(set(mancanti)) - 15}")
 
+    if b2:
+        print("  Costi fissi rilevati:")
+        for r in b2[:10]:
+            print(f"    + {r['descrizione']} | scad: {r['data_scadenza']} | pianif: {r.get('data_pianificata')}")
+        if len(b2) > 10:
+            print(f"    ... e altri {len(b2) - 10}")
+
     if dry_run:
         print("\n🔍 Dry-run: nessuna modifica su Supabase.")
         return
 
-    # 5. Check esistenti (CHECK_CHUNK=50 per limite URL PostgREST)
-    print(f"\nInvio {len(righe_db)} righe a Supabase...")
+    # Rimuove campo interno prima di inviare al DB
+    for r in righe_db:
+        r.pop("_binario", None)
+
+    # ── 5. Check esistenti ────────────────────────────────────────────────────
+    print(f"\nInvio dati a Supabase...")
     ids = [r["id"] for r in righe_db]
     esistenti: set[str] = set()
     for i in range(0, len(ids), CHECK_CHUNK):
@@ -368,42 +413,51 @@ def run_import(dry_run: bool = False):
         for row in res_check.data:
             esistenti.add(row["id"])
 
-    nuovi         = [r for r in righe_db if r["id"] not in esistenti]
-    da_aggiornare = [r for r in righe_db if r["id"] in esistenti]
-    print(f"  Nuovi da inserire      : {len(nuovi)}")
-    print(f"  Esistenti da aggiornare: {len(da_aggiornare)}")
-
-    # 6. Insert nuovi
-    ins_ok = 0
-    for i in range(0, len(nuovi), UPSERT_CHUNK):
-        supabase.table("scadenze_pagamento").insert(nuovi[i:i + UPSERT_CHUNK]).execute()
-        ins_ok += len(nuovi[i:i + UPSERT_CHUNK])
-    print(f"  ✅ Inseriti: {ins_ok}")
-
-    # 7. Update esistenti
-    # ⚠️  data_pianificata NON inclusa → preserva le modifiche utente dalla web app
-    CAMPI_UPDATE = {
-        "importo_totale",
-        "importo_pagato",
-        "stato",
-        "data_pagamento",
-        "metodo_pagamento",
-        "fattura_riferimento",
-        "data_scadenza",
-        "data_emissione",
-        "soggetto_id",
-        "cantiere_id",
-        "descrizione",
-        "note",
+    # ── BINARIO 1 (Fornitori Normali): SOLO update, mai insert ───────────────
+    # Evita doppioni con MAIN. Non tocca data_pianificata (preserva scelte utente).
+    CAMPI_UPDATE_B1 = {
+        "importo_totale", "importo_pagato", "stato", "data_pagamento",
+        "metodo_pagamento", "fattura_riferimento", "data_scadenza",
+        "data_emissione", "soggetto_id", "cantiere_id", "descrizione", "note",
+        # data_pianificata ESCLUSA → preserva modifiche utente dalla web app
     }
-    upd_ok = 0
-    for r in da_aggiornare:
-        payload = {k: v for k, v in r.items() if k in CAMPI_UPDATE}
+    b1_update = [r for r in b1 if r["id"] in esistenti]
+    b1_skip   = [r for r in b1 if r["id"] not in esistenti]
+    upd_b1 = 0
+    for r in b1_update:
+        payload = {k: v for k, v in r.items() if k in CAMPI_UPDATE_B1}
         supabase.table("scadenze_pagamento").update(payload).eq("id", r["id"]).execute()
-        upd_ok += 1
+        upd_b1 += 1
+    print(f"  Binario 1 → aggiornati: {upd_b1} | saltati (non in MAIN): {len(b1_skip)}")
 
-    print(f"  ✅ Aggiornati: {upd_ok}")
-    print(f"\nImportazione completata: {ins_ok} creati, {upd_ok} aggiornati.")
+    # ── BINARIO 2 (Costi Fissi): insert nuovi + update esistenti ─────────────
+    # Crea da zero le scadenze con data_pianificata → entrano nella proiezione.
+    # Su update: aggiorna data_pianificata SOLO se non è stata modificata dall'utente
+    # (strategia: aggiorna sempre — i costi fissi sono ricorrenti e controllati dallo script)
+    CAMPI_UPDATE_B2 = {
+        "importo_totale", "importo_pagato", "stato", "data_pagamento",
+        "metodo_pagamento", "fattura_riferimento", "data_scadenza",
+        "data_emissione", "soggetto_id", "cantiere_id", "descrizione", "note",
+        "data_pianificata",  # ← inclusa per i costi fissi
+    }
+    b2_nuovi   = [r for r in b2 if r["id"] not in esistenti]
+    b2_update  = [r for r in b2 if r["id"] in esistenti]
+
+    ins_b2 = 0
+    for i in range(0, len(b2_nuovi), UPSERT_CHUNK):
+        supabase.table("scadenze_pagamento").insert(b2_nuovi[i:i + UPSERT_CHUNK]).execute()
+        ins_b2 += len(b2_nuovi[i:i + UPSERT_CHUNK])
+
+    upd_b2 = 0
+    for r in b2_update:
+        payload = {k: v for k, v in r.items() if k in CAMPI_UPDATE_B2}
+        supabase.table("scadenze_pagamento").update(payload).eq("id", r["id"]).execute()
+        upd_b2 += 1
+
+    print(f"  Binario 2 → inseriti: {ins_b2} | aggiornati: {upd_b2}")
+    print(f"\nImportazione completata.")
+    print(f"  Fornitori (B1): {upd_b1} aggiornati, {len(b1_skip)} ignorati (non in MAIN)")
+    print(f"  Costi Fissi (B2): {ins_b2} creati, {upd_b2} aggiornati")
 
 
 # ─── CLI ─────────────────────────────────────────────────────────────────────
