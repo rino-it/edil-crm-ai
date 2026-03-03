@@ -158,8 +158,8 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
 
   const handleConferma = async (formData: FormData) => {
     const movId = formData.get('movimento_id') as string;
-    const scadenzaId = (formData.get('scadenza_id') as string) || '';
-    const soggettoId = (formData.get('soggetto_id') as string) || '';
+    let scadenzaId = (formData.get('scadenza_id') as string) || '';
+    let soggettoId = (formData.get('soggetto_id') as string) || '';
     const categoria = (formData.get('categoria') as string) || 'fattura';
 
     const categorieSpeciali = [
@@ -179,9 +179,47 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
 
     const isSpeciale = categorieSpeciali.includes(categoria);
 
-    // Per i casi non-speciali serve almeno scadenza o soggetto; altrimenti non inviare/rimuovere
+    // FIX: auto-risoluzione soggetto/scadenza dal filtro testo se l'utente non ha selezionato dal dropdown
     if (!isSpeciale && !scadenzaId && !soggettoId) {
-      return;
+      const filtro = (manualFilters[movId] || '').toLowerCase().trim();
+
+      if (filtro && filtro.length >= 3) {
+        const movimento = movimentiLocali.find(m => m.id === movId);
+        const isEntrata = (movimento?.importo || 0) > 0;
+        const importoMovimento = Math.abs(Number(formData.get('importo')) || 0);
+
+        const matchingScadenze = scadenzeAperte.filter(s => {
+          const dirOk = isEntrata ? s.tipo === 'entrata' : s.tipo === 'uscita';
+          const nome = (s.soggetto?.ragione_sociale || s.anagrafica_soggetti?.ragione_sociale || '').toLowerCase();
+          return dirOk && nome.includes(filtro);
+        });
+
+        const uniqueSoggetti = Array.from(new Set(
+          matchingScadenze
+            .map(s => s.soggetto_id)
+            .filter(Boolean)
+        ));
+
+        if (uniqueSoggetti.length === 1) {
+          soggettoId = uniqueSoggetti[0] as string;
+          formData.set('soggetto_id', soggettoId);
+
+          const scadenzaMatch = matchingScadenze.find(s => {
+            const residuo = Number(s.importo_totale) - Number(s.importo_pagato || 0);
+            return Math.abs(residuo - importoMovimento) < 1.0;
+          });
+
+          if (scadenzaMatch?.id) {
+            scadenzaId = scadenzaMatch.id;
+            formData.set('scadenza_id', scadenzaId);
+          }
+        }
+      }
+
+      // Per i casi non-speciali serve almeno scadenza o soggetto; altrimenti non inviare/rimuovere
+      if (!soggettoId && !scadenzaId) {
+        return;
+      }
     }
 
     const result = await confermaAction(formData);
