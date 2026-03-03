@@ -252,6 +252,10 @@ export async function handleConferma(formData: FormData) {
       { auth: { persistSession: false } }
     );
 
+    // Recupera il movimento per avere conto_banca_id (necessario per aggiornare il saldo)
+    // Nota: il saldo viene già aggiornato all'import CSV; qui aggiorniamo solo lo stato riconciliazione.
+    // Per categorie speciali (commissione, stipendio, ecc.) il movimento è già nel saldo — nessun doppio conteggio.
+
     if (['commissione', 'giroconto', 'stipendio', 'leasing', 'ente_pubblico', 'cassa_edile', 'cessione_quinto', 'utenza', 'assicurazione'].includes(categoria)) {
       await supabaseAdmin
         .from('movimenti_banca')

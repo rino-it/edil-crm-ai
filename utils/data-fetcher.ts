@@ -1532,6 +1532,26 @@ export async function importMovimentiBanca(movimenti: any[], conto_banca_id?: st
     console.error("Errore inserimento in DB:", error.message);
     throw new Error(error.message);
   }
+
+  // Aggiorna saldo_attuale del conto banca sommando il delta dei movimenti importati
+  if (data && data.length > 0 && conto_banca_id) {
+    const deltaImporto = data.reduce((sum: number, m: any) => sum + (Number(m.importo) || 0), 0);
+    const { data: conto } = await supabase
+      .from('conti_banca')
+      .select('saldo_attuale')
+      .eq('id', conto_banca_id)
+      .single();
+    if (conto) {
+      await supabase
+        .from('conti_banca')
+        .update({
+          saldo_attuale: (Number(conto.saldo_attuale) || 0) + deltaImporto,
+          saldo_aggiornato_al: new Date().toISOString().split('T')[0]
+        })
+        .eq('id', conto_banca_id);
+    }
+  }
+
   return data;
 }
 
@@ -1584,8 +1604,9 @@ export async function confermaRiconciliazione(
   }
   
   const updateData: any = { 
-    stato: 'riconciliato', 
-    scadenza_id: scadenza_id 
+    stato_riconciliazione: 'riconciliato', 
+    scadenza_id: scadenza_id,
+    categoria_dedotta: 'fattura'
   };
   
   if (resolvedSoggettoId) updateData.soggetto_id = resolvedSoggettoId;
