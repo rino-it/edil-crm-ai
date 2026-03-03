@@ -1,5 +1,5 @@
 'use client'
-import { useState, Fragment, useTransition } from 'react'
+import { useState, useRef, Fragment, useTransition } from 'react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { ChevronRight, ChevronDown, PackageOpen, CalendarDays, Loader2 } from "lucide-react"
@@ -12,17 +12,23 @@ interface CashflowTableProps {
   daPianificare: CashflowWeek | null
 }
 
-// ─── Riga dettaglio con date picker inline ────────────────────────────────────
+// ─── Riga dettaglio con click-to-edit date picker ───────────────────────────
 function DetailRow({ d, bgHover = 'hover:bg-white' }: { d: CashflowDetailRow; bgHover?: string }) {
   const [isPending, startTransition] = useTransition()
+  const [editing, setEditing] = useState(false)
+  const [dateValue, setDateValue] = useState(d.data_effettiva.split('T')[0])
+  const inputRef = useRef<HTMLInputElement>(null)
 
-  const handleDateChange = (newDate: string) => {
-    if (!newDate) return
+  const commit = (newDate: string) => {
+    setEditing(false)
+    if (!newDate || newDate === d.data_effettiva.split('T')[0]) return
+    setDateValue(newDate)
     startTransition(async () => {
       try {
         await riprogrammaScadenza(d.id, newDate)
-        toast.success(`${d.ragione_sociale} → spostata al ${new Date(newDate).toLocaleDateString('it-IT')}`)
+        toast.success(`${d.ragione_sociale} → spostata al ${new Date(newDate + 'T12:00:00').toLocaleDateString('it-IT')}`)
       } catch {
+        setDateValue(d.data_effettiva.split('T')[0]) // rollback
         toast.error('Errore durante la riprogrammazione')
       }
     })
@@ -41,23 +47,37 @@ function DetailRow({ d, bgHover = 'hover:bg-white' }: { d: CashflowDetailRow; bg
         <span className="text-zinc-400 font-mono text-xs">{d.fattura_riferimento || '-'}</span>
       </div>
       <div className="flex items-center gap-3">
-        {/* Date picker inline */}
-        <label className="flex items-center gap-1 cursor-pointer group relative">
-          {isPending
-            ? <Loader2 size={13} className="text-zinc-400 animate-spin" />
-            : <CalendarDays size={13} className="text-zinc-400 group-hover:text-blue-500 transition-colors" />
-          }
-          <span className="text-zinc-500 text-xs group-hover:text-blue-600 transition-colors">
-            {new Date(d.data_effettiva).toLocaleDateString('it-IT')}
-          </span>
+        {/* Click-to-edit date */}
+        {editing ? (
           <input
+            ref={inputRef}
             type="date"
-            defaultValue={d.data_effettiva}
-            onChange={e => handleDateChange(e.target.value)}
-            className="absolute inset-0 opacity-0 cursor-pointer w-full"
-            title="Sposta nel cashflow"
+            value={dateValue}
+            autoFocus
+            onChange={e => setDateValue(e.target.value)}
+            onBlur={e => commit(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') commit(dateValue)
+              if (e.key === 'Escape') { setEditing(false); setDateValue(d.data_effettiva.split('T')[0]) }
+            }}
+            className="text-xs border border-blue-300 rounded px-1.5 py-0.5 bg-blue-50 text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-400"
           />
-        </label>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            title="Clicca per riprogrammare"
+            className="flex items-center gap-1 group"
+          >
+            {isPending
+              ? <Loader2 size={13} className="text-zinc-400 animate-spin" />
+              : <CalendarDays size={13} className="text-zinc-400 group-hover:text-blue-500 transition-colors" />
+            }
+            <span className="text-zinc-500 text-xs group-hover:text-blue-600 group-hover:underline transition-colors">
+              {new Date(dateValue + 'T12:00:00').toLocaleDateString('it-IT')}
+            </span>
+          </button>
+        )}
         <span className={`font-mono font-bold ${d.tipo === 'entrata' ? 'text-emerald-600' : 'text-rose-600'}`}>
           {formatEuro(d.importo_residuo)}
         </span>

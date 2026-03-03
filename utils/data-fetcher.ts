@@ -1210,8 +1210,11 @@ export async function getCashflowPrevisionale(giorni: number = 90): Promise<any[
 
   if (!scadenze || scadenze.length === 0) return [{ data: dataInizio.toISOString().split('T')[0], saldo: saldoCorrente }];
 
-  // 3. Calcolo dello scaduto (tutto ciò che era pianificato nel passato impatta il Giorno 0)
-  const scadute = scadenze.filter(s => new Date(s.data_pianificata || s.data_scadenza) < dataInizio);
+  // 3. Giorno 0: solo items con data_pianificata esplicitamente impostata E passata
+  // Fatture senza data_pianificata e scadute → parcheggio "Da Pianificare", escluse dalla proiezione
+  const scadute = scadenze.filter(s =>
+    s.data_pianificata && new Date(s.data_pianificata) < dataInizio
+  );
   scadute.forEach(s => {
     const importo = Number(s.importo_totale) - Number(s.importo_pagato || 0);
     saldoCorrente += s.tipo === 'entrata' ? importo : -importo;
@@ -1220,7 +1223,7 @@ export async function getCashflowPrevisionale(giorni: number = 90): Promise<any[
   const cashflow: any[] = [];
   const mappaGiorni: Record<string, { entrate: number, uscite: number }> = {};
 
-  // Raggruppa per giorno futuro
+  // Raggruppa per giorno futuro (con o senza data_pianificata esplicita, purché >= oggi)
   const future = scadenze.filter(s => new Date(s.data_pianificata || s.data_scadenza) >= dataInizio);
   future.forEach(s => {
     const dataIso = (s.data_pianificata || s.data_scadenza).split('T')[0];

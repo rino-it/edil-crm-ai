@@ -162,7 +162,11 @@ export default async function FinanzaPage() {
                   <span className="text-xs text-blue-600 font-normal hover:underline cursor-pointer">Apri Dettaglio Completo</span>
                 </Link>
               </CardTitle>
-              <CardDescription>Il punto iniziale include il peso di <strong>tutti i debiti/crediti scaduti nel passato</strong>.</CardDescription>
+              <CardDescription>
+                Mostra solo le scadenze <strong>esplicitamente programmate</strong>.
+                Le fatture senza data pianificata sono nel parcheggio di{' '}
+                <Link href="/finanza/programmazione" className="underline text-blue-600">Programmazione →</Link>
+              </CardDescription>
             </CardHeader>
             <CardContent className="pt-2">
               <CashflowChart data={cashflowData} />
