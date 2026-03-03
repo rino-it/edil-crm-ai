@@ -14,14 +14,14 @@ export function F24Dialog({ f24 }: { f24: any[] }) {
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Card className="border-rose-200 bg-rose-50/30 shadow-sm cursor-pointer hover:bg-rose-100/50 transition-colors">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-bold text-rose-800 uppercase flex items-center gap-2">
-              <Landmark size={14} /> F24 / Erario
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-black text-rose-900">{f24.length} <span className="text-sm font-medium">storico</span></div>
+        <Card className="h-[58px] border-rose-200 bg-rose-50/30 shadow-sm cursor-pointer hover:bg-rose-100/50 transition-colors">
+          <CardContent className="h-full px-3 py-2">
+            <div className="h-full flex items-center justify-between gap-2">
+              <CardTitle className="text-[10px] font-bold text-rose-800 uppercase flex items-center gap-1.5 leading-none">
+                <Landmark size={12} /> F24 / Erario
+              </CardTitle>
+              <div className="text-lg font-black text-rose-900 leading-none">{f24.length}</div>
+            </div>
           </CardContent>
         </Card>
       </DialogTrigger>

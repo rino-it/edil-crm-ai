@@ -14,14 +14,14 @@ export function GirocontiDialog({ giroconti }: { giroconti: any[] }) {
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Card className="border-indigo-200 bg-indigo-50/30 shadow-sm cursor-pointer hover:bg-indigo-100/50 transition-colors">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-bold text-indigo-800 uppercase flex items-center gap-2">
-              <ArrowRightLeft size={14} /> Giroconti / Carte
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-black text-indigo-900">{giroconti.length} <span className="text-sm font-medium">storico</span></div>
+        <Card className="h-[58px] border-indigo-200 bg-indigo-50/30 shadow-sm cursor-pointer hover:bg-indigo-100/50 transition-colors">
+          <CardContent className="h-full px-3 py-2">
+            <div className="h-full flex items-center justify-between gap-2">
+              <CardTitle className="text-[10px] font-bold text-indigo-800 uppercase flex items-center gap-1.5 leading-none">
+                <ArrowRightLeft size={12} /> Giroconti / Carte
+              </CardTitle>
+              <div className="text-lg font-black text-indigo-900 leading-none">{giroconti.length}</div>
+            </div>
           </CardContent>
         </Card>
       </DialogTrigger>

@@ -14,14 +14,14 @@ export function FinanziamentiSocioDialog({ movimenti }: { movimenti: any[] }) {
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Card className="border-lime-200 bg-lime-50/30 shadow-sm cursor-pointer hover:bg-lime-100/50 transition-colors">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-bold text-lime-800 uppercase flex items-center gap-2">
-              <Handshake size={14} /> Finanziamenti Soci
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-black text-lime-900">{movimenti.length} <span className="text-sm font-medium">storico</span></div>
+        <Card className="h-[58px] border-lime-200 bg-lime-50/30 shadow-sm cursor-pointer hover:bg-lime-100/50 transition-colors">
+          <CardContent className="h-full px-3 py-2">
+            <div className="h-full flex items-center justify-between gap-2">
+              <CardTitle className="text-[10px] font-bold text-lime-800 uppercase flex items-center gap-1.5 leading-none">
+                <Handshake size={12} /> Finanziamenti Soci
+              </CardTitle>
+              <div className="text-lg font-black text-lime-900 leading-none">{movimenti.length}</div>
+            </div>
           </CardContent>
         </Card>
       </DialogTrigger>
