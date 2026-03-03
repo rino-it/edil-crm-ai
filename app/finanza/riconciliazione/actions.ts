@@ -256,6 +256,32 @@ export async function handleConferma(formData: FormData) {
     // Nota: il saldo viene già aggiornato all'import CSV; qui aggiorniamo solo lo stato riconciliazione.
     // Per categorie speciali (commissione, stipendio, ecc.) il movimento è già nel saldo — nessun doppio conteggio.
 
+    // Fallback: se non c'è scadenza_id né soggetto_id ma c'è manual_filter, cerca in anagrafica_soggetti
+    const manual_filter = (formData.get('manual_filter') as string || '').trim();
+    let resolvedSoggettoId = soggetto_id;
+
+    if (!['commissione', 'giroconto', 'carta_credito', 'stipendio', 'leasing', 'ente_pubblico', 'cassa_edile', 'cessione_quinto', 'utenza', 'assicurazione', 'f24', 'finanziamento_socio'].includes(categoria)
+        && !scadenza_id && !soggetto_id && manual_filter && manual_filter.length >= 3) {
+      const { data: soggetti, error: searchErr } = await supabaseAdmin
+        .from('anagrafica_soggetti')
+        .select('id, ragione_sociale')
+        .ilike('ragione_sociale', `%${manual_filter}%`);
+
+      if (searchErr) {
+        return { error: `Errore ricerca fornitore: ${searchErr.message}` };
+      }
+
+      if (!soggetti || soggetti.length === 0) {
+        return { error: `Fornitore "${manual_filter}" non trovato in anagrafica` };
+      }
+
+      if (soggetti.length > 1) {
+        return { error: `Più fornitori corrispondono a "${manual_filter}", seleziona dal dropdown` };
+      }
+
+      resolvedSoggettoId = soggetti[0].id;
+    }
+
     if (['commissione', 'giroconto', 'carta_credito', 'stipendio', 'leasing', 'ente_pubblico', 'cassa_edile', 'cessione_quinto', 'utenza', 'assicurazione', 'f24', 'finanziamento_socio'].includes(categoria)) {
       await supabaseAdmin
         .from('movimenti_banca')
@@ -271,19 +297,20 @@ export async function handleConferma(formData: FormData) {
         scadenza_id, 
         importo, 
         'confermato_utente',
-        soggetto_id || undefined
+        resolvedSoggettoId || soggetto_id || undefined
       );
-    } else if (soggetto_id) {
+    } else if (resolvedSoggettoId || soggetto_id) {
+      const finalSoggettoId = resolvedSoggettoId || soggetto_id;
       await supabaseAdmin
         .from('movimenti_banca')
         .update({ 
           stato_riconciliazione: 'riconciliato', 
-          soggetto_id: soggetto_id,
+          soggetto_id: finalSoggettoId,
           categoria_dedotta: categoria || 'fattura'
         })
         .eq('id', movimento_id);
 
-      await allocaPagamentoIntelligente(supabaseAdmin, soggetto_id, importo, movimento_id);
+      await allocaPagamentoIntelligente(supabaseAdmin, finalSoggettoId!, importo, movimento_id);
       
     } else {
       throw new Error("Dati insufficienti per confermare (manca scadenza, soggetto o categoria valida).");

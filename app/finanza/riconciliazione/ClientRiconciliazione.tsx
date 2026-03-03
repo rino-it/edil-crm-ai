@@ -56,6 +56,8 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
   // filtro testo e categoria override per il match manuale
   const [manualFilters, setManualFilters] = useState<Record<string, string>>({});
   const [manualCategorie, setManualCategorie] = useState<Record<string, string>>({});
+  // Stato errori per feedback utente per movimento
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   // STEP 6: Stato e logica per la barra di ricerca
   const [searchTerm, setSearchTerm] = useState('');
@@ -236,16 +238,17 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
         }
       }
 
-      // Per i casi non-speciali serve almeno scadenza o soggetto; altrimenti non inviare/rimuovere
-      if (!soggettoId && !scadenzaId) {
-        return;
-      }
+      // Se non troviamo nelle scadenze aperte, lasciamo che il server cerchi in anagrafica_soggetti
+      // Il campo manual_filter è già nel formData dal campo input
     }
 
     const result = await confermaAction(formData);
     if ((result as any)?.error) {
+      setErrors(prev => ({ ...prev, [movId]: (result as any).error }));
       return;
     }
+    // Pulisci errore precedente se successo
+    setErrors(prev => { const next = { ...prev }; delete next[movId]; return next; });
 
     setMovimentiLocali(prev => prev.filter(m => m.id !== movId));
   }
@@ -435,7 +438,10 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
                                   placeholder="Cerca fornitore..."
                                   className="h-7 text-xs border border-zinc-200 rounded px-2 w-[130px] outline-none"
                                   value={manualFilters[m.id] || ''}
-                                  onChange={(e) => setManualFilters(prev => ({ ...prev, [m.id]: e.target.value }))}
+                                  onChange={(e) => {
+                                    setManualFilters(prev => ({ ...prev, [m.id]: e.target.value }));
+                                    setErrors(prev => { const next = { ...prev }; delete next[m.id]; return next; });
+                                  }}
                                 />
                                 <select
                                   name="categoria"
@@ -491,6 +497,12 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
                                   <Check className="h-4 w-4" />
                                 </Button>
                               </div>
+                              {/* Messaggio di errore per questo movimento */}
+                              {errors[m.id] && (
+                                <p className="text-xs text-rose-600 font-medium mt-0.5 max-w-[280px]">
+                                  ⚠ {errors[m.id]}
+                                </p>
+                              )}
                             </form>
                           )}
                         </div>
