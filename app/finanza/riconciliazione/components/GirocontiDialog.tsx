@@ -40,6 +40,7 @@ export function GirocontiDialog({ giroconti }: { giroconti: any[] }) {
                   <th className="p-3 font-medium">Data</th>
                   <th className="p-3 font-medium">Conto Origine</th>
                   <th className="p-3 font-medium">Dettaglio (Dedotto dal sistema)</th>
+                  <th className="p-3 font-medium">Note</th>
                   <th className="p-3 font-medium text-right">Importo</th>
                 </tr>
               </thead>
@@ -51,6 +52,9 @@ export function GirocontiDialog({ giroconti }: { giroconti: any[] }) {
                       {g.conti_banca?.nome_banca} <span className="text-zinc-500 font-normal">{g.conti_banca?.nome_conto}</span>
                     </td>
                     <td className="p-3 text-zinc-700 italic">{g.ai_motivo || g.motivo || g.descrizione}</td>
+                    <td className="p-3 text-zinc-500 italic text-xs max-w-[180px]">
+                      <span className="truncate block" title={g.note_riconciliazione || ''}>{g.note_riconciliazione || '—'}</span>
+                    </td>
                     <td className={`p-3 text-right font-bold whitespace-nowrap ${g.importo > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                       {formatEuro(g.importo)}
                     </td>

@@ -1560,14 +1560,14 @@ export async function getMovimentiNonRiconciliati(contoId?: string) {
   
   let query = supabase
     .from('movimenti_banca')
-    .select('*, conti_banca!movimenti_banca_conto_banca_id_fkey(nome_banca, nome_conto), anagrafica_soggetti(ragione_sociale)')
-    .eq('stato_riconciliazione', 'non_riconciliato') // FIX: Usa stato_riconciliazione e non stato
+    .select('*, anagrafica_soggetti(ragione_sociale)')
+    .eq('stato_riconciliazione', 'non_riconciliato')
     .order('data_operazione', { ascending: false });
     
   if (contoId) query = query.eq('conto_banca_id', contoId);
   
   const { data } = await query;
-  return data || [];
+  return enrichWithContiBanca(data || []);
 }
 
 export async function getScadenzeApertePerMatch(tipo: 'entrata' | 'uscita') {
@@ -2840,12 +2840,32 @@ export async function getAnagrafichePaginate(
   return await executePaginatedQuery<SoggettoAnagrafica>(query, pagination);
 }
 
+// ---------------------------------------------------------------------------
+// Helper: arricchisce un array di movimenti con i dati del conto bancario.
+// movimenti_banca è una tabella partizionata → PostgREST non riesce a risolvere
+// FK-hint ambigui (conto_banca_id + conto_destinazione_id entrambi → conti_banca).
+// Si usa quindi un secondo round-trip separato su conti_banca.
+// ---------------------------------------------------------------------------
+async function enrichWithContiBanca<T extends { conto_banca_id?: string | null }>(movimenti: T[]): Promise<(T & { conti_banca: { nome_banca: string | null; nome_conto: string | null } | null })[]> {
+  if (!movimenti.length) return movimenti.map(m => ({ ...m, conti_banca: null }));
+  const supabase = getSupabaseAdmin();
+  const ids = [...new Set(movimenti.map(m => m.conto_banca_id).filter(Boolean))] as string[];
+  const { data: conti } = await supabase
+    .from('conti_banca')
+    .select('id, nome_banca, nome_conto')
+    .in('id', ids);
+  const contiMap = new Map((conti || []).map(c => [c.id, c]));
+  return movimenti.map(m => ({
+    ...m,
+    conti_banca: m.conto_banca_id ? (contiMap.get(m.conto_banca_id) ?? null) : null,
+  }));
+}
+
 export async function getStoricoGiroconti() {
   const supabase = getSupabaseAdmin();
-  
   const { data, error } = await supabase
     .from('movimenti_banca')
-    .select('*, conti_banca!movimenti_banca_conto_banca_id_fkey(nome_banca, nome_conto)')
+    .select('*')
     .eq('categoria_dedotta', 'giroconto')
     .eq('stato_riconciliazione', 'riconciliato')
     .order('data_operazione', { ascending: false });
@@ -2853,44 +2873,37 @@ export async function getStoricoGiroconti() {
     console.error("❌ Errore recupero storico giroconti:", error);
     return [];
   }
-  
-  return data || [];
+  return enrichWithContiBanca(data || []);
 }
 
 export async function getStoricoF24() {
   const supabase = getSupabaseAdmin();
-
   const { data, error } = await supabase
     .from('movimenti_banca')
-    .select('*, conti_banca!movimenti_banca_conto_banca_id_fkey(nome_banca, nome_conto)')
+    .select('*')
     .eq('categoria_dedotta', 'f24')
     .eq('stato_riconciliazione', 'riconciliato')
     .order('data_operazione', { ascending: false });
-
   if (error) {
     console.error("❌ Errore storico F24:", error);
     return [];
   }
-
-  return data || [];
+  return enrichWithContiBanca(data || []);
 }
 
 export async function getStoricoFinanziamentiSocio() {
   const supabase = getSupabaseAdmin();
-
   const { data, error } = await supabase
     .from('movimenti_banca')
-    .select('*, conti_banca!movimenti_banca_conto_banca_id_fkey(nome_banca, nome_conto)')
+    .select('*')
     .eq('categoria_dedotta', 'finanziamento_socio')
     .eq('stato_riconciliazione', 'riconciliato')
     .order('data_operazione', { ascending: false });
-
   if (error) {
     console.error("❌ Errore storico finanziamenti socio:", error);
     return [];
   }
-
-  return data || [];
+  return enrichWithContiBanca(data || []);
 }
 
 export async function getScadenzeSoggetto(soggettoId: string) {
@@ -3089,17 +3102,19 @@ export async function getGirocontiVersoCartaConto(contoDestinazioneId: string) {
   const ibanSuffix = contoDest.iban?.slice(-4);
   const nomeConto = (contoDest.nome_conto || '').toLowerCase();
 
+  const MOV_SELECT = 'id, data_operazione, descrizione, importo, ai_motivo, note_riconciliazione, conto_banca_id';
+
   // Prima strada: join esplicita tramite conto_destinazione_id (metodo diretto)
   const { data: viaId } = await supabase
     .from('movimenti_banca')
-    .select('id, data_operazione, descrizione, importo, ai_motivo, note_riconciliazione, conto_banca_id, conti_banca!movimenti_banca_conto_banca_id_fkey(nome_banca, nome_conto)')
+    .select(MOV_SELECT)
     .neq('conto_banca_id', contoDestinazioneId)
     .in('categoria_dedotta', ['giroconto', 'carta_credito'])
     .eq('stato_riconciliazione', 'riconciliato')
     .eq('conto_destinazione_id', contoDestinazioneId)
     .order('data_operazione', { ascending: false });
 
-  if (viaId && viaId.length > 0) return viaId;
+  if (viaId && viaId.length > 0) return enrichWithContiBanca(viaId);
 
   // Seconda strada: fallback testuale
   if (!lastDigits && !nomeConto) return [];
@@ -3123,12 +3138,12 @@ export async function getGirocontiVersoCartaConto(contoDestinazioneId: string) {
 
   const { data: viaText } = await supabase
     .from('movimenti_banca')
-    .select('id, data_operazione, descrizione, importo, ai_motivo, note_riconciliazione, conto_banca_id, conti_banca!movimenti_banca_conto_banca_id_fkey(nome_banca, nome_conto)')
+    .select(MOV_SELECT)
     .neq('conto_banca_id', contoDestinazioneId)
     .in('categoria_dedotta', ['giroconto', 'carta_credito'])
     .eq('stato_riconciliazione', 'riconciliato')
     .or(orFilters.join(','))
     .order('data_operazione', { ascending: false });
 
-  return viaText || [];
+  return enrichWithContiBanca(viaText || []);
 }

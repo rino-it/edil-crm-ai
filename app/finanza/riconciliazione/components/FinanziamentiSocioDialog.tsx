@@ -40,6 +40,7 @@ export function FinanziamentiSocioDialog({ movimenti }: { movimenti: any[] }) {
                   <th className="p-3 font-medium">Data</th>
                   <th className="p-3 font-medium">Conto</th>
                   <th className="p-3 font-medium">Dettaglio</th>
+                  <th className="p-3 font-medium">Note</th>
                   <th className="p-3 font-medium text-right">Importo</th>
                 </tr>
               </thead>
@@ -51,6 +52,9 @@ export function FinanziamentiSocioDialog({ movimenti }: { movimenti: any[] }) {
                       {m.conti_banca?.nome_banca} <span className="text-zinc-500 font-normal">{m.conti_banca?.nome_conto}</span>
                     </td>
                     <td className="p-3 text-zinc-700 italic">{m.ai_motivo || m.motivo || m.descrizione}</td>
+                    <td className="p-3 text-zinc-500 italic text-xs max-w-[180px]">
+                      <span className="truncate block" title={m.note_riconciliazione || ''}>{m.note_riconciliazione || '—'}</span>
+                    </td>
                     <td className={`p-3 text-right font-bold whitespace-nowrap ${m.importo > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                       {formatEuro(m.importo)}
                     </td>
