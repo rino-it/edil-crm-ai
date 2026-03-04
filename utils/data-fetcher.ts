@@ -1701,6 +1701,7 @@ export async function getStoricoPaymentsSoggetto(
       stato_riconciliazione,
       categoria_dedotta,
       ai_motivo,
+      note_riconciliazione,
       scadenza_id,
       scadenze_pagamento (
         fattura_riferimento,
@@ -2832,13 +2833,20 @@ export interface SpesaMensile {
   mese: string;
   totale: number;
   conteggio: number;
+  movimenti: Array<{
+    id: string;
+    data_operazione: string;
+    descrizione: string;
+    importo: number;
+    note_riconciliazione: string | null;
+  }>;
 }
 
 export async function getSpeseBancarieConto(conto_banca_id: string, anno?: number): Promise<SpesaMensile[]> {
   const supabase = getSupabaseAdmin();
   let query = supabase
     .from('movimenti_banca')
-    .select('importo, data_operazione, categoria_dedotta')
+    .select('id, importo, data_operazione, categoria_dedotta, descrizione, note_riconciliazione')
     .eq('conto_banca_id', conto_banca_id)
     .eq('categoria_dedotta', 'commissione');
 
@@ -2848,14 +2856,23 @@ export async function getSpeseBancarieConto(conto_banca_id: string, anno?: numbe
       .lte('data_operazione', `${anno}-12-31T23:59:59`);
   }
 
+  query = (query as any).order('data_operazione', { ascending: false });
+
   const { data, error } = await query;
   if (error || !data) return [];
 
   const grouped = data.reduce((acc: Record<string, SpesaMensile>, curr: any) => {
     const mese = curr.data_operazione.substring(0, 7);
-    if (!acc[mese]) acc[mese] = { mese, totale: 0, conteggio: 0 };
+    if (!acc[mese]) acc[mese] = { mese, totale: 0, conteggio: 0, movimenti: [] };
     acc[mese].totale += Math.abs(curr.importo || 0);
     acc[mese].conteggio += 1;
+    acc[mese].movimenti.push({
+      id: curr.id,
+      data_operazione: curr.data_operazione,
+      descrizione: curr.descrizione,
+      importo: curr.importo,
+      note_riconciliazione: curr.note_riconciliazione ?? null,
+    });
     return acc;
   }, {});
 
@@ -2910,7 +2927,7 @@ export interface CostoRicorrenteMensile {
   totale_assicurazione: number;
   totale_mutuo: number;
   totale_interessi: number;
-  dettagli: Array<{ id: string; data_operazione: string; descrizione: string; importo: number; categoria_dedotta: string; ragione_sociale?: string }>;
+  dettagli: Array<{ id: string; data_operazione: string; descrizione: string; importo: number; categoria_dedotta: string; ragione_sociale?: string; note_riconciliazione?: string }>;
 }
 
 const CATEGORIE_RICORRENTI = ['leasing', 'assicurazione', 'mutuo', 'interessi_bancari'] as const;
@@ -2920,7 +2937,7 @@ export async function getCostiRicorrentiConto(contoId: string, anno: number): Pr
 
   const { data, error } = await supabase
     .from('movimenti_banca')
-    .select('id, data_operazione, descrizione, importo, categoria_dedotta, soggetto_id')
+    .select('id, data_operazione, descrizione, importo, categoria_dedotta, soggetto_id, note_riconciliazione')
     .eq('conto_banca_id', contoId)
     .eq('stato_riconciliazione', 'riconciliato')
     .in('categoria_dedotta', CATEGORIE_RICORRENTI as unknown as string[])
@@ -2962,9 +2979,63 @@ export async function getCostiRicorrentiConto(contoId: string, anno: number): Pr
       importo: curr.importo,
       categoria_dedotta: curr.categoria_dedotta,
       ragione_sociale: curr.soggetto_id ? soggettiMap[curr.soggetto_id] : undefined,
+      note_riconciliazione: curr.note_riconciliazione || undefined,
     });
     return acc;
   }, {});
 
   return Object.values(grouped).sort((a, b) => a.mese.localeCompare(b.mese));
+}
+
+// ==========================================
+// GIROCONTI VERSO CARTA / CONTO PREPAGATO
+// ==========================================
+export async function getGirocontiVersoCartaConto(contoDestinazioneId: string) {
+  const supabase = getSupabaseAdmin();
+
+  // Recupera info del conto destinazione per trovare le ultime cifre della carta
+  const { data: contoDest } = await supabase
+    .from('conti_banca')
+    .select('nome_conto, iban, nome_banca')
+    .eq('id', contoDestinazioneId)
+    .single();
+
+  if (!contoDest) return [];
+
+  const lastDigits = contoDest.nome_conto?.match(/\*?(\d{3,4})/)?.[1];
+  const ibanSuffix = contoDest.iban?.slice(-4);
+  const nomeConto = (contoDest.nome_conto || '').toLowerCase();
+
+  // Prima strada: join esplicita tramite conto_destinazione_id (metodo diretto)
+  const { data: viaId } = await supabase
+    .from('movimenti_banca')
+    .select('id, data_operazione, descrizione, importo, ai_motivo, note_riconciliazione, conto_banca_id, conti_banca!movimenti_banca_conto_banca_id_fkey(nome_banca, nome_conto)')
+    .neq('conto_banca_id', contoDestinazioneId)
+    .in('categoria_dedotta', ['giroconto', 'carta_credito'])
+    .eq('stato_riconciliazione', 'riconciliato')
+    .eq('conto_destinazione_id', contoDestinazioneId)
+    .order('data_operazione', { ascending: false });
+
+  if (viaId && viaId.length > 0) return viaId;
+
+  // Seconda strada: fallback testuale
+  if (!lastDigits && !nomeConto) return [];
+
+  const orFilters: string[] = [];
+  if (lastDigits) orFilters.push(`descrizione.ilike.%${lastDigits}%`, `ai_motivo.ilike.%${lastDigits}%`);
+  if (ibanSuffix && ibanSuffix !== lastDigits) orFilters.push(`descrizione.ilike.%${ibanSuffix}%`);
+  if (nomeConto.length > 3) orFilters.push(`ai_motivo.ilike.%${nomeConto}%`);
+
+  if (orFilters.length === 0) return [];
+
+  const { data: viaText } = await supabase
+    .from('movimenti_banca')
+    .select('id, data_operazione, descrizione, importo, ai_motivo, note_riconciliazione, conto_banca_id, conti_banca!movimenti_banca_conto_banca_id_fkey(nome_banca, nome_conto)')
+    .neq('conto_banca_id', contoDestinazioneId)
+    .in('categoria_dedotta', ['giroconto', 'carta_credito'])
+    .eq('stato_riconciliazione', 'riconciliato')
+    .or(orFilters.join(','))
+    .order('data_operazione', { ascending: false });
+
+  return viaText || [];
 }

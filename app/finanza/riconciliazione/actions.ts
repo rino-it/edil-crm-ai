@@ -293,6 +293,48 @@ export async function handleConferma(formData: FormData) {
           ...(note_riconciliazione ? { note_riconciliazione } : {})
         })
         .eq('id', movimento_id);
+
+      // Per giroconti/carte: tenta di identificare e salvare il conto destinazione
+      if (categoria === 'giroconto' || categoria === 'carta_credito') {
+        const { data: mov } = await supabaseAdmin
+          .from('movimenti_banca')
+          .select('descrizione, ai_motivo, conto_banca_id')
+          .eq('id', movimento_id)
+          .single();
+
+        if (mov) {
+          const testo = `${mov.descrizione || ''} ${mov.ai_motivo || ''}`.toLowerCase();
+          const { data: conti } = await supabaseAdmin
+            .from('conti_banca')
+            .select('id, nome_conto, nome_banca, iban')
+            .neq('id', mov.conto_banca_id);
+
+          if (conti) {
+            let contoDestId: string | null = null;
+            for (const c of conti) {
+              const digits = c.nome_conto?.match(/\*?(\d{3,4})/)?.[1];
+              const ibanSuffix = c.iban?.slice(-4);
+              const nomeContoLower = (c.nome_conto || '').toLowerCase();
+              const nomeBancaLower = (c.nome_banca || '').toLowerCase();
+              if (
+                (digits && testo.includes(digits)) ||
+                (ibanSuffix && ibanSuffix.length >= 4 && testo.includes(ibanSuffix)) ||
+                (nomeContoLower.length > 3 && testo.includes(nomeContoLower)) ||
+                (nomeBancaLower.length > 4 && testo.includes(nomeBancaLower))
+              ) {
+                contoDestId = c.id;
+                break;
+              }
+            }
+            if (contoDestId) {
+              await supabaseAdmin
+                .from('movimenti_banca')
+                .update({ conto_destinazione_id: contoDestId })
+                .eq('id', movimento_id);
+            }
+          }
+        }
+      }
     } else if (scadenza_id) {
       await confermaRiconciliazione(
         movimento_id, 
@@ -393,6 +435,81 @@ export async function quickCreateSoggetto(formData: FormData) {
     return { success: true, soggetto_id: data.id };
   } catch (error: any) {
     console.error('❌ Errore quick-create soggetto:', error);
+    return { error: error.message };
+  }
+}
+
+// ==========================================
+// SPLIT MULTI-FATTURA
+// ==========================================
+export async function handleConfermaSplit(formData: FormData) {
+  try {
+    const movimento_id = formData.get('movimento_id') as string;
+    const note_riconciliazione = (formData.get('note_riconciliazione') as string || '').trim() || null;
+    const allocazioniJson = formData.get('allocazioni') as string;
+    const allocazioni: Array<{ scadenza_id: string; importo: number }> = JSON.parse(allocazioniJson);
+
+    if (!movimento_id || !allocazioni?.length) {
+      return { error: 'Dati mancanti per lo split' };
+    }
+
+    const supabaseAdmin = createAdminClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false } }
+    );
+
+    const soggettoIds = new Set<string>();
+
+    for (const alloc of allocazioni) {
+      // 1. Leggi scadenza
+      const { data: scadenza, error: errScad } = await supabaseAdmin
+        .from('scadenze_pagamento')
+        .select('importo_totale, importo_pagato, soggetto_id')
+        .eq('id', alloc.scadenza_id)
+        .single();
+
+      if (errScad || !scadenza) {
+        console.error(`❌ Scadenza ${alloc.scadenza_id} non trovata:`, errScad);
+        continue;
+      }
+
+      if (scadenza.soggetto_id) soggettoIds.add(scadenza.soggetto_id);
+
+      // 2. Aggiorna importo_pagato sulla scadenza
+      const nuovoPagato = (Number(scadenza.importo_pagato) || 0) + Math.abs(alloc.importo);
+      const nuovoStato = nuovoPagato >= Number(scadenza.importo_totale) - 0.01 ? 'pagato' : 'parziale';
+
+      await supabaseAdmin
+        .from('scadenze_pagamento')
+        .update({
+          importo_pagato: nuovoPagato,
+          stato: nuovoStato,
+          data_pagamento: new Date().toISOString().split('T')[0]
+        })
+        .eq('id', alloc.scadenza_id);
+    }
+
+    // 3. Aggiorna movimento bancario
+    await supabaseAdmin
+      .from('movimenti_banca')
+      .update({
+        stato_riconciliazione: 'riconciliato',
+        scadenza_id: allocazioni[0].scadenza_id,
+        soggetto_id: [...soggettoIds][0] || null,
+        categoria_dedotta: 'fattura',
+        ai_motivo: `Split: ${allocazioni.length} fatture da ${soggettoIds.size} fornitore${soggettoIds.size !== 1 ? 'i' : ''}`,
+        ...(note_riconciliazione ? { note_riconciliazione } : {})
+      })
+      .eq('id', movimento_id);
+
+    revalidatePath('/finanza/riconciliazione');
+    revalidatePath('/finanza');
+    revalidatePath('/scadenze');
+    revalidatePath('/anagrafiche');
+    return { success: true };
+  } catch (error: any) {
+    console.error('❌ Errore split multi-fattura:', error);
     return { error: error.message };
   }
 }

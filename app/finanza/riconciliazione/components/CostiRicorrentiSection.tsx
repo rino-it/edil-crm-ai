@@ -234,7 +234,10 @@ export function CostiRicorrentiSection({ costiMensili, annoSelezionato, anni }: 
                                 </Badge>
                               )}
                             </td>
-                            <td className="px-3 py-1.5 font-mono max-w-[250px] truncate" title={d.descrizione}>{d.descrizione}</td>
+                            <td className="px-3 py-1.5 font-mono max-w-[250px]">
+                              <span className="truncate block" title={d.descrizione}>{d.descrizione}</span>
+                              {d.note_riconciliazione && <p className="text-[10px] text-zinc-500 italic mt-0.5 font-sans">{d.note_riconciliazione}</p>}
+                            </td>
                             <td className="px-3 py-1.5 text-zinc-600">{d.ragione_sociale || '—'}</td>
                             <td className="px-3 py-1.5 text-right font-bold text-rose-600">{formatEuro(d.importo)}</td>
                           </tr>

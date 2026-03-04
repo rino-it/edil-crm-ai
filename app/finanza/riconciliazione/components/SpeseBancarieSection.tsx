@@ -4,12 +4,7 @@ import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Receipt, TrendingDown, ChevronDown, ChevronUp, Calendar } from 'lucide-react'
-
-interface SpesaMensile {
-  mese: string;
-  totale: number;
-  conteggio: number;
-}
+import type { SpesaMensile } from '@/utils/data-fetcher'
 
 interface SpeseBancarieProps {
   speseMensili: SpesaMensile[];
@@ -36,6 +31,7 @@ function formatMese(mese: string) {
 
 export function SpeseBancarieSection({ speseMensili, annoSelezionato, anni }: SpeseBancarieProps) {
   const [aperta, setAperta] = useState(false)
+  const [meseEspanso, setMeseEspanso] = useState<string | null>(null)
 
   // KPI
   const totaleAnno = speseMensili.reduce((acc, m) => acc + m.totale, 0)
@@ -143,20 +139,70 @@ export function SpeseBancarieSection({ speseMensili, annoSelezionato, anni }: Sp
               <tbody>
                 {speseMensili.map((row, i) => {
                   const pct = maxTotale > 0 ? (row.totale / maxTotale) * 100 : 0
+                  const isDettaglioAperto = meseEspanso === row.mese
                   return (
-                    <tr key={row.mese} className={`border-t border-border/30 ${i % 2 === 0 ? 'bg-white' : 'bg-muted/20'}`}>
-                      <td className="px-4 py-2.5 font-medium text-foreground">{formatMese(row.mese)}</td>
-                      <td className="px-4 py-2.5 text-center text-muted-foreground">{row.conteggio}</td>
-                      <td className="px-4 py-2.5 text-right font-bold text-rose-700">{formatEuro(row.totale)}</td>
-                      <td className="px-4 py-2.5">
-                        <div className="w-full bg-zinc-100 rounded-full h-1.5">
-                          <div
-                            className="bg-rose-400 h-1.5 rounded-full transition-all"
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                      </td>
-                    </tr>
+                    <>
+                      <tr
+                        key={row.mese}
+                        className={`border-t border-border/30 cursor-pointer transition-colors ${
+                          isDettaglioAperto ? 'bg-rose-50/50' : i % 2 === 0 ? 'bg-white' : 'bg-muted/20'
+                        } hover:bg-rose-50/30`}
+                        onClick={() => setMeseEspanso(isDettaglioAperto ? null : row.mese)}
+                      >
+                        <td className="px-4 py-2.5 font-medium text-foreground">{formatMese(row.mese)}</td>
+                        <td className="px-4 py-2.5 text-center text-muted-foreground">{row.conteggio}</td>
+                        <td className="px-4 py-2.5 text-right font-bold text-rose-700">{formatEuro(row.totale)}</td>
+                        <td className="px-4 py-2.5">
+                          <div className="w-full bg-zinc-100 rounded-full h-1.5">
+                            <div
+                              className="bg-rose-400 h-1.5 rounded-full transition-all"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                      {isDettaglioAperto && row.movimenti && row.movimenti.length > 0 && (
+                        <tr key={`${row.mese}-detail`}>
+                          <td colSpan={4} className="p-0 border-t border-rose-200">
+                            <div className="bg-rose-50/40 p-4">
+                              <p className="text-xs font-bold text-rose-700 uppercase mb-2">
+                                Dettaglio {formatMese(row.mese)} — {row.movimenti.length} commissione{row.movimenti.length !== 1 ? 'i' : 'e'}
+                              </p>
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="text-[10px] font-bold text-muted-foreground uppercase">
+                                    <th className="text-left px-3 py-1.5">Data</th>
+                                    <th className="text-left px-3 py-1.5">Causale</th>
+                                    <th className="text-left px-3 py-1.5">Note</th>
+                                    <th className="text-right px-3 py-1.5">Importo</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {row.movimenti.map(m => (
+                                    <tr key={m.id} className="border-t border-rose-100/60 hover:bg-rose-50/60">
+                                      <td className="px-3 py-1.5 whitespace-nowrap">
+                                        {new Date(m.data_operazione).toLocaleDateString('it-IT')}
+                                      </td>
+                                      <td className="px-3 py-1.5 font-mono max-w-[280px]">
+                                        <span className="truncate block" title={m.descrizione}>{m.descrizione}</span>
+                                      </td>
+                                      <td className="px-3 py-1.5 text-zinc-500 italic max-w-[200px]">
+                                        <span className="truncate block" title={m.note_riconciliazione || ''}>
+                                          {m.note_riconciliazione || '—'}
+                                        </span>
+                                      </td>
+                                      <td className="px-3 py-1.5 text-right font-bold text-rose-600">
+                                        {formatEuro(Math.abs(m.importo))}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
                   )
                 })}
               </tbody>

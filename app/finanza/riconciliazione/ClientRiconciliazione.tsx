@@ -8,9 +8,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Upload, BrainCircuit, Check, X, Search, Loader2, Plus, ChevronDown, ChevronRight } from 'lucide-react'
+import { Upload, BrainCircuit, Check, X, Search, Loader2, Plus, ChevronDown, ChevronRight, Split } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { PaginationControls } from "@/components/ui/pagination-controls"
+import { SplitReconciliationPanel } from './components/SplitReconciliationPanel'
 
 // STEP 5: Mappa estesa con le categorie speciali
 const BADGE_MAP: Record<string, { icon: string; label: string; className: string }> = {
@@ -84,6 +85,9 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
 
   // Riga espandibile: una sola alla volta
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
+
+  // Split panel state
+  const [splitMovimento, setSplitMovimento] = useState<{ id: string; data_operazione: string; descrizione: string; importo: number } | null>(null);
 
   // STEP 6: Stato e logica per la barra di ricerca
   const [searchTerm, setSearchTerm] = useState('');
@@ -505,6 +509,13 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
                                   </div>
                                 )}
 
+                                {m.note_riconciliazione && (
+                                  <div>
+                                    <p className="text-xs text-zinc-500 mb-1 font-medium">Note</p>
+                                    <p className="text-xs text-zinc-600 italic bg-white/80 rounded px-2 py-1 border border-zinc-100">{m.note_riconciliazione}</p>
+                                  </div>
+                                )}
+
                                 <div className="flex items-center gap-2 text-xs text-zinc-500">
                                   <span>Data: {new Date(m.data_operazione).toLocaleDateString('it-IT')}</span>
                                   <span>•</span>
@@ -587,7 +598,6 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
                                       onChange={(e) => setManualNotes(prev => ({ ...prev, [m.id]: e.target.value }))}
                                     />
 
-                                    {/* Riga: Seleziona scadenza + Bottoni */}
                                     <div className="flex gap-2">
                                       <select
                                         name="scadenza_id"
@@ -615,6 +625,16 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
                                             </option>
                                           ))}
                                       </select>
+                                      <Button
+                                        size="sm"
+                                        type="button"
+                                        variant="outline"
+                                        className="h-8 px-2 text-xs text-blue-600 border-blue-200 hover:bg-blue-50 shrink-0"
+                                        onClick={() => setSplitMovimento({ id: m.id, data_operazione: m.data_operazione, descrizione: m.descrizione, importo: m.importo })}
+                                        title="Split Multi-Fattura"
+                                      >
+                                        <Split className="h-3.5 w-3.5 mr-1" /> Split
+                                      </Button>
                                       <Button size="sm" type="submit" className="h-8 px-4 bg-emerald-600 hover:bg-emerald-700">
                                         <Check className="h-4 w-4 mr-1" /> Conferma
                                       </Button>
@@ -722,6 +742,21 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Panel Split Multi-Fattura */}
+      <SplitReconciliationPanel
+        movimento={splitMovimento || { id: '', data_operazione: '', descrizione: '', importo: 0 }}
+        scadenzeAperte={scadenzeAperte}
+        open={!!splitMovimento}
+        onClose={() => setSplitMovimento(null)}
+        onConfirm={(result) => {
+          if (result.success && splitMovimento) {
+            setMovimentiLocali(prev => prev.filter(m => m.id !== splitMovimento.id));
+            setExpandedRow(null);
+          }
+          setSplitMovimento(null);
+        }}
+      />
     </div>
   )
 }

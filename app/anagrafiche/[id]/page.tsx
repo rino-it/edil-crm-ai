@@ -460,8 +460,9 @@ export default async function SoggettoDetailPage({
                         <TableCell className="text-sm whitespace-nowrap">
                           {new Date(m.data_operazione).toLocaleDateString('it-IT')}
                         </TableCell>
-                        <TableCell className="text-xs font-mono truncate max-w-[250px]" title={m.descrizione}>
-                          {m.descrizione}
+                        <TableCell className="text-xs font-mono max-w-[250px]" title={m.descrizione}>
+                          <span className="truncate block">{m.descrizione}</span>
+                          {m.note_riconciliazione && <p className="text-xs text-zinc-500 italic mt-0.5 font-sans">{m.note_riconciliazione}</p>}
                         </TableCell>
                         <TableCell className="text-sm font-medium">
                           {isAcconto ? (
