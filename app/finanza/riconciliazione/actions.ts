@@ -243,6 +243,7 @@ export async function handleConferma(formData: FormData) {
     const personale_id = formData.get('personale_id') as string | null;
     const categoria = formData.get('categoria') as string;
     const importo = Number(formData.get('importo'));
+    const note_riconciliazione = (formData.get('note_riconciliazione') as string | null) || null;
 
     if (!movimento_id) throw new Error("ID movimento mancante.");
 
@@ -260,7 +261,7 @@ export async function handleConferma(formData: FormData) {
     const manual_filter = (formData.get('manual_filter') as string || '').trim();
     let resolvedSoggettoId = soggetto_id;
 
-    if (!['commissione', 'giroconto', 'carta_credito', 'stipendio', 'leasing', 'ente_pubblico', 'cassa_edile', 'cessione_quinto', 'utenza', 'assicurazione', 'f24', 'finanziamento_socio'].includes(categoria)
+    if (!['commissione', 'giroconto', 'carta_credito', 'stipendio', 'leasing', 'ente_pubblico', 'cassa_edile', 'cessione_quinto', 'utenza', 'assicurazione', 'f24', 'finanziamento_socio', 'interessi_bancari', 'mutuo'].includes(categoria)
         && !scadenza_id && !soggetto_id && manual_filter && manual_filter.length >= 3) {
       const { data: soggetti, error: searchErr } = await supabaseAdmin
         .from('anagrafica_soggetti')
@@ -272,7 +273,7 @@ export async function handleConferma(formData: FormData) {
       }
 
       if (!soggetti || soggetti.length === 0) {
-        return { error: `Fornitore "${manual_filter}" non trovato in anagrafica` };
+        return { error: 'fornitore_non_trovato', nome: manual_filter };
       }
 
       if (soggetti.length > 1) {
@@ -282,13 +283,14 @@ export async function handleConferma(formData: FormData) {
       resolvedSoggettoId = soggetti[0].id;
     }
 
-    if (['commissione', 'giroconto', 'carta_credito', 'stipendio', 'leasing', 'ente_pubblico', 'cassa_edile', 'cessione_quinto', 'utenza', 'assicurazione', 'f24', 'finanziamento_socio'].includes(categoria)) {
+    if (['commissione', 'giroconto', 'carta_credito', 'stipendio', 'leasing', 'ente_pubblico', 'cassa_edile', 'cessione_quinto', 'utenza', 'assicurazione', 'f24', 'finanziamento_socio', 'interessi_bancari', 'mutuo'].includes(categoria)) {
       await supabaseAdmin
         .from('movimenti_banca')
         .update({ 
           stato_riconciliazione: 'riconciliato', 
           categoria_dedotta: categoria,
-          personale_id: personale_id || null
+          personale_id: personale_id || null,
+          ...(note_riconciliazione ? { note_riconciliazione } : {})
         })
         .eq('id', movimento_id);
     } else if (scadenza_id) {
@@ -306,7 +308,8 @@ export async function handleConferma(formData: FormData) {
         .update({ 
           stato_riconciliazione: 'riconciliato', 
           soggetto_id: finalSoggettoId,
-          categoria_dedotta: categoria || 'fattura'
+          categoria_dedotta: categoria || 'fattura',
+          ...(note_riconciliazione ? { note_riconciliazione } : {})
         })
         .eq('id', movimento_id);
 
@@ -362,6 +365,36 @@ export async function handleRifiuta(formData: FormData) {
 
 export async function matchManuale(formData: FormData) {
   return handleConferma(formData);
+}
+
+export async function quickCreateSoggetto(formData: FormData) {
+  try {
+    const ragione_sociale = (formData.get('ragione_sociale') as string || '').trim();
+    const tipo = (formData.get('tipo') as string) || 'fornitore';
+    const partita_iva = (formData.get('partita_iva') as string || '').trim() || null;
+
+    if (!ragione_sociale) return { error: 'Ragione sociale obbligatoria' };
+
+    const supabaseAdmin = createAdminClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false } }
+    );
+
+    const { data, error } = await supabaseAdmin
+      .from('anagrafica_soggetti')
+      .insert({ ragione_sociale, tipo, partita_iva })
+      .select('id')
+      .single();
+
+    if (error) return { error: error.message };
+
+    revalidatePath('/anagrafiche');
+    return { success: true, soggetto_id: data.id };
+  } catch (error: any) {
+    console.error('❌ Errore quick-create soggetto:', error);
+    return { error: error.message };
+  }
 }
 
 // ==========================================

@@ -1,14 +1,15 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { importaEstrattoConto, handleConferma as confermaAction, handleRifiuta as rifiutaAction } from './actions'
+import { importaEstrattoConto, handleConferma as confermaAction, handleRifiuta as rifiutaAction, quickCreateSoggetto } from './actions'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Upload, BrainCircuit, Check, X, Search, Loader2 } from 'lucide-react'
+import { Upload, BrainCircuit, Check, X, Search, Loader2, Plus, ChevronDown, ChevronRight } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { PaginationControls } from "@/components/ui/pagination-controls"
 
 // STEP 5: Mappa estesa con le categorie speciali
@@ -29,6 +30,23 @@ const BADGE_MAP: Record<string, { icon: string; label: string; className: string
   cassa_edile:       { icon: '🏗️', label: 'Cassa Edile',     className: 'bg-yellow-100 text-yellow-800' },
   cessione_quinto:   { icon: '💳', label: 'Cessione Quinto', className: 'bg-pink-100 text-pink-800' },
   assicurazione:     { icon: '🛡️', label: 'Assicurazione',   className: 'bg-indigo-100 text-indigo-800' },
+  interessi_bancari: { icon: '📊', label: 'Interessi',       className: 'bg-red-100 text-red-800' },
+  mutuo:             { icon: '🏠', label: 'Mutuo',           className: 'bg-stone-100 text-stone-800' },
+};
+
+// Template placeholder per nota in base alla categoria
+const PLACEHOLDER_MAP: Record<string, string> = {
+  fattura: 'Fornitore + n° fattura (es. "Elettrica Sud FT-2025/0142")',
+  giroconto: 'Conto destinazione (es. "Da BCC Bari a UniCredit")',
+  utenza: 'Tipo utenza + fornitore (es. "Enel Energia - FT 3200145")',
+  leasing: 'Rif. contratto (es. "Contratto ALF-2024/5588")',
+  carta_credito: 'Ultime cifre carta (es. "Saldo carta *5396")',
+  finanziamento_socio: 'Descrizione (es. "Versamento socio Mario Rossi")',
+  assicurazione: 'Polizza + tipo (es. "Polizza RCA n.1234 - UNIPOL")',
+  commissione: 'Tipo spesa (es. "Canone mensile c/c")',
+  f24: 'Tributo + periodo (es. "IRES 2024 - Saldo")',
+  interessi_bancari: 'Tipo + periodo (es. "Interessi fido Q4 2024")',
+  mutuo: 'Rata + rif. (es. "Rata mutuo n.123456 - Feb 2025")',
 };
 
 // Helper per i colori della confidence
@@ -58,6 +76,14 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
   const [manualCategorie, setManualCategorie] = useState<Record<string, string>>({});
   // Stato errori per feedback utente per movimento
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // Note manuali per movimento
+  const [manualNotes, setManualNotes] = useState<Record<string, string>>({});
+  // Quick-create fornitore: { movId, nome, formData originale }
+  const [quickCreate, setQuickCreate] = useState<{ movId: string; nome: string; formData: FormData } | null>(null);
+  const [quickCreateLoading, setQuickCreateLoading] = useState(false);
+
+  // Riga espandibile: una sola alla volta
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   // STEP 6: Stato e logica per la barra di ricerca
   const [searchTerm, setSearchTerm] = useState('');
@@ -177,6 +203,8 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
       'assicurazione',
       'f24',
       'finanziamento_socio',
+      'interessi_bancari',
+      'mutuo',
     ];
 
     const isSpeciale = categorieSpeciali.includes(categoria);
@@ -244,11 +272,18 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
 
     const result = await confermaAction(formData);
     if ((result as any)?.error) {
-      setErrors(prev => ({ ...prev, [movId]: (result as any).error }));
+      // Se il server indica fornitore non trovato, attiva il quick-create
+      if ((result as any).error === 'fornitore_non_trovato') {
+        setQuickCreate({ movId, nome: (result as any).nome || manualFilters[movId] || '', formData });
+        setErrors(prev => ({ ...prev, [movId]: `Fornitore "${(result as any).nome || manualFilters[movId]}" non trovato in anagrafica` }));
+      } else {
+        setErrors(prev => ({ ...prev, [movId]: (result as any).error }));
+      }
       return;
     }
     // Pulisci errore precedente se successo
     setErrors(prev => { const next = { ...prev }; delete next[movId]; return next; });
+    setExpandedRow(null);
 
     setMovimentiLocali(prev => prev.filter(m => m.id !== movId));
   }
@@ -256,6 +291,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
   const handleRifiuta = async (formData: FormData) => {
     const movId = formData.get('movimento_id') as string;
     await rifiutaAction(formData);
+    setExpandedRow(null);
     setMovimentiLocali(prev => prev.map(m => 
       m.id === movId ? { 
         ...m, 
@@ -336,17 +372,16 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
           <Table>
             <TableHeader className="bg-zinc-50/50">
               <TableRow>
-                <TableHead>Data</TableHead>
-                <TableHead>Causale Bancaria</TableHead>
-                <TableHead className="text-right">Importo</TableHead>
-                <TableHead>Suggerimento</TableHead>
-                <TableHead className="text-right">Azioni</TableHead>
+                <TableHead className="w-[100px]">Data</TableHead>
+                <TableHead>Causale</TableHead>
+                <TableHead className="text-right w-[120px]">Importo</TableHead>
+                <TableHead className="text-right w-[280px]">Stato / Azioni</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {movimentiFiltrati.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-12 text-zinc-400">
+                  <TableCell colSpan={4} className="text-center py-12 text-zinc-400">
                     Nessun movimento trovato per questa ricerca.
                   </TableCell>
                 </TableRow>
@@ -356,158 +391,262 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
                   const suggestedSoggetto = scadenzeAperte.find(s => s.soggetto_id === m.soggetto_id);
                   const conf = m.ai_confidence || 0;
                   const isAcconto = m.soggetto_id && !m.ai_suggerimento;
+                  const hasSuggerimento = m.ai_suggerimento || isAcconto || (m.categoria_dedotta && m.categoria_dedotta !== 'fattura');
+                  const isHighConf = hasSuggerimento && conf >= 0.95;
+                  const isExpanded = expandedRow === m.id;
+                  const nomeDisplay = m.ragione_sociale || suggestedScadenza?.soggetto?.ragione_sociale || suggestedScadenza?.anagrafica_soggetti?.ragione_sociale || suggestedSoggetto?.ragione_sociale;
 
                   return (
-                    <TableRow key={m.id} className="hover:bg-zinc-50/50">
-                      <TableCell className="text-sm whitespace-nowrap">
-                        {new Date(m.data_operazione).toLocaleDateString('it-IT')}
-                      </TableCell>
-                      <TableCell className="text-xs font-mono max-w-[300px] truncate" title={m.descrizione}>
-                        {m.descrizione}
-                      </TableCell>
-                      <TableCell className={`text-right font-bold ${m.importo > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                        {formatEuro(m.importo)}
-                      </TableCell>
-                      
-                      <TableCell>
-                        <div className="flex flex-col gap-1">
-                          {(m.ragione_sociale || suggestedScadenza?.soggetto?.ragione_sociale || suggestedScadenza?.anagrafica_soggetti?.ragione_sociale || suggestedSoggetto?.ragione_sociale) ? (
-                            <span className="text-sm font-semibold">
-                              {m.ragione_sociale || suggestedScadenza?.soggetto?.ragione_sociale || suggestedScadenza?.anagrafica_soggetti?.ragione_sociale || suggestedSoggetto?.ragione_sociale}
-                            </span>
-                          ) : (
-                            m.ai_motivo && <span className="text-sm font-medium text-zinc-600">Soggetto non identificato</span>
-                          )}
-                          
-                          {(m.ai_motivo || m.ai_suggerimento || m.categoria_dedotta) ? (
-                            <div className="flex items-center gap-2 text-xs mt-0.5">
-                              {m.categoria_dedotta && BADGE_MAP[m.categoria_dedotta] && (
-                                <Badge variant="outline" className={`${BADGE_MAP[m.categoria_dedotta].className} border-none py-0 h-5`}>
-                                  {BADGE_MAP[m.categoria_dedotta].icon} {BADGE_MAP[m.categoria_dedotta].label}
+                    <React.Fragment key={m.id}>
+                      {/* === RIGA COMPATTA === */}
+                      <TableRow
+                        className={`cursor-pointer transition-colors ${isExpanded ? 'bg-blue-50/60' : 'hover:bg-zinc-50/50'}`}
+                        onClick={() => setExpandedRow(isExpanded ? null : m.id)}
+                      >
+                        <TableCell className="text-sm whitespace-nowrap">
+                          {new Date(m.data_operazione).toLocaleDateString('it-IT')}
+                        </TableCell>
+                        <TableCell className="text-xs font-mono max-w-[350px] truncate" title={m.descrizione}>
+                          {m.descrizione}
+                        </TableCell>
+                        <TableCell className={`text-right font-bold whitespace-nowrap ${m.importo > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {formatEuro(m.importo)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {hasSuggerimento ? (
+                              <>
+                                {/* Badge categoria + nome soggetto compatti */}
+                                {m.categoria_dedotta && BADGE_MAP[m.categoria_dedotta] && (
+                                  <Badge variant="outline" className={`${BADGE_MAP[m.categoria_dedotta].className} border-none py-0 h-5 text-[10px]`}>
+                                    {BADGE_MAP[m.categoria_dedotta].icon} {BADGE_MAP[m.categoria_dedotta].label}
+                                  </Badge>
+                                )}
+                                {nomeDisplay && (
+                                  <span className="text-xs font-medium text-zinc-700 max-w-[100px] truncate" title={nomeDisplay}>
+                                    {nomeDisplay}
+                                  </span>
+                                )}
+                                <Badge variant="outline" className={`${getConfidenceStyle(conf)} border-none py-0 h-5 text-[10px]`}>
+                                  {(conf * 100).toFixed(0)}%
                                 </Badge>
-                              )}
-                              
-                              <Badge variant="outline" className={`${getConfidenceStyle(conf)} border-none py-0 h-5`}>
-                                {(conf * 100).toFixed(0)}%
-                              </Badge>
-                              
-                              <span className="text-zinc-500 truncate max-w-[200px]" title={m.ai_motivo}>{m.ai_motivo}</span>
+
+                                {/* Bottoni inline per alta confidence */}
+                                {isHighConf && (
+                                  <div className="flex gap-1 ml-1" onClick={(e) => e.stopPropagation()}>
+                                    <form action={handleConferma}>
+                                      <input type="hidden" name="movimento_id" value={m.id} />
+                                      {m.ai_suggerimento && <input type="hidden" name="scadenza_id" value={m.ai_suggerimento} />}
+                                      {m.soggetto_id && <input type="hidden" name="soggetto_id" value={m.soggetto_id} />}
+                                      {m.personale_id && <input type="hidden" name="personale_id" value={m.personale_id} />}
+                                      <input type="hidden" name="importo" value={Math.abs(m.importo)} />
+                                      <input type="hidden" name="categoria" value={m.categoria_dedotta || 'fattura'} />
+                                      <Button size="sm" type="submit" className="bg-emerald-600 hover:bg-emerald-700 h-6 w-6 p-0" title="Conferma">
+                                        <Check className="h-3 w-3" />
+                                      </Button>
+                                    </form>
+                                    <form action={handleRifiuta}>
+                                      <input type="hidden" name="movimento_id" value={m.id} />
+                                      <Button size="sm" type="submit" variant="outline" className="text-rose-600 hover:bg-rose-50 h-6 w-6 p-0" title="Rifiuta">
+                                        <X className="h-3 w-3" />
+                                      </Button>
+                                    </form>
+                                  </div>
+                                )}
+
+                                {!isHighConf && (
+                                  isExpanded
+                                    ? <ChevronDown className="h-4 w-4 text-zinc-400 shrink-0" />
+                                    : <ChevronRight className="h-4 w-4 text-zinc-400 shrink-0" />
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <span className="text-xs text-zinc-400 italic">
+                                  {m.ai_motivo ? 'Da classificare' : 'In attesa di analisi...'}
+                                </span>
+                                {isExpanded
+                                  ? <ChevronDown className="h-4 w-4 text-zinc-400 shrink-0" />
+                                  : <ChevronRight className="h-4 w-4 text-zinc-400 shrink-0" />
+                                }
+                              </>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+
+                      {/* === PANNELLO ESPANSO === */}
+                      {isExpanded && (
+                        <TableRow>
+                          <TableCell colSpan={4} className="bg-zinc-50/80 p-0 border-l-4 border-blue-400">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
+                              {/* Colonna sinistra: Dettagli */}
+                              <div className="space-y-3">
+                                <div>
+                                  <p className="text-xs text-zinc-500 mb-1 font-medium">Causale completa</p>
+                                  <p className="text-sm font-mono bg-white/80 rounded px-2 py-1.5 border border-zinc-100">{m.descrizione}</p>
+                                </div>
+
+                                {(m.ai_motivo || hasSuggerimento) && (
+                                  <div>
+                                    <p className="text-xs text-zinc-500 mb-1 font-medium">Suggerimento AI</p>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      {m.categoria_dedotta && BADGE_MAP[m.categoria_dedotta] && (
+                                        <Badge variant="outline" className={`${BADGE_MAP[m.categoria_dedotta].className} border-none py-0 h-5`}>
+                                          {BADGE_MAP[m.categoria_dedotta].icon} {BADGE_MAP[m.categoria_dedotta].label}
+                                        </Badge>
+                                      )}
+                                      <Badge variant="outline" className={`${getConfidenceStyle(conf)} border-none py-0 h-5`}>
+                                        {(conf * 100).toFixed(0)}%
+                                      </Badge>
+                                      {nomeDisplay && <span className="text-sm font-semibold">{nomeDisplay}</span>}
+                                    </div>
+                                    {m.ai_motivo && <p className="text-xs text-zinc-500 mt-1">{m.ai_motivo}</p>}
+                                  </div>
+                                )}
+
+                                <div className="flex items-center gap-2 text-xs text-zinc-500">
+                                  <span>Data: {new Date(m.data_operazione).toLocaleDateString('it-IT')}</span>
+                                  <span>•</span>
+                                  <span className={m.importo > 0 ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold'}>{formatEuro(m.importo)}</span>
+                                </div>
+                              </div>
+
+                              {/* Colonna destra: Form */}
+                              <div onClick={(e) => e.stopPropagation()}>
+                                {hasSuggerimento ? (
+                                  <div className="space-y-3">
+                                    <p className="text-xs text-zinc-500 font-medium">Conferma o rifiuta il suggerimento</p>
+                                    <div className="flex gap-2">
+                                      <form action={handleConferma} className="flex-1">
+                                        <input type="hidden" name="movimento_id" value={m.id} />
+                                        {m.ai_suggerimento && <input type="hidden" name="scadenza_id" value={m.ai_suggerimento} />}
+                                        {m.soggetto_id && <input type="hidden" name="soggetto_id" value={m.soggetto_id} />}
+                                        {m.personale_id && <input type="hidden" name="personale_id" value={m.personale_id} />}
+                                        <input type="hidden" name="importo" value={Math.abs(m.importo)} />
+                                        <input type="hidden" name="categoria" value={m.categoria_dedotta || 'fattura'} />
+                                        <Button size="sm" type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 h-9">
+                                          <Check className="h-4 w-4 mr-2" /> Conferma
+                                        </Button>
+                                      </form>
+                                      <form action={handleRifiuta}>
+                                        <input type="hidden" name="movimento_id" value={m.id} />
+                                        <Button size="sm" type="submit" variant="outline" className="text-rose-600 hover:bg-rose-50 h-9 px-4">
+                                          <X className="h-4 w-4 mr-1" /> Rifiuta
+                                        </Button>
+                                      </form>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <form action={handleConferma} className="space-y-2">
+                                    <input type="hidden" name="movimento_id" value={m.id} />
+                                    <input type="hidden" name="importo" value={Math.abs(m.importo)} />
+                                    <input type="hidden" name="soggetto_id" value={manualSelections[m.id] || ''} />
+
+                                    {/* Riga: Cerca fornitore + Categoria */}
+                                    <div className="flex gap-2">
+                                      <input
+                                        type="text"
+                                        name="manual_filter"
+                                        placeholder="Cerca fornitore..."
+                                        className="h-8 text-xs border border-zinc-200 rounded px-2 flex-1 outline-none"
+                                        value={manualFilters[m.id] || ''}
+                                        onChange={(e) => {
+                                          setManualFilters(prev => ({ ...prev, [m.id]: e.target.value }));
+                                          setErrors(prev => { const next = { ...prev }; delete next[m.id]; return next; });
+                                        }}
+                                      />
+                                      <select
+                                        name="categoria"
+                                        className="h-8 text-xs border border-zinc-200 rounded px-1 w-[140px] outline-none"
+                                        value={manualCategorie[m.id] || 'fattura'}
+                                        onChange={(e) => setManualCategorie(prev => ({ ...prev, [m.id]: e.target.value }))}
+                                      >
+                                        <option value="fattura">📄 Fattura</option>
+                                        <option value="utenza">💡 Utenza</option>
+                                        <option value="leasing">🚗 Leasing</option>
+                                        <option value="f24">🏦 F24/Imposte</option>
+                                        <option value="commissione">🏦 Comm. Banca</option>
+                                        <option value="assicurazione">🛡️ Assicurazione</option>
+                                        <option value="carta_credito">💳 Carta Credito</option>
+                                        <option value="finanziamento_socio">🤝 Fin. Socio</option>
+                                        <option value="sepa">⚡ SEPA/SDD</option>
+                                        <option value="giroconto">🔄 Giroconto</option>
+                                        <option value="interessi_bancari">📊 Interessi Bancari</option>
+                                        <option value="mutuo">🏠 Mutuo</option>
+                                      </select>
+                                    </div>
+
+                                    {/* Riga: Note/Descrizione */}
+                                    <input
+                                      type="text"
+                                      name="note_riconciliazione"
+                                      placeholder={PLACEHOLDER_MAP[manualCategorie[m.id] || 'fattura'] || 'Note aggiuntive...'}
+                                      className="h-8 text-xs border border-zinc-200 rounded px-2 w-full outline-none"
+                                      value={manualNotes[m.id] || ''}
+                                      onChange={(e) => setManualNotes(prev => ({ ...prev, [m.id]: e.target.value }))}
+                                    />
+
+                                    {/* Riga: Seleziona scadenza + Bottoni */}
+                                    <div className="flex gap-2">
+                                      <select
+                                        name="scadenza_id"
+                                        className="h-8 text-xs border border-zinc-200 rounded px-2 flex-1 min-w-0 outline-none"
+                                        onChange={(e) => {
+                                          const selected = scadenzeAperte.find(s => s.id === e.target.value);
+                                          if (selected) {
+                                            setManualSelections(prev => ({ ...prev, [m.id]: selected.soggetto_id || '' }));
+                                          } else {
+                                            setManualSelections(prev => ({ ...prev, [m.id]: '' }));
+                                          }
+                                        }}
+                                      >
+                                        <option value="">— Solo categoria (senza scadenza) —</option>
+                                        {scadenzeAperte
+                                          .filter(s => {
+                                            const dirOk = m.importo > 0 ? s.tipo === 'entrata' : s.tipo === 'uscita';
+                                            const filtro = (manualFilters[m.id] || '').toLowerCase();
+                                            const nome = (s.soggetto?.ragione_sociale || s.anagrafica_soggetti?.ragione_sociale || '').toLowerCase();
+                                            return dirOk && (!filtro || nome.includes(filtro));
+                                          })
+                                          .map(s => (
+                                            <option key={s.id} value={s.id}>
+                                              {s.soggetto?.ragione_sociale || s.anagrafica_soggetti?.ragione_sociale} — {formatEuro(s.importo_totale)}
+                                            </option>
+                                          ))}
+                                      </select>
+                                      <Button size="sm" type="submit" className="h-8 px-4 bg-emerald-600 hover:bg-emerald-700">
+                                        <Check className="h-4 w-4 mr-1" /> Conferma
+                                      </Button>
+                                    </div>
+
+                                    {/* Errore + Quick-create */}
+                                    {errors[m.id] && (
+                                      <div className="flex items-center gap-1.5">
+                                        <p className="text-xs text-rose-600 font-medium max-w-[250px] truncate" title={errors[m.id]}>
+                                          ⚠ {errors[m.id]}
+                                        </p>
+                                        {quickCreate?.movId === m.id && (
+                                          <Button
+                                            size="sm"
+                                            type="button"
+                                            variant="outline"
+                                            className="h-6 px-2 text-xs text-amber-700 border-amber-300 hover:bg-amber-50 shrink-0"
+                                            onClick={() => setQuickCreate({ movId: m.id, nome: quickCreate?.nome || '', formData: quickCreate?.formData || new FormData() })}
+                                          >
+                                            <Plus className="h-3 w-3 mr-1" /> Crea Fornitore
+                                          </Button>
+                                        )}
+                                      </div>
+                                    )}
+                                  </form>
+                                )}
+                              </div>
                             </div>
-                          ) : (
-                            <span className="text-xs text-zinc-400 italic">In attesa di analisi...</span>
-                          )}
-                        </div>
-                      </TableCell>
-                      
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          {/* STEP 5: Nuova logica operatore ternario dinamico sulla BADGE_MAP */}
-                          {(m.ai_suggerimento || isAcconto || (m.categoria_dedotta && m.categoria_dedotta !== 'fattura')) ? (
-                            <>
-                              <form action={handleConferma}>
-                                <input type="hidden" name="movimento_id" value={m.id} />
-                                {m.ai_suggerimento && <input type="hidden" name="scadenza_id" value={m.ai_suggerimento} />}
-                                {m.soggetto_id && <input type="hidden" name="soggetto_id" value={m.soggetto_id} />}
-                                {m.personale_id && <input type="hidden" name="personale_id" value={m.personale_id} />}
-                                <input type="hidden" name="importo" value={Math.abs(m.importo)} />
-                                <input type="hidden" name="categoria" value={m.categoria_dedotta || 'fattura'} />
-                                
-                                <Button size="sm" type="submit" className="bg-emerald-600 hover:bg-emerald-700 h-8 px-2" title="Conferma">
-                                  <Check className="h-4 w-4" />
-                                </Button>
-                              </form>
-
-                              <form action={handleRifiuta}>
-                                <input type="hidden" name="movimento_id" value={m.id} />
-                                <Button size="sm" type="submit" variant="outline" className="text-rose-600 hover:bg-rose-50 h-8 px-2" title="Rifiuta">
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </form>
-                            </>
-                          ) : (
-                            <form action={handleConferma} className="flex flex-col gap-1 items-end">
-                              <input type="hidden" name="movimento_id" value={m.id} />
-                              <input type="hidden" name="importo" value={Math.abs(m.importo)} />
-                              <input type="hidden" name="soggetto_id" value={manualSelections[m.id] || ''} />
-
-                              {/* Riga 1: filtro testo + categoria */}
-                              <div className="flex gap-1.5 items-center w-full">
-                                <input
-                                  type="text"
-                                  name="manual_filter"
-                                  placeholder="Cerca fornitore..."
-                                  className="h-7 text-xs border border-zinc-200 rounded px-2 w-[130px] outline-none"
-                                  value={manualFilters[m.id] || ''}
-                                  onChange={(e) => {
-                                    setManualFilters(prev => ({ ...prev, [m.id]: e.target.value }));
-                                    setErrors(prev => { const next = { ...prev }; delete next[m.id]; return next; });
-                                  }}
-                                />
-                                <select
-                                  name="categoria"
-                                  className="h-7 text-xs border border-zinc-200 rounded px-1 w-[120px] outline-none"
-                                  value={manualCategorie[m.id] || 'fattura'}
-                                  onChange={(e) => setManualCategorie(prev => ({ ...prev, [m.id]: e.target.value }))}
-                                >
-                                  <option value="fattura">📄 Fattura</option>
-                                  <option value="utenza">💡 Utenza</option>
-                                  <option value="leasing">🚗 Leasing</option>
-                                  <option value="f24">🏦 F24/Imposte</option>
-                                  <option value="commissione">🏦 Comm. Banca</option>
-                                  <option value="assicurazione">🛡️ Assicurazione</option>
-                                  <option value="carta_credito">💳 Carta Credito</option>
-                                  <option value="finanziamento_socio">🤝 Fin. Socio</option>
-                                  <option value="sepa">⚡ SEPA/SDD</option>
-                                  <option value="giroconto">🔄 Giroconto</option>
-                                </select>
-                              </div>
-
-                              {/* Riga 2: select scadenza + conferma */}
-                              <div className="flex gap-1.5 items-center w-full">
-                                <select
-                                  name="scadenza_id"
-                                  className="h-7 text-xs border border-zinc-200 rounded px-2 flex-1 min-w-0 outline-none"
-                                  onChange={(e) => {
-                                    const selected = scadenzeAperte.find(s => s.id === e.target.value);
-                                    if (selected) {
-                                      setManualSelections(prev => ({ ...prev, [m.id]: selected.soggetto_id || '' }));
-                                    } else {
-                                      setManualSelections(prev => ({ ...prev, [m.id]: '' }));
-                                    }
-                                  }}
-                                >
-                                  <option value="">— Solo categoria (senza scadenza) —</option>
-                                  {scadenzeAperte
-                                    .filter(s => {
-                                      const dirOk = m.importo > 0 ? s.tipo === 'entrata' : s.tipo === 'uscita';
-                                      const filtro = (manualFilters[m.id] || '').toLowerCase();
-                                      const nome = (s.soggetto?.ragione_sociale || s.anagrafica_soggetti?.ragione_sociale || '').toLowerCase();
-                                      return dirOk && (!filtro || nome.includes(filtro));
-                                    })
-                                    .map(s => (
-                                      <option key={s.id} value={s.id}>
-                                        {s.soggetto?.ragione_sociale || s.anagrafica_soggetti?.ragione_sociale} — {formatEuro(s.importo_totale)}
-                                      </option>
-                                    ))}
-                                </select>
-                                <Button size="sm" type="button" variant="secondary" className="h-7 px-2 shrink-0" title="Filtra risultati">
-                                  <Search className="h-4 w-4" />
-                                </Button>
-                                <Button size="sm" type="submit" className="h-7 px-2 shrink-0 bg-emerald-600 hover:bg-emerald-700" title="Conferma Collegamento">
-                                  <Check className="h-4 w-4" />
-                                </Button>
-                              </div>
-                              {/* Messaggio di errore per questo movimento */}
-                              {errors[m.id] && (
-                                <p className="text-xs text-rose-600 font-medium mt-0.5 max-w-[280px]">
-                                  ⚠ {errors[m.id]}
-                                </p>
-                              )}
-                            </form>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </React.Fragment>
                   )
                 })
               )}
@@ -528,6 +667,61 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
           
         </CardContent>
       </Card>
+      {/* Modal Quick-Create Fornitore */}
+      <Dialog open={!!quickCreate} onOpenChange={(open) => { if (!open) setQuickCreate(null); }}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="text-base">Crea Nuovo Fornitore</DialogTitle>
+          </DialogHeader>
+          <form
+            className="space-y-3"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!quickCreate) return;
+              setQuickCreateLoading(true);
+              const fd = new FormData(e.currentTarget);
+              const result = await quickCreateSoggetto(fd);
+              if ((result as any)?.error) {
+                setErrors(prev => ({ ...prev, [quickCreate.movId]: (result as any).error }));
+                setQuickCreateLoading(false);
+                return;
+              }
+              // Successo: rilancia handleConferma con il nuovo soggetto_id
+              const originalFd = quickCreate.formData;
+              originalFd.set('soggetto_id', (result as any).soggetto_id);
+              setQuickCreate(null);
+              setQuickCreateLoading(false);
+              const confResult = await confermaAction(originalFd);
+              if ((confResult as any)?.error) {
+                setErrors(prev => ({ ...prev, [quickCreate!.movId]: (confResult as any).error }));
+                return;
+              }
+              setErrors(prev => { const next = { ...prev }; delete next[quickCreate!.movId]; return next; });
+              setMovimentiLocali(prev => prev.filter(m => m.id !== quickCreate!.movId));
+            }}
+          >
+            <div>
+              <label className="text-xs font-medium text-zinc-600">Ragione Sociale</label>
+              <Input name="ragione_sociale" defaultValue={quickCreate?.nome || ''} required className="mt-1" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-zinc-600">Tipo</label>
+              <select name="tipo" className="w-full h-9 text-sm border border-zinc-200 rounded px-2 mt-1 outline-none" defaultValue="fornitore">
+                <option value="fornitore">Fornitore</option>
+                <option value="cliente">Cliente</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-zinc-600">Partita IVA (opzionale)</label>
+              <Input name="partita_iva" placeholder="01234567890" className="mt-1" />
+            </div>
+            <Button type="submit" disabled={quickCreateLoading} className="w-full bg-amber-600 hover:bg-amber-700">
+              {quickCreateLoading ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+              Crea e Riconcilia
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

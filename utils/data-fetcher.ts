@@ -1929,6 +1929,27 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
     }
 
     // ==========================================
+    // 0.6. Pre-Filtro INTERESSI BANCARI
+    // ==========================================
+    const regexInteressi = /\b(interess[ie]\s+(fido|scoperto|conto|creditor|debitor|anno)|interess[ie]\s+su\s|interess[ie]\s+passiv[ie])\b/i;
+    if (regexInteressi.test(causale) || (m.xml_causale && regexInteressi.test(m.xml_causale))) {
+      matchati.push({
+        movimento_id: m.id, scadenza_id: null, soggetto_id: null, confidence: 0.99,
+        motivo: `Pre-match Veloce: Interessi Bancari`,
+        ragione_sociale: "Interessi Bancari", categoria: 'interessi_bancari'
+      });
+      continue;
+    }
+
+    // ==========================================
+    // 0.7. Pre-Filtro RATA MUTUO
+    // ==========================================
+    const regexMutuo = /\b(rata\s+mutuo|mutuo\s+n|est\.?\s*mutuo|rimborso\s+mutuo|addeb.*mutuo)\b/i;
+    const isMutuo = regexMutuo.test(causale) || (m.xml_causale && regexMutuo.test(m.xml_causale));
+    // Non fare continue qui — lascia proseguire allo Step 3 (soggetti speciali)
+    // per linkare il soggetto_id della banca che eroga il mutuo
+
+    // ==========================================
     // 1. STEP STIPENDI: Match con tabella personale 
     // ==========================================
     const regexStipendio = /\b(stipendio|emolument[i]?|uniemens)\b/i;
@@ -1953,7 +1974,7 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
     // ==========================================
     // 2. STEP GIROCONTI E CARTE DI CREDITO
     // ==========================================
-    const regexGiroconto = /\b(giroconto|giro\s*(da|a|per|su)|addebito carta|carta del credito cooperativo|estratto conto carta)\b/i;
+    const regexGiroconto = /\b(giroconto|giro\s*(da|a|per|su)|addebito carta|carta del credito cooperativo|estratto conto carta|ricarica\s+carta|add\.?\s*pagam\.?\s*diversi\s*ricarica)\b/i;
     let isGiroconto = regexGiroconto.test(causale) || (m.xml_causale && regexGiroconto.test(m.xml_causale));
     let controparteGiroconto = "";
     let contoMatchato = null;
@@ -1975,6 +1996,18 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
           break;
         }
         
+        // 1bis. Cerca numero carta in formato mascherato (es. 4691XXXXXXXX5396 → ultime 4: 5396)
+        if (!contoMatchato) {
+          const maskedCardMatch = causale.match(/\d{4}X{4,}(\d{4})/i);
+          if (maskedCardMatch) {
+            const ultimeCifre = maskedCardMatch[1];
+            if (c.nome_conto && c.nome_conto.includes(ultimeCifre)) {
+              contoMatchato = c;
+              break;
+            }
+          }
+        }
+
         // 2. Cerca per nome del conto o della banca testuale
         const nomeContoNorm = normalizzaNome(c.nome_conto);
         const nomeBancaNorm = normalizzaNome(c.nome_banca);
@@ -2034,6 +2067,48 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
         categoria: categoriaGiro
       });
       continue;
+    }
+
+    // ==========================================
+    // 2.5. SELF-TRANSFER DETECTION (Bonifici da/verso nostri conti)
+    // ==========================================
+    if (!matched) {
+      for (const c of conti_banca) {
+        if (c.id === m.conto_banca_id) continue;
+
+        // Cerca IBAN nostro nella causale
+        if (c.iban) {
+          const nostroIban = c.iban.replace(/\s/g, '').toUpperCase();
+          if (causale.replace(/\s/g, '').includes(nostroIban) ||
+              (m.xml_iban_controparte && m.xml_iban_controparte.replace(/\s/g, '').toUpperCase() === nostroIban)) {
+            const isUscita = m.importo < 0;
+            matchati.push({
+              movimento_id: m.id, scadenza_id: null, soggetto_id: null, confidence: 0.99,
+              motivo: `Giroconto: ${isUscita ? 'Uscita verso' : 'Entrata da'} ${c.nome_banca} - ${c.nome_conto}`,
+              ragione_sociale: `${c.nome_banca} ${c.nome_conto}`, categoria: 'giroconto'
+            });
+            matched = true;
+            break;
+          }
+        }
+
+        // Cerca parole lunghe ≥5 char del nome conto nella causale
+        const nomiParts = normalizzaNome(c.nome_conto || '').split(' ');
+        for (const parte of nomiParts) {
+          if (parte.length >= 5 && causaleNorm.includes(parte)) {
+            const isUscita = m.importo < 0;
+            matchati.push({
+              movimento_id: m.id, scadenza_id: null, soggetto_id: null, confidence: 0.95,
+              motivo: `Giroconto (probabile): ${isUscita ? 'Uscita verso' : 'Entrata da'} ${c.nome_banca} (match: "${parte}")`,
+              ragione_sociale: `${c.nome_banca} ${c.nome_conto}`, categoria: 'giroconto'
+            });
+            matched = true;
+            break;
+          }
+        }
+        if (matched) break;
+      }
+      if (matched) continue;
     }
 
     // ==========================================
@@ -2823,4 +2898,73 @@ export async function getTotaleSpeseBancarieGlobale(anno: number): Promise<numbe
   if (error || !data) return 0;
 
   return data.reduce((acc: number, curr: any) => acc + Math.abs(curr.importo || 0), 0);
+}
+
+// ==========================================
+// COSTI RICORRENTI (leasing, assicurazione, mutuo, interessi_bancari)
+// ==========================================
+
+export interface CostoRicorrenteMensile {
+  mese: string;
+  totale_leasing: number;
+  totale_assicurazione: number;
+  totale_mutuo: number;
+  totale_interessi: number;
+  dettagli: Array<{ id: string; data_operazione: string; descrizione: string; importo: number; categoria_dedotta: string; ragione_sociale?: string }>;
+}
+
+const CATEGORIE_RICORRENTI = ['leasing', 'assicurazione', 'mutuo', 'interessi_bancari'] as const;
+
+export async function getCostiRicorrentiConto(contoId: string, anno: number): Promise<CostoRicorrenteMensile[]> {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from('movimenti_banca')
+    .select('id, data_operazione, descrizione, importo, categoria_dedotta, soggetto_id')
+    .eq('conto_banca_id', contoId)
+    .eq('stato_riconciliazione', 'riconciliato')
+    .in('categoria_dedotta', CATEGORIE_RICORRENTI as unknown as string[])
+    .gte('data_operazione', `${anno}-01-01`)
+    .lte('data_operazione', `${anno}-12-31T23:59:59`)
+    .order('data_operazione', { ascending: true });
+
+  if (error || !data) return [];
+
+  // Recupera ragione_sociale per i soggetti linkati
+  const soggettiIds = [...new Set(data.filter(d => d.soggetto_id).map(d => d.soggetto_id))];
+  let soggettiMap: Record<string, string> = {};
+  if (soggettiIds.length > 0) {
+    const { data: soggetti } = await supabase
+      .from('anagrafica_soggetti')
+      .select('id, ragione_sociale')
+      .in('id', soggettiIds);
+    if (soggetti) {
+      soggettiMap = Object.fromEntries(soggetti.map(s => [s.id, s.ragione_sociale]));
+    }
+  }
+
+  const grouped = data.reduce((acc: Record<string, CostoRicorrenteMensile>, curr: any) => {
+    const mese = curr.data_operazione.substring(0, 7); // "2026-01"
+    if (!acc[mese]) {
+      acc[mese] = { mese, totale_leasing: 0, totale_assicurazione: 0, totale_mutuo: 0, totale_interessi: 0, dettagli: [] };
+    }
+    const importoAbs = Math.abs(curr.importo || 0);
+    switch (curr.categoria_dedotta) {
+      case 'leasing': acc[mese].totale_leasing += importoAbs; break;
+      case 'assicurazione': acc[mese].totale_assicurazione += importoAbs; break;
+      case 'mutuo': acc[mese].totale_mutuo += importoAbs; break;
+      case 'interessi_bancari': acc[mese].totale_interessi += importoAbs; break;
+    }
+    acc[mese].dettagli.push({
+      id: curr.id,
+      data_operazione: curr.data_operazione,
+      descrizione: curr.descrizione,
+      importo: curr.importo,
+      categoria_dedotta: curr.categoria_dedotta,
+      ragione_sociale: curr.soggetto_id ? soggettiMap[curr.soggetto_id] : undefined,
+    });
+    return acc;
+  }, {});
+
+  return Object.values(grouped).sort((a, b) => a.mese.localeCompare(b.mese));
 }

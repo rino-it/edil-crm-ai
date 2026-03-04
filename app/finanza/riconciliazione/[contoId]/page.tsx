@@ -1,12 +1,13 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { getMovimentiPaginati, getScadenzeApertePerMatch, getSpeseBancarieConto } from '@/utils/data-fetcher'
+import { getMovimentiPaginati, getScadenzeApertePerMatch, getSpeseBancarieConto, getCostiRicorrentiConto } from '@/utils/data-fetcher'
 import ClientRiconciliazione from '../ClientRiconciliazione'
 import { DEFAULT_PAGE_SIZE } from '@/types/pagination'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, Landmark } from 'lucide-react'
 import { SpeseBancarieSection } from '../components/SpeseBancarieSection'
+import { CostiRicorrentiSection } from '../components/CostiRicorrentiSection'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,6 +67,9 @@ export default async function DettaglioContoPage({
   // 4. Fetch Spese Bancarie per questo conto
   const speseMensili = await getSpeseBancarieConto(contoId, annoSpese)
 
+  // 5. Fetch Costi Ricorrenti (Leasing, Assicurazione, Mutuo, Interessi)
+  const costiRicorrenti = await getCostiRicorrentiConto(contoId, annoSpese)
+
   const formatEuro = (val: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val)
 
   return (
@@ -105,6 +109,13 @@ export default async function DettaglioContoPage({
       {/* Sezione Spese e Commissioni Bancarie */}
       <SpeseBancarieSection
         speseMensili={speseMensili}
+        annoSelezionato={annoSpese}
+        anni={anniDisponibili}
+      />
+
+      {/* Sezione Costi Ricorrenti */}
+      <CostiRicorrentiSection
+        costiMensili={costiRicorrenti}
         annoSelezionato={annoSpese}
         anni={anniDisponibili}
       />
