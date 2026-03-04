@@ -1560,7 +1560,7 @@ export async function getMovimentiNonRiconciliati(contoId?: string) {
   
   let query = supabase
     .from('movimenti_banca')
-    .select('*, conti_banca(nome_banca, nome_conto), anagrafica_soggetti(ragione_sociale)')
+    .select('*, conti_banca!movimenti_banca_conto_banca_id_fkey(nome_banca, nome_conto), anagrafica_soggetti(ragione_sociale)')
     .eq('stato_riconciliazione', 'non_riconciliato') // FIX: Usa stato_riconciliazione e non stato
     .order('data_operazione', { ascending: false });
     
@@ -1690,8 +1690,7 @@ export async function getStoricoPaymentsSoggetto(
 ): Promise<PaginatedResult<any>> {
   const supabase = getSupabaseAdmin();
 
-  // Costruiamo la query senza eseguirla (rimuovendo await)
-  const query = supabase
+  const { data: diretti, error: directError } = await supabase
     .from('movimenti_banca')
     .select(`
       id,
@@ -1707,13 +1706,92 @@ export async function getStoricoPaymentsSoggetto(
         fattura_riferimento,
         importo_totale
       )
-    `, { count: 'exact' }) // Obbligatorio per la paginazione
+    `)
     .eq('stato_riconciliazione', 'riconciliato')
-    .eq('soggetto_id', soggetto_id)
-    .order('data_operazione', { ascending: false });
+    .eq('soggetto_id', soggetto_id);
 
-  // Deleghiamo l'esecuzione e il calcolo del count all'helper infrastrutturale
-  return await executePaginatedQuery(query, pagination);
+  if (directError) {
+    throw new Error(`Errore storico pagamenti soggetto (diretti): ${directError.message}`);
+  }
+
+  const { data: splitMovimenti, error: splitError } = await supabase
+    .from('riconciliazione_log')
+    .select(`
+      scadenza_id,
+      movimento_id,
+      importo_applicato,
+      tipo_match,
+      scadenze_pagamento!inner(
+        soggetto_id,
+        fattura_riferimento,
+        importo_totale
+      ),
+      movimenti_banca!inner(
+        id,
+        data_operazione,
+        descrizione,
+        importo,
+        stato_riconciliazione,
+        categoria_dedotta,
+        ai_motivo,
+        note_riconciliazione
+      )
+    `)
+    .eq('tipo_match', 'split')
+    .eq('scadenze_pagamento.soggetto_id', soggetto_id)
+    .eq('movimenti_banca.stato_riconciliazione', 'riconciliato');
+
+  if (splitError) {
+    throw new Error(`Errore storico pagamenti soggetto (split): ${splitError.message}`);
+  }
+
+  const mergedMap = new Map<string, any>();
+
+  for (const movimento of (diretti || [])) {
+    mergedMap.set(movimento.id, movimento);
+  }
+
+  for (const item of (splitMovimenti || [])) {
+    const mov = Array.isArray((item as any).movimenti_banca)
+      ? (item as any).movimenti_banca[0]
+      : (item as any).movimenti_banca;
+    const scad = Array.isArray((item as any).scadenze_pagamento)
+      ? (item as any).scadenze_pagamento[0]
+      : (item as any).scadenze_pagamento;
+
+    if (!mov?.id) continue;
+
+    if (!mergedMap.has(mov.id)) {
+      mergedMap.set(mov.id, {
+        ...mov,
+        scadenza_id: (item as any).scadenza_id || null,
+        scadenze_pagamento: scad
+          ? {
+              fattura_riferimento: scad.fattura_riferimento,
+              importo_totale: scad.importo_totale,
+            }
+          : null,
+      });
+    }
+  }
+
+  const allRows = Array.from(mergedMap.values()).sort(
+    (a, b) => new Date(b.data_operazione).getTime() - new Date(a.data_operazione).getTime()
+  );
+
+  const page = Math.max(1, pagination.page);
+  const pageSize = Math.max(1, pagination.pageSize);
+  const totalCount = allRows.length;
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize;
+
+  return {
+    data: allRows.slice(from, to),
+    totalCount,
+    page,
+    pageSize,
+    totalPages: Math.ceil(totalCount / pageSize),
+  };
 }
 
 export async function getStoricoPagamentiPersonale(
@@ -2762,7 +2840,7 @@ export async function getStoricoGiroconti() {
   
   const { data, error } = await supabase
     .from('movimenti_banca')
-    .select('*, conti_banca(nome_banca, nome_conto)')
+    .select('*, conti_banca!movimenti_banca_conto_banca_id_fkey(nome_banca, nome_conto)')
     .eq('categoria_dedotta', 'giroconto')
     .eq('stato_riconciliazione', 'riconciliato')
     .order('data_operazione', { ascending: false });
@@ -2779,7 +2857,7 @@ export async function getStoricoF24() {
 
   const { data, error } = await supabase
     .from('movimenti_banca')
-    .select('*, conti_banca(nome_banca, nome_conto)')
+    .select('*, conti_banca!movimenti_banca_conto_banca_id_fkey(nome_banca, nome_conto)')
     .eq('categoria_dedotta', 'f24')
     .eq('stato_riconciliazione', 'riconciliato')
     .order('data_operazione', { ascending: false });
@@ -2797,7 +2875,7 @@ export async function getStoricoFinanziamentiSocio() {
 
   const { data, error } = await supabase
     .from('movimenti_banca')
-    .select('*, conti_banca(nome_banca, nome_conto)')
+    .select('*, conti_banca!movimenti_banca_conto_banca_id_fkey(nome_banca, nome_conto)')
     .eq('categoria_dedotta', 'finanziamento_socio')
     .eq('stato_riconciliazione', 'riconciliato')
     .order('data_operazione', { ascending: false });
@@ -3022,9 +3100,19 @@ export async function getGirocontiVersoCartaConto(contoDestinazioneId: string) {
   if (!lastDigits && !nomeConto) return [];
 
   const orFilters: string[] = [];
-  if (lastDigits) orFilters.push(`descrizione.ilike.%${lastDigits}%`, `ai_motivo.ilike.%${lastDigits}%`);
-  if (ibanSuffix && ibanSuffix !== lastDigits) orFilters.push(`descrizione.ilike.%${ibanSuffix}%`);
-  if (nomeConto.length > 3) orFilters.push(`ai_motivo.ilike.%${nomeConto}%`);
+  if (lastDigits) orFilters.push(
+    `descrizione.ilike.%${lastDigits}%`,
+    `ai_motivo.ilike.%${lastDigits}%`,
+    `note_riconciliazione.ilike.%${lastDigits}%`
+  );
+  if (ibanSuffix && ibanSuffix !== lastDigits) orFilters.push(
+    `descrizione.ilike.%${ibanSuffix}%`,
+    `note_riconciliazione.ilike.%${ibanSuffix}%`
+  );
+  if (nomeConto.length > 3) orFilters.push(
+    `ai_motivo.ilike.%${nomeConto}%`,
+    `note_riconciliazione.ilike.%${nomeConto}%`
+  );
 
   if (orFilters.length === 0) return [];
 

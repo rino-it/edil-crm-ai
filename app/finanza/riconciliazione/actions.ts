@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/utils/supabase/server'
 import { createClient as createAdminClient } from "@supabase/supabase-js"
-import { parseCSVBanca, parseXMLBanca, importMovimentiBanca, confermaRiconciliazione } from '@/utils/data-fetcher'
+import { parseCSVBanca, parseXMLBanca, importMovimentiBanca, confermaRiconciliazione, creaLogRiconciliazione } from '@/utils/data-fetcher'
 
 // ==========================================
 // AZIONI PER DOCUMENTI GENERICI (NUVOLA)
@@ -298,12 +298,12 @@ export async function handleConferma(formData: FormData) {
       if (categoria === 'giroconto' || categoria === 'carta_credito') {
         const { data: mov } = await supabaseAdmin
           .from('movimenti_banca')
-          .select('descrizione, ai_motivo, conto_banca_id')
+          .select('descrizione, ai_motivo, conto_banca_id, note_riconciliazione')
           .eq('id', movimento_id)
           .single();
 
         if (mov) {
-          const testo = `${mov.descrizione || ''} ${mov.ai_motivo || ''}`.toLowerCase();
+          const testo = `${mov.descrizione || ''} ${mov.ai_motivo || ''} ${mov.note_riconciliazione || ''}`.toLowerCase();
           const { data: conti } = await supabaseAdmin
             .from('conti_banca')
             .select('id, nome_conto, nome_banca, iban')
@@ -488,6 +488,13 @@ export async function handleConfermaSplit(formData: FormData) {
           data_pagamento: new Date().toISOString().split('T')[0]
         })
         .eq('id', alloc.scadenza_id);
+
+      await creaLogRiconciliazione({
+        movimento_id,
+        scadenza_id: alloc.scadenza_id,
+        importo_applicato: Math.abs(alloc.importo),
+        tipo_match: 'split'
+      });
     }
 
     // 3. Aggiorna movimento bancario

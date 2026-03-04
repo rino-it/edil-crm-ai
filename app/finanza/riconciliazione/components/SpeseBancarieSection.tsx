@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Receipt, TrendingDown, ChevronDown, ChevronUp, Calendar } from 'lucide-react'
@@ -141,9 +141,8 @@ export function SpeseBancarieSection({ speseMensili, annoSelezionato, anni }: Sp
                   const pct = maxTotale > 0 ? (row.totale / maxTotale) * 100 : 0
                   const isDettaglioAperto = meseEspanso === row.mese
                   return (
-                    <>
+                    <Fragment key={row.mese}>
                       <tr
-                        key={row.mese}
                         className={`border-t border-border/30 cursor-pointer transition-colors ${
                           isDettaglioAperto ? 'bg-rose-50/50' : i % 2 === 0 ? 'bg-white' : 'bg-muted/20'
                         } hover:bg-rose-50/30`}
@@ -202,7 +201,7 @@ export function SpeseBancarieSection({ speseMensili, annoSelezionato, anni }: Sp
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   )
                 })}
               </tbody>

@@ -483,12 +483,12 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
                       {isExpanded && (
                         <TableRow>
                           <TableCell colSpan={4} className="bg-zinc-50/80 p-0 border-l-4 border-blue-400">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 overflow-hidden">
                               {/* Colonna sinistra: Dettagli */}
-                              <div className="space-y-3">
+                              <div className="space-y-3 min-w-0">
                                 <div>
                                   <p className="text-xs text-zinc-500 mb-1 font-medium">Causale completa</p>
-                                  <p className="text-sm font-mono bg-white/80 rounded px-2 py-1.5 border border-zinc-100">{m.descrizione}</p>
+                                  <p className="text-sm font-mono bg-white/80 rounded px-2 py-1.5 border border-zinc-100 break-words overflow-hidden max-w-full whitespace-pre-wrap">{m.descrizione}</p>
                                 </div>
 
                                 {(m.ai_motivo || hasSuggerimento) && (
@@ -524,7 +524,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
                               </div>
 
                               {/* Colonna destra: Form */}
-                              <div onClick={(e) => e.stopPropagation()}>
+                              <div className="min-w-0" onClick={(e) => e.stopPropagation()}>
                                 {hasSuggerimento ? (
                                   <div className="space-y-3">
                                     <p className="text-xs text-zinc-500 font-medium">Conferma o rifiuta il suggerimento</p>
