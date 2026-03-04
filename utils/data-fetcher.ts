@@ -1714,7 +1714,9 @@ export async function getStoricoPaymentsSoggetto(
     throw new Error(`Errore storico pagamenti soggetto (diretti): ${directError.message}`);
   }
 
-  const { data: splitMovimenti, error: splitError } = await supabase
+  // movimenti_banca is a partitioned table — PostgREST cannot join it via FK embed.
+  // Step 1: get log entries for split scadenze belonging to this soggetto
+  const { data: splitLogs, error: splitError } = await supabase
     .from('riconciliazione_log')
     .select(`
       scadenza_id,
@@ -1725,24 +1727,29 @@ export async function getStoricoPaymentsSoggetto(
         soggetto_id,
         fattura_riferimento,
         importo_totale
-      ),
-      movimenti_banca!inner(
-        id,
-        data_operazione,
-        descrizione,
-        importo,
-        stato_riconciliazione,
-        categoria_dedotta,
-        ai_motivo,
-        note_riconciliazione
       )
     `)
     .eq('tipo_match', 'split')
-    .eq('scadenze_pagamento.soggetto_id', soggetto_id)
-    .eq('movimenti_banca.stato_riconciliazione', 'riconciliato');
+    .eq('scadenze_pagamento.soggetto_id', soggetto_id);
 
   if (splitError) {
     throw new Error(`Errore storico pagamenti soggetto (split): ${splitError.message}`);
+  }
+
+  // Step 2: fetch the actual movements separately
+  const splitMovimentoIds = [...new Set((splitLogs || []).map((l: any) => l.movimento_id).filter(Boolean))];
+  let splitMovimentiMap = new Map<string, any>();
+
+  if (splitMovimentoIds.length > 0) {
+    const { data: splitMovData } = await supabase
+      .from('movimenti_banca')
+      .select('id, data_operazione, descrizione, importo, stato_riconciliazione, categoria_dedotta, ai_motivo, note_riconciliazione')
+      .in('id', splitMovimentoIds)
+      .eq('stato_riconciliazione', 'riconciliato');
+
+    for (const m of (splitMovData || [])) {
+      splitMovimentiMap.set(m.id, m);
+    }
   }
 
   const mergedMap = new Map<string, any>();
@@ -1751,10 +1758,8 @@ export async function getStoricoPaymentsSoggetto(
     mergedMap.set(movimento.id, movimento);
   }
 
-  for (const item of (splitMovimenti || [])) {
-    const mov = Array.isArray((item as any).movimenti_banca)
-      ? (item as any).movimenti_banca[0]
-      : (item as any).movimenti_banca;
+  for (const item of (splitLogs || [])) {
+    const mov = splitMovimentiMap.get((item as any).movimento_id);
     const scad = Array.isArray((item as any).scadenze_pagamento)
       ? (item as any).scadenze_pagamento[0]
       : (item as any).scadenze_pagamento;

@@ -1,10 +1,14 @@
--- Fix: riconciliazione_log.movimento_id FK was pointing to movimenti_banca_old
--- instead of movimenti_banca, causing:
---   1. FK violation on INSERT (23503) because movimento_id values are in movimenti_banca, not movimenti_banca_old
---   2. PostgREST schema cache error: "Could not find a relationship between riconciliazione_log and movimenti_banca"
+-- Step 1: Drop the old broken FK (pointed to movimenti_banca_old)
+ALTER TABLE public.riconciliazione_log
+  DROP CONSTRAINT IF EXISTS riconciliazione_log_movimento_id_fkey;
 
--- Step 1: Drop existing PK/unique on movimenti_banca.id if malformed, then re-add it cleanly.
--- First drop existing PK constraint by name if it exists
+-- NOTE: We do NOT recreate the FK because movimenti_banca is a PARTITIONED TABLE
+-- (partitioned by data_operazione). PostgreSQL requires the PK on a partitioned table
+-- to include ALL partition key columns, so PRIMARY KEY (id) alone is forbidden.
+-- A FK referencing only (id) is therefore structurally impossible.
+-- Application-level joins are used instead (two-step query in data-fetcher.ts).
+
+-- Step 3: Add PK (id, data_operazione) to movimenti_banca if not already present
 DO $$
 DECLARE
   pk_name text;
@@ -13,23 +17,10 @@ BEGIN
   FROM pg_constraint
   WHERE conrelid = 'public.movimenti_banca'::regclass
     AND contype = 'p';
-
-  IF pk_name IS NOT NULL THEN
-    EXECUTE format('ALTER TABLE public.movimenti_banca DROP CONSTRAINT %I', pk_name);
+  IF pk_name IS NULL THEN
+    ALTER TABLE public.movimenti_banca ADD PRIMARY KEY (id, data_operazione);
   END IF;
 END $$;
 
--- Re-add primary key explicitly
-ALTER TABLE public.movimenti_banca ADD PRIMARY KEY (id);
-
--- Step 2: Drop the old FK constraint pointing to movimenti_banca_old
-ALTER TABLE public.riconciliazione_log
-  DROP CONSTRAINT IF EXISTS riconciliazione_log_movimento_id_fkey;
-
--- Step 3: Recreate FK pointing to the correct table
-ALTER TABLE public.riconciliazione_log
-  ADD CONSTRAINT riconciliazione_log_movimento_id_fkey
-  FOREIGN KEY (movimento_id) REFERENCES public.movimenti_banca(id) ON DELETE CASCADE;
-
--- Step 4: Notify PostgREST to reload the schema cache
+-- Step 4: Reload PostgREST schema cache
 NOTIFY pgrst, 'reload schema';
