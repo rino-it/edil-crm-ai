@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ArrowLeft, Save, Trash2, Receipt, History, Wallet, BrainCircuit, FileText, AlertCircle, CheckCircle2, Clock } from "lucide-react"
+import { ArrowLeft, Save, Trash2, Receipt, History, Wallet, BrainCircuit, FileText, AlertCircle, CheckCircle2, Clock, Paperclip } from "lucide-react"
 import { PaginationControls } from "@/components/ui/pagination-controls"
 import { DEFAULT_PAGE_SIZE } from '@/types/pagination'
 import Link from 'next/link'
@@ -315,10 +315,12 @@ export default async function SoggettoDetailPage({
                     <tr>
                       <th className="p-4">Fattura</th>
                       <th className="p-4">Tipo</th>
+                      <th className="p-4">Categoria</th>
                       <th className="p-4">Data Scadenza</th>
                       <th className="p-4">Data Pianificata</th>
                       <th className="p-4">Stato</th>
                       <th className="p-4 text-right">Importo</th>
+                      <th className="p-4 text-center">Doc</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100">
@@ -337,6 +339,28 @@ export default async function SoggettoDetailPage({
                             {s.tipo}
                           </span>
                         </td>
+                        <td className="p-4">
+                          {(() => {
+                            const CATEGORIA_LABELS: Record<string, string> = {
+                              utenza: 'Utenza', multa: 'Multa', tassa: 'Tassa',
+                              burocrazia: 'Burocrazia', ufficio: 'Ufficio',
+                            };
+                            const CATEGORIA_COLORS: Record<string, string> = {
+                              utenza: 'bg-sky-100 text-sky-700', multa: 'bg-red-100 text-red-700',
+                              tassa: 'bg-purple-100 text-purple-700', burocrazia: 'bg-amber-100 text-amber-700',
+                              ufficio: 'bg-zinc-100 text-zinc-700',
+                            };
+                            const cat = s.categoria;
+                            if (cat && CATEGORIA_LABELS[cat]) {
+                              return (
+                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${CATEGORIA_COLORS[cat] || 'bg-zinc-100 text-zinc-600'}`}>
+                                  {CATEGORIA_LABELS[cat]}
+                                </span>
+                              );
+                            }
+                            return <span className="text-zinc-300 text-xs">—</span>;
+                          })()}
+                        </td>
                         <td className="p-4 text-zinc-500">{s.data_scadenza ? formatData(s.data_scadenza) : '-'}</td>
                         <td className="p-4 font-medium text-zinc-700">{s.data_pianificata ? formatData(s.data_pianificata) : '-'}</td>
                         <td className="p-4">
@@ -345,6 +369,15 @@ export default async function SoggettoDetailPage({
                           {s.stato === 'scaduto' && <span className="flex items-center gap-1.5 text-rose-600 text-xs font-bold"><AlertCircle size={14}/> Scaduto</span>}
                         </td>
                         <td className="p-4 text-right font-bold text-zinc-900">{formatEuro(s.importo_totale)}</td>
+                        <td className="p-4 text-center">
+                          {s.file_url ? (
+                            <a href={s.file_url} target="_blank" rel="noopener noreferrer" title="Apri documento allegato">
+                              <Paperclip className="h-4 w-4 text-blue-500 hover:text-blue-700 transition-colors inline-block" />
+                            </a>
+                          ) : (
+                            <span className="text-zinc-200">—</span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

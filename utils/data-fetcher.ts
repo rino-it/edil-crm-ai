@@ -3219,7 +3219,7 @@ export async function getScadenzeSoggetto(soggettoId: string) {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from('scadenze_pagamento')
-    .select('id, tipo, importo_totale, importo_pagato, data_scadenza, data_pianificata, stato, fattura_riferimento, descrizione')
+    .select('id, tipo, importo_totale, importo_pagato, data_scadenza, data_pianificata, stato, fattura_riferimento, descrizione, file_url, categoria')
     .eq('soggetto_id', soggettoId)
     .order('data_pianificata', { ascending: true }); // Ordina per la data operativa che abbiamo creato
 
