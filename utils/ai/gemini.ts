@@ -148,6 +148,7 @@ PER DOCUMENTI DI PAGAMENTO (utenze, multe, tasse, avvisi):
 {"category":"documento_pagamento","search_key":null,"summary":"...","reply_to_user":"","extracted_data":{"tipo_documento":"utenza","emittente":"Nome ente","numero_documento":"...","data_documento":"YYYY-MM-DD","importo_totale":0.00,"data_scadenza":"YYYY-MM-DD","codice_pagamento":null,"descrizione_completa":"trascrizione dettagliata","note":null}}
 
 REGOLE:
+- P.IVA: ATTENZIONE — estrai la P.IVA dell'EMITTENTE/FORNITORE (chi ha emesso il documento), NON quella del DESTINATARIO/CLIENTE. In fattura il fornitore è nel blocco "Cedente/Prestatore", il cliente nel blocco "Cessionario/Committente".
 - P.IVA: rimuovi prefisso "IT", deve essere 11 cifre
 - Importi: usa il punto come separatore decimale
 - Se non riesci a leggere un campo, metti null

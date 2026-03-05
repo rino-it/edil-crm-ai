@@ -279,6 +279,136 @@ export async function POST(request: NextRequest) {
         }
 
         // =====================================================
+        // CASO SOGGETTO: conferma match soggetto incerto
+        // =====================================================
+        if (pendingStep === 'waiting_confirm_soggetto' && type === 'text') {
+          const candidati = (pendingData._soggetti_candidati as Array<{id: string, ragione_sociale: string}>) || [];
+          const scelta = parseInt(rawContent.trim());
+
+          let soggettoScelto: {id: string, ragione_sociale: string} | null = null;
+          if (!isNaN(scelta) && scelta >= 1 && scelta <= candidati.length) {
+            soggettoScelto = candidati[scelta - 1];
+          } else {
+            // Cerca per testo libero tra i candidati
+            const match = candidati.find(c =>
+              c.ragione_sociale.toLowerCase().includes(rawContent.toLowerCase())
+            );
+            soggettoScelto = match || null;
+          }
+
+          if (soggettoScelto) {
+            // Aggiorna fornitore con il soggetto confermato
+            const nuoviDati = { ...pendingData };
+            if (nuoviDati.fornitore) {
+              nuoviDati.fornitore = { ...nuoviDati.fornitore as Record<string, unknown>, ragione_sociale: soggettoScelto.ragione_sociale };
+            } else if (nuoviDati.emittente) {
+              nuoviDati.emittente = soggettoScelto.ragione_sociale;
+            }
+            nuoviDati._soggetto_confermato_id = soggettoScelto.id;
+            delete nuoviDati._soggetti_candidati;
+
+            // Genera riepilogo appropriato in base al flusso
+            if (nuoviDati._flow_type === 'fattura') {
+              const fd = nuoviDati as unknown as FatturaEstratta;
+              const tipoDoc = fd.tipo_documento === 'proforma' ? 'PROFORMA'
+                : fd.tipo_documento === 'nota_credito' ? 'NOTA CREDITO' : 'FATTURA';
+              const righeText = (fd.righe?.length ?? 0) > 0
+                ? fd.righe.map((r, i) =>
+                    `  ${i + 1}. ${r.descrizione} (${r.quantita} ${r.unita_misura}) = EUR ${(r.importo || 0).toFixed(2)}`
+                  ).join('\n')
+                : '  (nessuna riga estratta)';
+              const riepilogo =
+                `*${tipoDoc} RILEVATA*\n\n` +
+                `Fornitore: *${soggettoScelto.ragione_sociale}*\n` +
+                `P.IVA: ${fd.fornitore?.partita_iva || 'non rilevata'}\n` +
+                `Numero: *${fd.numero_fattura || 'N/D'}*\n` +
+                `Data: ${fd.data_fattura || 'N/D'}\n` +
+                `*TOTALE: EUR ${(fd.importo_totale || 0).toFixed(2)}*\n\n` +
+                `Righe:\n${righeText}\n\n` +
+                `Confermi il salvataggio? Rispondi *Sì* o *No*`;
+              await sendWhatsAppMessage(sender, riepilogo);
+              await supabaseAdmin.from('chat_log').insert({
+                raw_text: rawContent, sender_number: sender, status_ai: 'completed',
+                interaction_step: 'waiting_confirm_fattura', temp_data: nuoviDati
+              });
+            } else {
+              // documento_pagamento
+              const dd = nuoviDati as unknown as DocumentoPagamentoEstratto;
+              const riepilogo =
+                `Fornitore confermato: *${soggettoScelto.ragione_sociale}*\n` +
+                `*IMPORTO: EUR ${(dd.importo_totale || 0).toFixed(2)}*\n\n` +
+                `Confermi il salvataggio? Rispondi *Sì* o *No*`;
+              await sendWhatsAppMessage(sender, riepilogo);
+              await supabaseAdmin.from('chat_log').insert({
+                raw_text: rawContent, sender_number: sender, status_ai: 'completed',
+                interaction_step: 'waiting_confirm_documento', temp_data: nuoviDati
+              });
+            }
+          } else {
+            await sendWhatsAppMessage(sender, 'Non ho capito. Rispondi con il numero o il nome esatto.');
+            await supabaseAdmin.from('chat_log').insert({
+              raw_text: rawContent, sender_number: sender, status_ai: 'completed',
+              interaction_step: 'waiting_confirm_soggetto', temp_data: pendingData
+            });
+          }
+          return new NextResponse('Ricevuto', { status: 200 });
+        }
+
+        // =====================================================
+        // CASO IMPORTO MANUALE: multa con importo illeggibile
+        // =====================================================
+        if (pendingStep === 'waiting_importo_documento' && type === 'text') {
+          const importoMatch = rawContent.match(/(\d+[.,]?\d*)\s*(?:euro|€|eur)?/i);
+
+          if (importoMatch) {
+            const importo = parseFloat(importoMatch[1].replace(',', '.'));
+            let dataScadenza: string | null = null;
+
+            // Parsing data dal testo (es. "entro 15/04/2026" o "scadenza 15 aprile")
+            const dataMatch = rawContent.match(/(?:entro|scadenza|scad\.?)\s*(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?/i)
+              || rawContent.match(/(\d{1,2})\s+(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)(?:\s+(\d{4}))?/i);
+
+            if (dataMatch) {
+              const giorno = dataMatch[1].padStart(2, '0');
+              let mese = dataMatch[2];
+              const MESI: Record<string, string> = {
+                gennaio:'01',febbraio:'02',marzo:'03',aprile:'04',maggio:'05',giugno:'06',
+                luglio:'07',agosto:'08',settembre:'09',ottobre:'10',novembre:'11',dicembre:'12'
+              };
+              mese = MESI[mese.toLowerCase()] || mese.padStart(2, '0');
+              const anno = dataMatch[3] ? (dataMatch[3].length === 2 ? '20' + dataMatch[3] : dataMatch[3]) : '2026';
+              dataScadenza = `${anno}-${mese}-${giorno}`;
+            }
+
+            // Aggiorna dati e mostra riepilogo per conferma
+            const nuoviDati = { ...pendingData, importo_totale: importo };
+            if (dataScadenza) nuoviDati.data_scadenza = dataScadenza;
+
+            const riepilogo =
+              `*🚨 MULTA — CONFERMA*\n\n` +
+              `Emittente: *${nuoviDati.emittente || 'N/D'}*\n` +
+              `Importo: *EUR ${importo.toFixed(2)}*\n` +
+              `Scadenza: ${dataScadenza || nuoviDati.data_scadenza || 'non specificata'}\n\n` +
+              `Confermi? *Sì* o *No*`;
+
+            await sendWhatsAppMessage(sender, riepilogo);
+            await supabaseAdmin.from('chat_log').insert({
+              raw_text: rawContent, sender_number: sender, status_ai: 'completed',
+              interaction_step: 'waiting_confirm_documento', temp_data: nuoviDati
+            });
+          } else {
+            await sendWhatsAppMessage(sender,
+              'Non ho capito. Scrivi importo e scadenza, ad esempio:\n*150 euro entro 15/04/2026*'
+            );
+            await supabaseAdmin.from('chat_log').insert({
+              raw_text: rawContent, sender_number: sender, status_ai: 'completed',
+              interaction_step: 'waiting_importo_documento', temp_data: pendingData
+            });
+          }
+          return new NextResponse('Ricevuto', { status: 200 });
+        }
+
+        // =====================================================
         // CASO FATTURA: conferma salvataggio fattura
         // =====================================================
         if (pendingStep === 'waiting_confirm_fattura' && type === 'text') {
@@ -621,67 +751,112 @@ export async function POST(request: NextRequest) {
               };
             } else {
               // Flusso fattura/proforma/nota_credito standard
-              const tipoDoc = datiFin.tipo_documento === 'proforma' ? 'PROFORMA'
-                : datiFin.tipo_documento === 'nota_credito' ? 'NOTA CREDITO' : 'FATTURA';
+              // Check match soggetto incerto (match multiplo in anagrafica)
+              const ragSoc = datiFin.fornitore?.ragione_sociale?.trim();
+              let skipRiepilogo = false;
+              if (ragSoc) {
+                const { data: matchesSogg } = await supabaseAdmin
+                  .from('anagrafica_soggetti')
+                  .select('id, ragione_sociale')
+                  .ilike('ragione_sociale', `%${ragSoc}%`)
+                  .limit(5);
 
-              const righeText = (datiFin.righe?.length ?? 0) > 0
-                ? datiFin.righe.map((r, i) =>
-                    `  ${i + 1}. ${r.descrizione} (${r.quantita} ${r.unita_misura}) = EUR ${(r.importo || 0).toFixed(2)}`
-                  ).join('\n')
-                : '  (nessuna riga estratta)';
+                if (matchesSogg && matchesSogg.length > 1) {
+                  // Match incerto → chiedi conferma soggetto
+                  const opzioni = matchesSogg.map((m: { id: string; ragione_sociale: string }, i: number) => `${i + 1}. ${m.ragione_sociale}`).join('\n');
+                  finalReply = `Ho trovato più corrispondenze per "${ragSoc}":\n\n${opzioni}\n\n` +
+                    `Rispondi con il numero corretto, oppure scrivi il nome esatto.`;
+                  interactionStep = 'waiting_confirm_soggetto';
+                  tempData = {
+                    _flow_type: 'fattura',
+                    ...datiFin,
+                    file_url: uploadedFileUrl,
+                    _soggetti_candidati: matchesSogg,
+                  };
+                  skipRiepilogo = true;
+                }
+              }
 
-              const riepilogo =
-                `*${tipoDoc} RILEVATA*\n\n` +
-                `Fornitore: *${datiFin.fornitore?.ragione_sociale || 'N/D'}*\n` +
-                `P.IVA: ${datiFin.fornitore?.partita_iva || 'non rilevata'}\n` +
-                `Numero: *${datiFin.numero_fattura || 'N/D'}*\n` +
-                `Data: ${datiFin.data_fattura || 'N/D'}\n` +
-                `Imponibile: EUR ${(datiFin.importo_imponibile || 0).toFixed(2)}\n` +
-                `IVA (${datiFin.aliquota_iva || 22}%): EUR ${(datiFin.importo_iva || 0).toFixed(2)}\n` +
-                `*TOTALE: EUR ${(datiFin.importo_totale || 0).toFixed(2)}*\n\n` +
-                `Righe:\n${righeText}\n\n` +
-                `Pagamento: ${datiFin.condizioni_pagamento || 'non specificato'}\n\n` +
-                `Confermi il salvataggio? Rispondi *Sì* o *No*`;
+              if (!skipRiepilogo) {
+                const tipoDoc = datiFin.tipo_documento === 'proforma' ? 'PROFORMA'
+                  : datiFin.tipo_documento === 'nota_credito' ? 'NOTA CREDITO' : 'FATTURA';
 
-              finalReply = riepilogo;
-              interactionStep = 'waiting_confirm_fattura';
-              tempData = {
-                _flow_type: 'fattura',
-                ...datiFin,
-                file_url: uploadedFileUrl,
-              };
+                const righeText = (datiFin.righe?.length ?? 0) > 0
+                  ? datiFin.righe.map((r, i) =>
+                      `  ${i + 1}. ${r.descrizione} (${r.quantita} ${r.unita_misura}) = EUR ${(r.importo || 0).toFixed(2)}`
+                    ).join('\n')
+                  : '  (nessuna riga estratta)';
+
+                const riepilogo =
+                  `*${tipoDoc} RILEVATA*\n\n` +
+                  `Fornitore: *${datiFin.fornitore?.ragione_sociale || 'N/D'}*\n` +
+                  `P.IVA: ${datiFin.fornitore?.partita_iva || 'non rilevata'}\n` +
+                  `Numero: *${datiFin.numero_fattura || 'N/D'}*\n` +
+                  `Data: ${datiFin.data_fattura || 'N/D'}\n` +
+                  `Imponibile: EUR ${(datiFin.importo_imponibile || 0).toFixed(2)}\n` +
+                  `IVA (${datiFin.aliquota_iva || 22}%): EUR ${(datiFin.importo_iva || 0).toFixed(2)}\n` +
+                  `*TOTALE: EUR ${(datiFin.importo_totale || 0).toFixed(2)}*\n\n` +
+                  `Righe:\n${righeText}\n\n` +
+                  `Pagamento: ${datiFin.condizioni_pagamento || 'non specificato'}\n\n` +
+                  `Confermi il salvataggio? Rispondi *Sì* o *No*`;
+
+                finalReply = riepilogo;
+                interactionStep = 'waiting_confirm_fattura';
+                tempData = {
+                  _flow_type: 'fattura',
+                  ...datiFin,
+                  file_url: uploadedFileUrl,
+                };
+              }
             }
           }
 
           else if (geminiResult.category === 'documento_pagamento' && geminiResult.extracted_data) {
             const dati = geminiResult.extracted_data as unknown as DocumentoPagamentoEstratto;
 
-            const TIPO_LABELS: Record<string, string> = {
-              utenza: '📋 BOLLETTA / UTENZA',
-              multa: '🚨 MULTA / CONTRAVVENZIONE',
-              tassa: '🏛️ TASSA / TRIBUTO',
-              avviso_pagamento: '📬 AVVISO DI PAGAMENTO'
-            };
-            const tipoLabel = TIPO_LABELS[dati.tipo_documento] || '📄 DOCUMENTO';
+            // BUG 4: Multa con importo non leggibile → chiedi importo manualmente
+            if (dati.tipo_documento === 'multa' && (!dati.importo_totale || dati.importo_totale === 0)) {
+              finalReply = `*🚨 MULTA RILEVATA*\n\n` +
+                `Emittente: *${dati.emittente || 'N/D'}*\n` +
+                `Numero verbale: ${dati.numero_documento || 'N/D'}\n` +
+                `Data: ${dati.data_documento || 'N/D'}\n\n` +
+                `L'importo non è leggibile. Scrivi importo e scadenza.\n` +
+                `Esempio: *150 euro entro 15/04/2026*`;
 
-            const riepilogo =
-              `*${tipoLabel} RILEVATO*\n\n` +
-              `Emittente: *${dati.emittente || 'N/D'}*\n` +
-              `Numero: ${dati.numero_documento || 'N/D'}\n` +
-              `Data: ${dati.data_documento || 'N/D'}\n` +
-              `*IMPORTO: EUR ${(dati.importo_totale || 0).toFixed(2)}*\n` +
-              `Scadenza: ${dati.data_scadenza || 'non specificata'}\n` +
-              (dati.codice_pagamento ? `Codice pagamento: ${dati.codice_pagamento}\n` : '') +
-              `\nDescrizione: ${dati.descrizione_completa?.substring(0, 200) || 'N/D'}\n\n` +
-              `Confermi il salvataggio? Rispondi *Sì* o *No*`;
+              interactionStep = 'waiting_importo_documento';
+              tempData = {
+                _flow_type: 'documento_pagamento',
+                ...dati,
+                file_url: uploadedFileUrl,
+              };
+            } else {
+              const TIPO_LABELS: Record<string, string> = {
+                utenza: '📋 BOLLETTA / UTENZA',
+                multa: '🚨 MULTA / CONTRAVVENZIONE',
+                tassa: '🏛️ TASSA / TRIBUTO',
+                avviso_pagamento: '📬 AVVISO DI PAGAMENTO'
+              };
+              const tipoLabel = TIPO_LABELS[dati.tipo_documento] || '📄 DOCUMENTO';
 
-            finalReply = riepilogo;
-            interactionStep = 'waiting_confirm_documento';
-            tempData = {
-              _flow_type: 'documento_pagamento',
-              ...dati,
-              file_url: uploadedFileUrl,
-            };
+              const riepilogo =
+                `*${tipoLabel} RILEVATO*\n\n` +
+                `Emittente: *${dati.emittente || 'N/D'}*\n` +
+                `Numero: ${dati.numero_documento || 'N/D'}\n` +
+                `Data: ${dati.data_documento || 'N/D'}\n` +
+                `*IMPORTO: EUR ${(dati.importo_totale || 0).toFixed(2)}*\n` +
+                `Scadenza: ${dati.data_scadenza || 'non specificata'}\n` +
+                (dati.codice_pagamento ? `Codice pagamento: ${dati.codice_pagamento}\n` : '') +
+                `\nDescrizione: ${dati.descrizione_completa?.substring(0, 200) || 'N/D'}\n\n` +
+                `Confermi il salvataggio? Rispondi *Sì* o *No*`;
+
+              finalReply = riepilogo;
+              interactionStep = 'waiting_confirm_documento';
+              tempData = {
+                _flow_type: 'documento_pagamento',
+                ...dati,
+                file_url: uploadedFileUrl,
+              };
+            }
           }
 
           else if (geminiResult.category === 'ddt' && geminiResult.extracted_data) {

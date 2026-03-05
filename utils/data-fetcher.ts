@@ -890,49 +890,53 @@ export interface InserisciFatturaInput {
   condizioni_pagamento?: string | null
   ddt_riferimento?: string[] | null
   file_url?: string | null
+  _soggetto_confermato_id?: string | null
 }
 
 export async function inserisciFatturaFornitore(data: InserisciFatturaInput): Promise<{ success: boolean; fattura_id?: string; error?: string }> {
   const supabase = getSupabaseAdmin();
 
   try {
-    // --- 1. Upsert soggetto fornitore ---
+    // --- 1. Match soggetto SOLO per ragione_sociale (NO P.IVA per evitare match sbagliati) ---
     let soggettoId: string | null = null;
     let condizioniPag: string = '30gg DFFM'; // fallback
+    const ragioneSociale = data.fornitore?.ragione_sociale?.trim();
     const piva = data.fornitore?.partita_iva?.replace(/\D/g, '');
-    const ragioneSociale = data.fornitore?.ragione_sociale;
 
-    if (piva && piva.length === 11) {
-      // Upsert by P.IVA
-      const { data: upserted, error: upsErr } = await supabase
+    // Se il webhook ha già confermato il soggetto, usalo direttamente
+    if (data._soggetto_confermato_id) {
+      soggettoId = data._soggetto_confermato_id;
+      const { data: s } = await supabase
         .from('anagrafica_soggetti')
-        .upsert(
-          { partita_iva: piva, ragione_sociale: ragioneSociale || 'Fornitore sconosciuto', tipo: 'fornitore' },
-          { onConflict: 'partita_iva' }
-        )
-        .select('id, condizioni_pagamento')
+        .select('condizioni_pagamento')
+        .eq('id', soggettoId)
         .single();
-
-      if (!upsErr && upserted) {
-        soggettoId = upserted.id;
-        condizioniPag = upserted.condizioni_pagamento || condizioniPag;
-      }
+      condizioniPag = s?.condizioni_pagamento || condizioniPag;
     } else if (ragioneSociale) {
-      // Cerca per ragione sociale (fuzzy)
-      const { data: existing } = await supabase
+      // Cerca match in anagrafica per ragione_sociale
+      const { data: matches } = await supabase
         .from('anagrafica_soggetti')
-        .select('id, condizioni_pagamento')
+        .select('id, ragione_sociale, condizioni_pagamento')
         .ilike('ragione_sociale', `%${ragioneSociale}%`)
-        .limit(1)
-        .single();
+        .limit(5);
 
-      if (existing) {
-        soggettoId = existing.id;
-        condizioniPag = existing.condizioni_pagamento || condizioniPag;
+      if (matches && matches.length === 1) {
+        // Match unico → usa direttamente
+        soggettoId = matches[0].id;
+        condizioniPag = matches[0].condizioni_pagamento || condizioniPag;
+      } else if (matches && matches.length > 1) {
+        // Match multiplo → prendi il primo risultato
+        soggettoId = matches[0].id;
+        condizioniPag = matches[0].condizioni_pagamento || condizioniPag;
       } else {
+        // Nessun match → crea nuovo soggetto
         const { data: created } = await supabase
           .from('anagrafica_soggetti')
-          .insert({ ragione_sociale: ragioneSociale, tipo: 'fornitore' })
+          .insert({
+            ragione_sociale: ragioneSociale,
+            tipo: 'fornitore',
+            partita_iva: (piva && piva.length === 11) ? piva : null,
+          })
           .select('id')
           .single();
         if (created) soggettoId = created.id;
@@ -1071,6 +1075,7 @@ export interface InserisciDocumentoInput {
   descrizione_completa?: string;
   note?: string | null;
   file_url?: string | null;
+  _soggetto_confermato_id?: string | null;
 }
 
 export async function inserisciDocumentoPagamento(data: InserisciDocumentoInput): Promise<{ success: boolean; scadenza_id?: string; error?: string }> {
@@ -1081,7 +1086,10 @@ export async function inserisciDocumentoPagamento(data: InserisciDocumentoInput)
     let soggettoId: string | null = null;
     const emittente = data.emittente?.trim();
 
-    if (emittente) {
+    // Se il webhook ha già confermato il soggetto, usalo direttamente
+    if (data._soggetto_confermato_id) {
+      soggettoId = data._soggetto_confermato_id;
+    } else if (emittente) {
       const { data: existing } = await supabase
         .from('anagrafica_soggetti')
         .select('id')
