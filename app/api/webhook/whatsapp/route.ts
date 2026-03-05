@@ -814,13 +814,16 @@ export async function POST(request: NextRequest) {
           else if (geminiResult.category === 'documento_pagamento' && geminiResult.extracted_data) {
             const dati = geminiResult.extracted_data as unknown as DocumentoPagamentoEstratto;
 
-            // BUG 4: Multa con importo non leggibile → chiedi importo manualmente
-            if (dati.tipo_documento === 'multa' && (!dati.importo_totale || dati.importo_totale === 0)) {
+            // BUG 4: Multe — importo spesso scritto a mano → chiedi SEMPRE conferma manuale
+            if (dati.tipo_documento === 'multa') {
+              const importoSuggerito = dati.importo_totale && dati.importo_totale > 0
+                ? `\nImporto letto: EUR ${dati.importo_totale.toFixed(2)} (potrebbe essere errato)\n` : '';
               finalReply = `*🚨 MULTA RILEVATA*\n\n` +
                 `Emittente: *${dati.emittente || 'N/D'}*\n` +
                 `Numero verbale: ${dati.numero_documento || 'N/D'}\n` +
-                `Data: ${dati.data_documento || 'N/D'}\n\n` +
-                `L'importo non è leggibile. Scrivi importo e scadenza.\n` +
+                `Data: ${dati.data_documento || 'N/D'}\n` +
+                importoSuggerito + `\n` +
+                `Scrivi importo e scadenza per conferma.\n` +
                 `Esempio: *150 euro entro 15/04/2026*`;
 
               interactionStep = 'waiting_importo_documento';
