@@ -944,17 +944,22 @@ export async function inserisciFatturaFornitore(data: InserisciFatturaInput): Pr
     }
 
     // --- 2. Deduplicazione fattura ---
-    if (data.numero_fattura && piva) {
-      const { data: dup } = await supabase
+    if (data.numero_fattura) {
+      let dupQuery = supabase
         .from('fatture_fornitori')
         .select('id')
-        .eq('numero_fattura', data.numero_fattura)
-        .eq('piva_fornitore', piva)
-        .limit(1)
-        .maybeSingle();
+        .eq('numero_fattura', data.numero_fattura);
+
+      if (piva && piva.length === 11) {
+        dupQuery = dupQuery.eq('piva_fornitore', piva);
+      } else if (ragioneSociale) {
+        dupQuery = dupQuery.ilike('ragione_sociale', ragioneSociale);
+      }
+
+      const { data: dup } = await dupQuery.limit(1).maybeSingle();
 
       if (dup) {
-        return { success: false, error: `Fattura n.${data.numero_fattura} da P.IVA ${piva} già presente (id: ${dup.id})` };
+        return { success: false, error: `Fattura n.${data.numero_fattura} da ${ragioneSociale || piva || 'N/D'} già presente (id: ${dup.id})` };
       }
     }
 

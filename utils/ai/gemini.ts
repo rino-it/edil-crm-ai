@@ -151,6 +151,7 @@ REGOLE:
 - P.IVA: ATTENZIONE — estrai la P.IVA dell'EMITTENTE/FORNITORE (chi ha emesso il documento), NON quella del DESTINATARIO/CLIENTE. In fattura il fornitore è nel blocco "Cedente/Prestatore", il cliente nel blocco "Cessionario/Committente".
 - P.IVA: rimuovi prefisso "IT", deve essere 11 cifre
 - Importi: usa il punto come separatore decimale
+- MULTE: se l'importo appare scritto a mano, stampigliato in modo poco leggibile, o non sei sicuro al 100%, metti importo_totale: 0 — verrà chiesto manualmente all'utente. NON inventare o indovinare importi su multe.
 - Se non riesci a leggere un campo, metti null
 - Rispondi SOLO con un JSON valido, senza markdown e senza backtick`
     
