@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse, NextRequest } from 'next/server'
 import { processWithGemini, synthesizeWithData, detectConfirmation, estraiFatturaFoto, type FatturaEstratta, type DocumentoPagamentoEstratto } from '@/utils/ai/gemini'
-import { sendWhatsAppMessage, downloadMedia } from '@/utils/whatsapp'
+import { sendWhatsAppMessage, sendWhatsAppImage, downloadMedia } from '@/utils/whatsapp'
 import { uploadFileToSupabase } from '@/utils/supabase/upload'
 import {
   getCantiereData,
@@ -306,6 +306,7 @@ export async function POST(request: NextRequest) {
             }
             nuoviDati._soggetto_confermato_id = soggettoScelto.id;
             delete nuoviDati._soggetti_candidati;
+            const soggettoFileUrl = nuoviDati.file_url as string | null;
 
             // Genera riepilogo appropriato in base al flusso
             if (nuoviDati._flow_type === 'fattura') {
@@ -326,7 +327,11 @@ export async function POST(request: NextRequest) {
                 `*TOTALE: EUR ${(fd.importo_totale || 0).toFixed(2)}*\n\n` +
                 `Righe:\n${righeText}\n\n` +
                 `Confermi il salvataggio? Rispondi *Sì* o *No*`;
-              await sendWhatsAppMessage(sender, riepilogo);
+              if (soggettoFileUrl) {
+                await sendWhatsAppImage(sender, soggettoFileUrl, riepilogo);
+              } else {
+                await sendWhatsAppMessage(sender, riepilogo);
+              }
               await supabaseAdmin.from('chat_log').insert({
                 raw_text: rawContent, sender_number: sender, status_ai: 'completed',
                 interaction_step: 'waiting_confirm_fattura', temp_data: nuoviDati
@@ -338,7 +343,11 @@ export async function POST(request: NextRequest) {
                 `Fornitore confermato: *${soggettoScelto.ragione_sociale}*\n` +
                 `*IMPORTO: EUR ${(dd.importo_totale || 0).toFixed(2)}*\n\n` +
                 `Confermi il salvataggio? Rispondi *Sì* o *No*`;
-              await sendWhatsAppMessage(sender, riepilogo);
+              if (soggettoFileUrl) {
+                await sendWhatsAppImage(sender, soggettoFileUrl, riepilogo);
+              } else {
+                await sendWhatsAppMessage(sender, riepilogo);
+              }
               await supabaseAdmin.from('chat_log').insert({
                 raw_text: rawContent, sender_number: sender, status_ai: 'completed',
                 interaction_step: 'waiting_confirm_documento', temp_data: nuoviDati
@@ -391,7 +400,12 @@ export async function POST(request: NextRequest) {
               `Scadenza: ${dataScadenza || nuoviDati.data_scadenza || 'non specificata'}\n\n` +
               `Confermi? *Sì* o *No*`;
 
-            await sendWhatsAppMessage(sender, riepilogo);
+            const importoFileUrl = nuoviDati.file_url as string | null;
+            if (importoFileUrl) {
+              await sendWhatsAppImage(sender, importoFileUrl, riepilogo);
+            } else {
+              await sendWhatsAppMessage(sender, riepilogo);
+            }
             await supabaseAdmin.from('chat_log').insert({
               raw_text: rawContent, sender_number: sender, status_ai: 'completed',
               interaction_step: 'waiting_confirm_documento', temp_data: nuoviDati
@@ -1016,7 +1030,13 @@ export async function POST(request: NextRequest) {
         }
 
         if (finalReply) {
-          await sendWhatsAppMessage(sender, finalReply)
+          // Se c'è un file allegato, invia come immagine con didascalia
+          const fileUrl = (tempData as Record<string, unknown>)?.file_url as string | null;
+          if (fileUrl) {
+            await sendWhatsAppImage(sender, fileUrl, finalReply);
+          } else {
+            await sendWhatsAppMessage(sender, finalReply);
+          }
         }
 
         await supabaseAdmin

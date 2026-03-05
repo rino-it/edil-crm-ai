@@ -41,6 +41,56 @@ export async function sendWhatsAppMessage(to: string, body: string) {
 }
 
 // ============================================================
+// INVIO IMMAGINE CON DIDASCALIA VIA WHATSAPP
+// ============================================================
+
+export async function sendWhatsAppImage(to: string, imageUrl: string, caption: string) {
+  const token = process.env.META_ACCESS_TOKEN;
+  const phoneId = process.env.META_PHONE_ID;
+
+  if (!token || !phoneId) {
+    console.error("❌ Manca il Token o il Phone ID per invio immagine!");
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      `https://graph.facebook.com/v19.0/${phoneId}/messages`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to: to,
+          type: "image",
+          image: {
+            link: imageUrl,
+            caption: caption,
+          },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("❌ Errore invio immagine WhatsApp:", JSON.stringify(errorData, null, 2));
+      // Fallback: invia come testo con link
+      await sendWhatsAppMessage(to, `${caption}\n\n📎 Allegato: ${imageUrl}`);
+    } else {
+      console.log(`📤 Immagine inviata a ${to}: "${caption.substring(0, 20)}..."`);
+    }
+  } catch (error) {
+    console.error("🔥 Errore fetch immagine WhatsApp:", error);
+    // Fallback: invia come testo con link
+    await sendWhatsAppMessage(to, `${caption}\n\n📎 Allegato: ${imageUrl}`);
+  }
+}
+
+// ============================================================
 // DOWNLOAD MEDIA DA WHATSAPP CLOUD API
 // ============================================================
 
