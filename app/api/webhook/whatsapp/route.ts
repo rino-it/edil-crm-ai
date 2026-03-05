@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse, NextRequest } from 'next/server'
-import { processWithGemini, synthesizeWithData, detectConfirmation } from '@/utils/ai/gemini'
+import { processWithGemini, synthesizeWithData, detectConfirmation, estraiFatturaFoto, type FatturaEstratta } from '@/utils/ai/gemini'
 import { sendWhatsAppMessage, downloadMedia } from '@/utils/whatsapp'
 import { uploadFileToSupabase } from '@/utils/supabase/upload'
 import {
@@ -9,6 +9,7 @@ import {
   formatCantiereForAI,
   formatCantieriListForAI,
   inserisciMovimento,
+  inserisciFatturaFornitore,
   risolviPersonale,
   inserisciPresenze,
   type PersonaRisolta,
@@ -208,6 +209,21 @@ export async function POST(request: NextRequest) {
         } else if (type === 'document') {
           rawContent = message.document?.caption || message.document?.filename || '[DOCUMENTO]'
           mediaId = message.document?.id
+        } else if (type === 'audio') {
+          // PREDISPOSIZIONE AUDIO: per ora log e skip — in futuro:
+          // 1. Download audio via mediaId
+          // 2. Invia a Gemini 2.5 Flash per trascrizione
+          // 3. Testo trascritto → classificazione normale
+          rawContent = '[MESSAGGIO VOCALE]'
+          mediaId = message.audio?.id || null
+          console.log(`🎤 Audio ricevuto da ${sender} (id: ${mediaId}) — supporto vocale non ancora attivo`)
+          await sendWhatsAppMessage(sender, '🎤 Ho ricevuto il tuo vocale, ma il supporto audio non è ancora attivo. Per ora scrivi un messaggio o invia una foto.')
+          await supabaseAdmin.from('chat_log').insert({
+            raw_text: rawContent, sender_number: sender, media_url: mediaId,
+            status_ai: 'skipped', ai_response: { category: 'audio', summary: 'Audio non ancora supportato' },
+            interaction_step: 'idle', temp_data: null,
+          })
+          return new NextResponse('Ricevuto', { status: 200 })
         }
 
         console.log(`👤 Mittente: ${sender} | Tipo: ${type} | Contenuto: ${rawContent}`)
@@ -259,6 +275,49 @@ export async function POST(request: NextRequest) {
                 await sendWhatsAppMessage(sender, "✅ Nessuna stima in sospeso. Tutti i preventivi sono aggiornati.");
                 return new NextResponse('Ricevuto', { status: 200 });
             }
+        }
+
+        // =====================================================
+        // CASO FATTURA: conferma salvataggio fattura
+        // =====================================================
+        if (pendingStep === 'waiting_confirm_fattura' && type === 'text') {
+          const conf = detectConfirmation(rawContent);
+          const fattData = pendingData as unknown as FatturaEstratta & { file_url?: string | null };
+
+          if (conf === 'yes') {
+            const result = await inserisciFatturaFornitore(fattData);
+            if (result.success) {
+              await sendWhatsAppMessage(sender,
+                `✅ Fattura n.${fattData.numero_fattura || 'N/D'} da *${fattData.fornitore?.ragione_sociale || 'N/D'}* salvata!\n` +
+                `Scadenza pagamento creata: *EUR ${(fattData.importo_totale || 0).toFixed(2)}*`
+              );
+              await supabaseAdmin.from('chat_log').insert({
+                raw_text: rawContent, sender_number: sender, status_ai: 'completed',
+                ai_response: { category: 'fattura', summary: 'Fattura confermata e salvata' },
+                interaction_step: 'completed', temp_data: null
+              });
+            } else {
+              await sendWhatsAppMessage(sender, `❌ Errore salvataggio: ${result.error}. Riprova inviando la foto.`);
+              await supabaseAdmin.from('chat_log').insert({
+                raw_text: rawContent, sender_number: sender, status_ai: 'error',
+                interaction_step: 'idle', temp_data: null
+              });
+            }
+          } else if (conf === 'no') {
+            await sendWhatsAppMessage(sender, "Fattura annullata. Puoi inviare un'altra foto.");
+            await supabaseAdmin.from('chat_log').insert({
+              raw_text: rawContent, sender_number: sender, status_ai: 'completed',
+              ai_response: { category: 'fattura', summary: 'Fattura annullata' },
+              interaction_step: 'idle', temp_data: null
+            });
+          } else {
+            await sendWhatsAppMessage(sender, 'Non ho capito. Rispondi *Sì* per confermare o *No* per annullare.');
+            await supabaseAdmin.from('chat_log').insert({
+              raw_text: rawContent, sender_number: sender, status_ai: 'completed',
+              interaction_step: 'waiting_confirm_fattura', temp_data: pendingData
+            });
+          }
+          return new NextResponse('Ricevuto', { status: 200 });
         }
 
         // =====================================================
@@ -475,7 +534,82 @@ export async function POST(request: NextRequest) {
         }
 
         else {
-          if (geminiResult.category === 'ddt' && geminiResult.extracted_data) {
+          if (geminiResult.category === 'fattura' && geminiResult.extracted_data) {
+            const dati = geminiResult.extracted_data as unknown as FatturaEstratta;
+
+            // Secondo passaggio: estrazione precisa se dati incompleti
+            let datiFin: FatturaEstratta = dati;
+            if (mediaData && (!dati.numero_fattura || !dati.importo_totale)) {
+              try {
+                datiFin = await estraiFatturaFoto(mediaData, rawContent);
+              } catch {
+                // mantieni dati dalla prima classificazione
+              }
+            }
+
+            // Se Gemini classifica come fattura ma il tipo_documento è 'ddt',
+            // redirige al flusso DDT standard
+            if (datiFin.tipo_documento === 'ddt') {
+              const ddtData = {
+                fornitore: datiFin.fornitore?.ragione_sociale || null,
+                importo: datiFin.importo_totale || 0,
+                materiali: datiFin.righe?.map(r => r.descrizione).join(', ') || 'Materiali vari',
+                data: datiFin.data_fattura || new Date().toISOString().split('T')[0],
+                numero_ddt: datiFin.numero_fattura || null,
+                cantiere_rilevato: null,
+              };
+
+              finalReply = `📄 *DDT rilevato*\n\n` +
+                `• Fornitore: ${ddtData.fornitore || 'N/D'}\n` +
+                `• Importo: €${ddtData.importo}\n` +
+                `• Materiali: ${ddtData.materiali}\n` +
+                `• Data: ${ddtData.data}\n\n` +
+                `A quale cantiere lo assegno? Scrivimi il nome.`;
+              interactionStep = 'waiting_cantiere';
+              tempData = {
+                _flow_type: 'ddt',
+                fornitore: ddtData.fornitore,
+                importo: ddtData.importo,
+                materiali: ddtData.materiali,
+                data: ddtData.data,
+                numero_ddt: ddtData.numero_ddt,
+                file_url: uploadedFileUrl,
+              };
+            } else {
+              // Flusso fattura/proforma/nota_credito standard
+              const tipoDoc = datiFin.tipo_documento === 'proforma' ? 'PROFORMA'
+                : datiFin.tipo_documento === 'nota_credito' ? 'NOTA CREDITO' : 'FATTURA';
+
+              const righeText = (datiFin.righe?.length ?? 0) > 0
+                ? datiFin.righe.map((r, i) =>
+                    `  ${i + 1}. ${r.descrizione} (${r.quantita} ${r.unita_misura}) = EUR ${(r.importo || 0).toFixed(2)}`
+                  ).join('\n')
+                : '  (nessuna riga estratta)';
+
+              const riepilogo =
+                `*${tipoDoc} RILEVATA*\n\n` +
+                `Fornitore: *${datiFin.fornitore?.ragione_sociale || 'N/D'}*\n` +
+                `P.IVA: ${datiFin.fornitore?.partita_iva || 'non rilevata'}\n` +
+                `Numero: *${datiFin.numero_fattura || 'N/D'}*\n` +
+                `Data: ${datiFin.data_fattura || 'N/D'}\n` +
+                `Imponibile: EUR ${(datiFin.importo_imponibile || 0).toFixed(2)}\n` +
+                `IVA (${datiFin.aliquota_iva || 22}%): EUR ${(datiFin.importo_iva || 0).toFixed(2)}\n` +
+                `*TOTALE: EUR ${(datiFin.importo_totale || 0).toFixed(2)}*\n\n` +
+                `Righe:\n${righeText}\n\n` +
+                `Pagamento: ${datiFin.condizioni_pagamento || 'non specificato'}\n\n` +
+                `Confermi il salvataggio? Rispondi *Sì* o *No*`;
+
+              finalReply = riepilogo;
+              interactionStep = 'waiting_confirm_fattura';
+              tempData = {
+                _flow_type: 'fattura',
+                ...datiFin,
+                file_url: uploadedFileUrl,
+              };
+            }
+          }
+
+          else if (geminiResult.category === 'ddt' && geminiResult.extracted_data) {
             const dati = geminiResult.extracted_data
             let cantiere = null
             if (dati.cantiere_rilevato) {

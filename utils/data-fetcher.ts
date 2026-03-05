@@ -869,6 +869,192 @@ export async function upsertSoggettoDaPIVA(
   return { success: true, id: data.id };
 }
 
+// ============================================================
+// INSERISCI FATTURA FORNITORE (da WhatsApp / estrazione AI)
+// 1) Upsert soggetto
+// 2) Deduplicazione su fatture_fornitori
+// 3) Insert testata fattura + righe dettaglio
+// 4) Calcolo scadenza + insert scadenze_pagamento
+// ============================================================
+export interface InserisciFatturaInput {
+  fornitore: { ragione_sociale: string; partita_iva: string | null; codice_fiscale?: string }
+  tipo_documento: string
+  numero_fattura: string | null
+  data_fattura: string | null
+  importo_totale: number
+  importo_imponibile?: number
+  aliquota_iva?: number
+  importo_iva?: number
+  righe?: Array<{ descrizione: string; quantita: number; unita_misura: string; prezzo_unitario: number; importo: number }>
+  condizioni_pagamento?: string | null
+  ddt_riferimento?: string[] | null
+  file_url?: string | null
+}
+
+export async function inserisciFatturaFornitore(data: InserisciFatturaInput): Promise<{ success: boolean; fattura_id?: string; error?: string }> {
+  const supabase = getSupabaseAdmin();
+
+  try {
+    // --- 1. Upsert soggetto fornitore ---
+    let soggettoId: string | null = null;
+    let condizioniPag: string = '30gg DFFM'; // fallback
+    const piva = data.fornitore?.partita_iva?.replace(/\D/g, '');
+    const ragioneSociale = data.fornitore?.ragione_sociale;
+
+    if (piva && piva.length === 11) {
+      // Upsert by P.IVA
+      const { data: upserted, error: upsErr } = await supabase
+        .from('anagrafica_soggetti')
+        .upsert(
+          { partita_iva: piva, ragione_sociale: ragioneSociale || 'Fornitore sconosciuto', tipo: 'fornitore' },
+          { onConflict: 'partita_iva' }
+        )
+        .select('id, condizioni_pagamento')
+        .single();
+
+      if (!upsErr && upserted) {
+        soggettoId = upserted.id;
+        condizioniPag = upserted.condizioni_pagamento || condizioniPag;
+      }
+    } else if (ragioneSociale) {
+      // Cerca per ragione sociale (fuzzy)
+      const { data: existing } = await supabase
+        .from('anagrafica_soggetti')
+        .select('id, condizioni_pagamento')
+        .ilike('ragione_sociale', `%${ragioneSociale}%`)
+        .limit(1)
+        .single();
+
+      if (existing) {
+        soggettoId = existing.id;
+        condizioniPag = existing.condizioni_pagamento || condizioniPag;
+      } else {
+        const { data: created } = await supabase
+          .from('anagrafica_soggetti')
+          .insert({ ragione_sociale: ragioneSociale, tipo: 'fornitore' })
+          .select('id')
+          .single();
+        if (created) soggettoId = created.id;
+      }
+    }
+
+    // --- 2. Deduplicazione fattura ---
+    if (data.numero_fattura && piva) {
+      const { data: dup } = await supabase
+        .from('fatture_fornitori')
+        .select('id')
+        .eq('numero_fattura', data.numero_fattura)
+        .eq('piva_fornitore', piva)
+        .limit(1)
+        .maybeSingle();
+
+      if (dup) {
+        return { success: false, error: `Fattura n.${data.numero_fattura} da P.IVA ${piva} già presente (id: ${dup.id})` };
+      }
+    }
+
+    // --- 3. Insert testata fattura ---
+    const { data: fattura, error: fatErr } = await supabase
+      .from('fatture_fornitori')
+      .insert({
+        ragione_sociale: ragioneSociale || 'Fornitore sconosciuto',
+        piva_fornitore: piva || null,
+        numero_fattura: data.numero_fattura || 'N/D',
+        data_fattura: data.data_fattura || new Date().toISOString().split('T')[0],
+        importo_totale: data.importo_totale || 0,
+        soggetto_id: soggettoId,
+        tipo_documento: data.tipo_documento || 'fattura',
+        importo_imponibile: data.importo_imponibile || null,
+        aliquota_iva: data.aliquota_iva || null,
+        importo_iva: data.importo_iva || null,
+        file_url: data.file_url || null,
+      })
+      .select('id')
+      .single();
+
+    if (fatErr) {
+      console.error('❌ Errore insert fattura:', fatErr);
+      return { success: false, error: fatErr.message };
+    }
+
+    const fatturaId = fattura?.id;
+
+    // --- 4. Insert righe dettaglio ---
+    if (fatturaId && data.righe && data.righe.length > 0) {
+      const righeRows = data.righe.map((r, i) => ({
+        fattura_id: fatturaId,
+        numero_linea: i + 1,
+        descrizione: r.descrizione || '',
+        quantita: r.quantita || 0,
+        unita_misura: r.unita_misura || '',
+        prezzo_totale: r.importo || 0,
+        ddt_riferimento: data.ddt_riferimento?.join(',') || null,
+      }));
+
+      const { error: righeErr } = await supabase
+        .from('fatture_dettaglio_righe')
+        .insert(righeRows);
+
+      if (righeErr) {
+        console.warn('⚠️ Errore insert righe dettaglio:', righeErr.message);
+        // Non blocchiamo — la testata è già stata salvata
+      }
+    }
+
+    // --- 5. Calcolo data scadenza ---
+    // Priorità: condizioni estratte dalla fattura → condizioni del soggetto → fallback +30gg
+    const condizioniEffettive = data.condizioni_pagamento || condizioniPag;
+    const dataFattura = data.data_fattura ? new Date(data.data_fattura) : new Date();
+    let dataScadenza: Date;
+
+    const matchGG = condizioniEffettive.match(/(\d+)\s*g/i);
+    if (matchGG) {
+      const giorniDilazione = parseInt(matchGG[1], 10);
+
+      if (/dffm|fine\s*mese/i.test(condizioniEffettive)) {
+        // DFFM: fine mese + giorni
+        const fineMese = new Date(dataFattura.getFullYear(), dataFattura.getMonth() + 1, 0);
+        dataScadenza = new Date(fineMese.getTime() + giorniDilazione * 24 * 60 * 60 * 1000);
+      } else {
+        dataScadenza = new Date(dataFattura.getTime() + giorniDilazione * 24 * 60 * 60 * 1000);
+      }
+    } else {
+      // Fallback +30gg
+      dataScadenza = new Date(dataFattura.getTime() + 30 * 24 * 60 * 60 * 1000);
+    }
+
+    const dataScadenzaStr = dataScadenza.toISOString().split('T')[0];
+
+    // --- 6. Insert scadenza pagamento ---
+    const { error: scadErr } = await supabase
+      .from('scadenze_pagamento')
+      .insert({
+        tipo: 'uscita',
+        soggetto_id: soggettoId,
+        fattura_riferimento: data.numero_fattura || 'N/D',
+        importo_totale: data.importo_totale || 0,
+        importo_pagato: 0,
+        data_emissione: data.data_fattura || new Date().toISOString().split('T')[0],
+        data_scadenza: dataScadenzaStr,
+        data_pianificata: dataScadenzaStr,
+        stato: 'da_pagare',
+        descrizione: `Fattura n. ${data.numero_fattura || 'N/D'} da ${ragioneSociale || 'Fornitore sconosciuto'}`,
+        file_url: data.file_url || null,
+      });
+
+    if (scadErr) {
+      console.warn('⚠️ Errore insert scadenza:', scadErr.message);
+      // La fattura è già salvata, non blocchiamo
+    }
+
+    return { success: true, fattura_id: fatturaId };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Errore sconosciuto';
+    console.error('🔥 Errore inserisciFatturaFornitore:', msg);
+    return { success: false, error: msg };
+  }
+}
+
 export async function getKPIAnagrafiche(): Promise<{ fornitori: number; clienti: number; totale_debiti: number; totale_crediti: number }> {
   const supabase = getSupabaseAdmin();
   

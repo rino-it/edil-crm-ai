@@ -48,7 +48,7 @@ export type DatiEstrattiDocumento = DatiEstrattiContratto | DatiEstrattiDocument
 // ============================================================
 
 export interface GeminiResponse {
-  category: "materiale" | "presenze" | "problema" | "budget" | "ddt" | "preventivo" | "altro" | "errore";
+  category: "materiale" | "presenze" | "problema" | "budget" | "ddt" | "fattura" | "preventivo" | "altro" | "errore";
   search_key?: string | null;
   summary: string;
   reply_to_user: string;
@@ -63,9 +63,27 @@ export interface GeminiResponse {
   };
 }
 
-interface MediaInput {
+export interface MediaInput {
   base64: string;
   mimeType: string;
+}
+
+// ============================================================
+// INTERFACCIA: Fattura Estratta da Foto
+// ============================================================
+export interface FatturaEstratta {
+  tipo_documento: 'fattura' | 'proforma' | 'nota_credito' | 'ddt';
+  fornitore: { ragione_sociale: string; partita_iva: string | null; codice_fiscale?: string };
+  numero_fattura: string | null;
+  data_fattura: string | null;
+  importo_imponibile: number;
+  aliquota_iva: number;
+  importo_iva: number;
+  importo_totale: number;
+  righe: Array<{ descrizione: string; quantita: number; unita_misura: string; prezzo_unitario: number; importo: number }>;
+  condizioni_pagamento: string | null;
+  ddt_riferimento: string[] | null;
+  note: string | null;
 }
 
 // ============================================================
@@ -92,16 +110,23 @@ export async function processWithGemini(
 
 MESSAGGIO UTENTE (didascalia foto): "${text}"
 
-⚠️ PRIORITÀ ESTRAZIONE DATI (DALLA FOTO):
-1. **NUMERO DOCUMENTO (DDT)**: Cerca in alto a destra o sinistra. Cerca etichette come "DDT n.", "Doc n.", "Numero". È CRUCIALE per la riconciliazione automatica con le fatture. Se è scritto a mano, fai del tuo meglio per decifrarlo.
-2. **FORNITORE**: Cerca il logo o l'intestazione in alto.
-3. **DATA**: Data del documento (formato YYYY-MM-DD).
-4. **MATERIALI**: Elenco breve dei materiali consegnati.
-5. **CANTIERE**: Cerca l'indirizzo di destinazione ("Luogo di destinazione") per capire il cantiere.
-6. **IMPORTO**: Se c'è un totale visibile (es. 1500.50), estrailo. Altrimenti metti 0.
+⚠️ PRIORITÀ RICONOSCIMENTO IMMAGINI:
+1. Se il documento ha NUMERO FATTURA, P.IVA fornitore, IMPORTO TOTALE con IVA → category="fattura"
+   Estrai: tipo_documento (fattura/proforma/nota_credito/ddt), fornitore (ragione_sociale, partita_iva), numero_fattura, data_fattura (YYYY-MM-DD), importo_imponibile, aliquota_iva, importo_iva, importo_totale, righe, condizioni_pagamento, note
+2. Se il documento è un DDT (Documento di Trasporto, bolla di consegna, non contiene importo IVA) → category="ddt"
+   Estrai: fornitore, materiali, numero_ddt, cantiere_rilevato (indirizzo destinazione), data, importo
 
-Rispondi SOLO con un JSON valido, senza markdown e senza backtick:
-{"category":"ddt","search_key":null,"summary":"...","reply_to_user":"","extracted_data":{"fornitore":"...","data":"YYYY-MM-DD","importo":0,"materiali":"...","numero_ddt":"12345","cantiere_rilevato":"...oppure null"}}`
+PER FATTURE - rispondi con struttura:
+{"category":"fattura","search_key":null,"summary":"...","reply_to_user":"","extracted_data":{"tipo_documento":"fattura","fornitore":{"ragione_sociale":"...","partita_iva":"..."},"numero_fattura":"...","data_fattura":"YYYY-MM-DD","importo_imponibile":0.00,"aliquota_iva":22,"importo_iva":0.00,"importo_totale":0.00,"righe":[{"descrizione":"...","quantita":1,"unita_misura":"pz","prezzo_unitario":0.00,"importo":0.00}],"condizioni_pagamento":null,"ddt_riferimento":null,"note":null}}
+
+PER DDT - rispondi con struttura:
+{"category":"ddt","search_key":null,"summary":"...","reply_to_user":"","extracted_data":{"fornitore":"...","data":"YYYY-MM-DD","importo":0,"materiali":"...","numero_ddt":"12345","cantiere_rilevato":"...oppure null"}}
+
+REGOLE:
+- P.IVA: rimuovi prefisso "IT", deve essere 11 cifre
+- Importi: usa il punto come separatore decimale
+- Se non riesci a leggere un campo, metti null
+- Rispondi SOLO con un JSON valido, senza markdown e senza backtick`
     
     : `Sei un assistente per un'impresa edile. Analizza il messaggio e classifica la richiesta.
 
@@ -145,6 +170,91 @@ Rispondi SOLO con un JSON valido, senza markdown e senza backtick:
   }
 
   return await callGemini(parts, hasImage);
+}
+
+// ============================================================
+// ESTRAZIONE FATTURA DA FOTO (chiamata dedicata, più precisa)
+// Usata come secondo passaggio quando la classificazione Gemini
+// ha riconosciuto category="fattura" ma i dati sono incompleti.
+// ============================================================
+
+export async function estraiFatturaFoto(
+  media: MediaInput,
+  caption?: string
+): Promise<FatturaEstratta> {
+  const apiKey = process.env.GOOGLE_API_KEY;
+  if (!apiKey) throw new Error("GOOGLE_API_KEY mancante");
+
+  const prompt = `Analizza questa foto di un documento contabile italiano.
+Estrai i seguenti dati in formato JSON:
+
+{
+  "tipo_documento": "fattura" | "proforma" | "nota_credito" | "ddt",
+  "fornitore": {
+    "ragione_sociale": "...",
+    "partita_iva": "solo cifre, 11 caratteri, senza IT",
+    "codice_fiscale": "se visibile"
+  },
+  "numero_fattura": "esattamente come scritto",
+  "data_fattura": "YYYY-MM-DD",
+  "importo_imponibile": 0.00,
+  "aliquota_iva": 22,
+  "importo_iva": 0.00,
+  "importo_totale": 0.00,
+  "righe": [
+    {
+      "descrizione": "...",
+      "quantita": 1,
+      "unita_misura": "pz",
+      "prezzo_unitario": 0.00,
+      "importo": 0.00
+    }
+  ],
+  "condizioni_pagamento": "30gg DFFM / Rimessa Diretta / ...",
+  "ddt_riferimento": ["12345"],
+  "note": "qualsiasi altra info rilevante"
+}
+
+${caption ? `DIDASCALIA UTENTE: "${caption}"` : ''}
+
+REGOLE:
+- Se non riesci a leggere un campo, metti null
+- P.IVA: rimuovi prefisso "IT", deve essere 11 cifre
+- Importi: usa il punto come separatore decimale
+- Data: converti sempre in YYYY-MM-DD
+- Se è un DDT (documento di trasporto), rispondi con tipo_documento: "ddt"
+- ddt_riferimento: array di stringhe o null se non presente
+- Rispondi SOLO con JSON valido, senza markdown e senza backtick`;
+
+  const parts: Array<Record<string, unknown>> = [
+    { text: prompt },
+    { inline_data: { mime_type: media.mimeType, data: media.base64 } },
+  ];
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+  console.log("🧾 estraiFatturaFoto: avvio estrazione precisa...");
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contents: [{ parts }] }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    console.error("🔥 Errore Gemini estraiFatturaFoto:", err);
+    throw new Error(`Errore API Gemini: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!aiText) throw new Error("Risposta vuota da Gemini");
+
+  const cleanJson = aiText.replace(/```json\s*|```\s*/g, "").trim();
+  console.log("✅ estraiFatturaFoto completato");
+
+  return JSON.parse(cleanJson) as FatturaEstratta;
 }
 
 // ============================================================
