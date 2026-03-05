@@ -48,7 +48,7 @@ export type DatiEstrattiDocumento = DatiEstrattiContratto | DatiEstrattiDocument
 // ============================================================
 
 export interface GeminiResponse {
-  category: "materiale" | "presenze" | "problema" | "budget" | "ddt" | "fattura" | "preventivo" | "altro" | "errore";
+  category: "materiale" | "presenze" | "problema" | "budget" | "ddt" | "fattura" | "documento_pagamento" | "preventivo" | "altro" | "errore";
   search_key?: string | null;
   summary: string;
   reply_to_user: string;
@@ -87,6 +87,21 @@ export interface FatturaEstratta {
 }
 
 // ============================================================
+// INTERFACCIA: Documento di Pagamento (utenze, multe, tasse, avvisi)
+// ============================================================
+export interface DocumentoPagamentoEstratto {
+  tipo_documento: 'utenza' | 'multa' | 'tassa' | 'avviso_pagamento';
+  emittente: string;
+  numero_documento: string | null;
+  data_documento: string | null;
+  importo_totale: number;
+  data_scadenza: string | null;
+  codice_pagamento: string | null;
+  descrizione_completa: string;
+  note: string | null;
+}
+
+// ============================================================
 // FUNZIONE PRINCIPALE: Analisi messaggio (testo + eventuale foto)
 // ============================================================
 
@@ -121,6 +136,16 @@ PER FATTURE - rispondi con struttura:
 
 PER DDT - rispondi con struttura:
 {"category":"ddt","search_key":null,"summary":"...","reply_to_user":"","extracted_data":{"fornitore":"...","data":"YYYY-MM-DD","importo":0,"materiali":"...","numero_ddt":"12345","cantiere_rilevato":"...oppure null"}}
+
+3. Se il documento è una BOLLETTA (Enel, gas, acqua, telefono), MULTA, TASSA (F24, TARI),
+   AVVISO DI PAGAMENTO (MAV, RAV, bollettino) o qualsiasi documento che richiede un pagamento
+   ma NON è una fattura con P.IVA fornitore → category="documento_pagamento"
+   Estrai: tipo_documento (utenza/multa/tassa/avviso_pagamento), emittente, numero_documento,
+   data_documento (YYYY-MM-DD), importo_totale, data_scadenza (YYYY-MM-DD), codice_pagamento
+   (codice MAV/RAV/bollettino se presente), descrizione_completa, note
+
+PER DOCUMENTI DI PAGAMENTO (utenze, multe, tasse, avvisi):
+{"category":"documento_pagamento","search_key":null,"summary":"...","reply_to_user":"","extracted_data":{"tipo_documento":"utenza","emittente":"Nome ente","numero_documento":"...","data_documento":"YYYY-MM-DD","importo_totale":0.00,"data_scadenza":"YYYY-MM-DD","codice_pagamento":null,"descrizione_completa":"trascrizione dettagliata","note":null}}
 
 REGOLE:
 - P.IVA: rimuovi prefisso "IT", deve essere 11 cifre

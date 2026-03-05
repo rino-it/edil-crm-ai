@@ -9,6 +9,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { XMLParser } from "fast-xml-parser";
+import { categorizzaScadenza } from "@/utils/categorizza-scadenza";
 
 // ============================================================
 // INFRASTRUTTURA: PAGINAZIONE CONDIVISA
@@ -1051,6 +1052,115 @@ export async function inserisciFatturaFornitore(data: InserisciFatturaInput): Pr
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Errore sconosciuto';
     console.error('🔥 Errore inserisciFatturaFornitore:', msg);
+    return { success: false, error: msg };
+  }
+}
+
+// ============================================================
+// INSERISCI DOCUMENTO DI PAGAMENTO (utenze, multe, tasse, avvisi)
+// NON crea record in fatture_fornitori — solo scadenze_pagamento
+// ============================================================
+export interface InserisciDocumentoInput {
+  tipo_documento: string;
+  emittente: string;
+  numero_documento?: string | null;
+  data_documento?: string | null;
+  importo_totale: number;
+  data_scadenza?: string | null;
+  codice_pagamento?: string | null;
+  descrizione_completa?: string;
+  note?: string | null;
+  file_url?: string | null;
+}
+
+export async function inserisciDocumentoPagamento(data: InserisciDocumentoInput): Promise<{ success: boolean; scadenza_id?: string; error?: string }> {
+  const supabase = getSupabaseAdmin();
+
+  try {
+    // --- 1. Cerca o crea soggetto emittente ---
+    let soggettoId: string | null = null;
+    const emittente = data.emittente?.trim();
+
+    if (emittente) {
+      const { data: existing } = await supabase
+        .from('anagrafica_soggetti')
+        .select('id')
+        .ilike('ragione_sociale', `%${emittente}%`)
+        .limit(1)
+        .maybeSingle();
+
+      if (existing) {
+        soggettoId = existing.id;
+      } else {
+        const { data: created } = await supabase
+          .from('anagrafica_soggetti')
+          .insert({ ragione_sociale: emittente, tipo: 'fornitore' })
+          .select('id')
+          .single();
+        if (created) soggettoId = created.id;
+      }
+    }
+
+    // --- 2. Mappa tipo_documento → categoria scadenza ---
+    const CATEGORIA_MAP: Record<string, string> = {
+      utenza: 'utenza',
+      multa: 'multa',
+      tassa: 'burocrazia',
+      avviso_pagamento: 'burocrazia',
+    };
+    let categoria = CATEGORIA_MAP[data.tipo_documento] || null;
+
+    // Fallback: usa categorizzaScadenza() se il tipo AI non è mappato
+    if (!categoria) {
+      categoria = categorizzaScadenza(data.descrizione_completa, emittente);
+    }
+
+    // --- 3. Calcola data scadenza ---
+    let dataScadenzaStr: string;
+    if (data.data_scadenza) {
+      dataScadenzaStr = data.data_scadenza;
+    } else {
+      const base = data.data_documento ? new Date(data.data_documento) : new Date();
+      const scad = new Date(base.getTime() + 30 * 24 * 60 * 60 * 1000);
+      dataScadenzaStr = scad.toISOString().split('T')[0];
+    }
+
+    // --- 4. Costruisci note complete ---
+    const noteComplete = [
+      data.codice_pagamento ? `Codice pagamento: ${data.codice_pagamento}` : null,
+      data.note,
+    ].filter(Boolean).join(' | ') || null;
+
+    // --- 5. Insert scadenza pagamento ---
+    const { data: scadenza, error: scadErr } = await supabase
+      .from('scadenze_pagamento')
+      .insert({
+        tipo: 'uscita',
+        soggetto_id: soggettoId,
+        fattura_riferimento: data.numero_documento || 'N/D',
+        importo_totale: data.importo_totale || 0,
+        importo_pagato: 0,
+        data_emissione: data.data_documento || new Date().toISOString().split('T')[0],
+        data_scadenza: dataScadenzaStr,
+        data_pianificata: dataScadenzaStr,
+        stato: 'da_pagare',
+        categoria,
+        descrizione: data.descrizione_completa || `${data.tipo_documento} - ${emittente || 'N/D'}`,
+        file_url: data.file_url || null,
+        note: noteComplete,
+      })
+      .select('id')
+      .single();
+
+    if (scadErr) {
+      console.error('❌ Errore insert scadenza documento:', scadErr.message);
+      return { success: false, error: scadErr.message };
+    }
+
+    return { success: true, scadenza_id: scadenza?.id };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Errore sconosciuto';
+    console.error('🔥 Errore inserisciDocumentoPagamento:', msg);
     return { success: false, error: msg };
   }
 }

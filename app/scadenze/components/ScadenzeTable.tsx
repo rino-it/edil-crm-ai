@@ -3,7 +3,7 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { CheckCircle2, MoreHorizontal, MessageCircle, CalendarPlus, ArrowRight } from "lucide-react"
+import { CheckCircle2, MoreHorizontal, MessageCircle, CalendarPlus, ArrowRight, Paperclip } from "lucide-react"
 import Link from "next/link"
 import { ScadenzaWithSoggetto } from "@/types/finanza"
 import { PaginatedResult } from "@/types/pagination"
@@ -29,6 +29,21 @@ export function ScadenzeTable({
   const formatEuro = (val: number) => 
     new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val);
 
+  const CATEGORIA_LABELS: Record<string, string> = {
+    utenza: 'Utenza',
+    multa: 'Multa',
+    sanzione: 'Sanzione',
+    burocrazia: 'Tasse',
+    ufficio: 'Ufficio',
+  };
+  const CATEGORIA_COLORS: Record<string, string> = {
+    utenza: 'border-yellow-300 bg-yellow-50 text-yellow-700',
+    multa: 'border-red-300 bg-red-50 text-red-700',
+    sanzione: 'border-red-300 bg-red-50 text-red-700',
+    burocrazia: 'border-purple-300 bg-purple-50 text-purple-700',
+    ufficio: 'border-blue-300 bg-blue-50 text-blue-700',
+  };
+
   if (data.length === 0) {
     return (
       <div className="p-12 text-center text-zinc-500 bg-white rounded-xl border border-zinc-200">
@@ -46,6 +61,7 @@ export function ScadenzeTable({
           <TableHeader className="bg-zinc-50/80">
             <TableRow>
               <TableHead className="font-semibold">Soggetto</TableHead>
+              <TableHead className="w-20 font-semibold">Tipo</TableHead>
               <TableHead className="font-semibold">Fattura / Rif.</TableHead>
               {showCantiereColumn && <TableHead className="font-semibold">Cantiere</TableHead>}
               <TableHead className="text-right font-semibold">Totale</TableHead>
@@ -66,9 +82,24 @@ export function ScadenzeTable({
                   <TableCell className="font-bold text-zinc-900">
                     {s.anagrafica_soggetti?.ragione_sociale || 'N/D'}
                   </TableCell>
+
+                  <TableCell>
+                    {s.categoria ? (
+                      <Badge variant="outline" className={`text-[10px] ${CATEGORIA_COLORS[s.categoria] || 'border-zinc-300 bg-zinc-50 text-zinc-600'}`}>
+                        {CATEGORIA_LABELS[s.categoria] || s.categoria}
+                      </Badge>
+                    ) : null}
+                  </TableCell>
                   
                   <TableCell className="text-xs font-mono text-zinc-600">
-                    {s.fattura_riferimento || '-'}
+                    <div className="flex items-center gap-1.5">
+                      {s.fattura_riferimento || '-'}
+                      {s.file_url && (
+                        <a href={s.file_url} target="_blank" rel="noopener noreferrer" title="Apri documento allegato">
+                          <Paperclip className="h-3.5 w-3.5 text-blue-500 hover:text-blue-700 transition-colors" />
+                        </a>
+                      )}
+                    </div>
                   </TableCell>
                   
                   {showCantiereColumn && (
@@ -162,8 +193,13 @@ export function ScadenzeTable({
                   <div className="font-black text-zinc-900 text-sm leading-tight uppercase truncate">
                     {s.anagrafica_soggetti?.ragione_sociale || 'N/D'}
                   </div>
-                  <div className="text-xs text-zinc-500 font-mono">
+                  <div className="text-xs text-zinc-500 font-mono flex items-center gap-1.5">
                     Fattura: {s.fattura_riferimento || '-'}
+                    {s.file_url && (
+                      <a href={s.file_url} target="_blank" rel="noopener noreferrer">
+                        <Paperclip className="h-3 w-3 text-blue-500" />
+                      </a>
+                    )}
                   </div>
                   {showCantiereColumn && (
                     <div className="text-xs text-zinc-600 truncate mt-1">

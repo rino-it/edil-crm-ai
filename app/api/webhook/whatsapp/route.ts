@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse, NextRequest } from 'next/server'
-import { processWithGemini, synthesizeWithData, detectConfirmation, estraiFatturaFoto, type FatturaEstratta } from '@/utils/ai/gemini'
+import { processWithGemini, synthesizeWithData, detectConfirmation, estraiFatturaFoto, type FatturaEstratta, type DocumentoPagamentoEstratto } from '@/utils/ai/gemini'
 import { sendWhatsAppMessage, downloadMedia } from '@/utils/whatsapp'
 import { uploadFileToSupabase } from '@/utils/supabase/upload'
 import {
@@ -10,6 +10,7 @@ import {
   formatCantieriListForAI,
   inserisciMovimento,
   inserisciFatturaFornitore,
+  inserisciDocumentoPagamento,
   risolviPersonale,
   inserisciPresenze,
   type PersonaRisolta,
@@ -321,6 +322,49 @@ export async function POST(request: NextRequest) {
         }
 
         // =====================================================
+        // CASO DOCUMENTO PAGAMENTO: conferma salvataggio
+        // =====================================================
+        if (pendingStep === 'waiting_confirm_documento' && type === 'text') {
+          const conf = detectConfirmation(rawContent);
+          const docData = pendingData as unknown as DocumentoPagamentoEstratto & { file_url?: string | null };
+
+          if (conf === 'yes') {
+            const result = await inserisciDocumentoPagamento(docData);
+            if (result.success) {
+              await sendWhatsAppMessage(sender,
+                `✅ Documento salvato! Scadenza creata: *EUR ${(docData.importo_totale || 0).toFixed(2)}* ` +
+                `(${docData.emittente || 'N/D'})`
+              );
+              await supabaseAdmin.from('chat_log').insert({
+                raw_text: rawContent, sender_number: sender, status_ai: 'completed',
+                ai_response: { category: 'documento_pagamento', summary: 'Documento confermato e salvato' },
+                interaction_step: 'completed', temp_data: null
+              });
+            } else {
+              await sendWhatsAppMessage(sender, `❌ Errore: ${result.error}. Riprova.`);
+              await supabaseAdmin.from('chat_log').insert({
+                raw_text: rawContent, sender_number: sender, status_ai: 'error',
+                interaction_step: 'idle', temp_data: null
+              });
+            }
+          } else if (conf === 'no') {
+            await sendWhatsAppMessage(sender, "Annullato. Puoi inviare un'altra foto.");
+            await supabaseAdmin.from('chat_log').insert({
+              raw_text: rawContent, sender_number: sender, status_ai: 'completed',
+              ai_response: { category: 'documento_pagamento', summary: 'Documento annullato' },
+              interaction_step: 'idle', temp_data: null
+            });
+          } else {
+            await sendWhatsAppMessage(sender, 'Non ho capito. Rispondi *Sì* per confermare o *No* per annullare.');
+            await supabaseAdmin.from('chat_log').insert({
+              raw_text: rawContent, sender_number: sender, status_ai: 'completed',
+              interaction_step: 'waiting_confirm_documento', temp_data: pendingData
+            });
+          }
+          return new NextResponse('Ricevuto', { status: 200 });
+        }
+
+        // =====================================================
         // CASO A-TER: L'utente sta VALIDANDO UN PREVENTIVO
         // =====================================================
         if (pendingStep === 'waiting_confirm_preventivo' && type === 'text') {
@@ -607,6 +651,37 @@ export async function POST(request: NextRequest) {
                 file_url: uploadedFileUrl,
               };
             }
+          }
+
+          else if (geminiResult.category === 'documento_pagamento' && geminiResult.extracted_data) {
+            const dati = geminiResult.extracted_data as unknown as DocumentoPagamentoEstratto;
+
+            const TIPO_LABELS: Record<string, string> = {
+              utenza: '📋 BOLLETTA / UTENZA',
+              multa: '🚨 MULTA / CONTRAVVENZIONE',
+              tassa: '🏛️ TASSA / TRIBUTO',
+              avviso_pagamento: '📬 AVVISO DI PAGAMENTO'
+            };
+            const tipoLabel = TIPO_LABELS[dati.tipo_documento] || '📄 DOCUMENTO';
+
+            const riepilogo =
+              `*${tipoLabel} RILEVATO*\n\n` +
+              `Emittente: *${dati.emittente || 'N/D'}*\n` +
+              `Numero: ${dati.numero_documento || 'N/D'}\n` +
+              `Data: ${dati.data_documento || 'N/D'}\n` +
+              `*IMPORTO: EUR ${(dati.importo_totale || 0).toFixed(2)}*\n` +
+              `Scadenza: ${dati.data_scadenza || 'non specificata'}\n` +
+              (dati.codice_pagamento ? `Codice pagamento: ${dati.codice_pagamento}\n` : '') +
+              `\nDescrizione: ${dati.descrizione_completa?.substring(0, 200) || 'N/D'}\n\n` +
+              `Confermi il salvataggio? Rispondi *Sì* o *No*`;
+
+            finalReply = riepilogo;
+            interactionStep = 'waiting_confirm_documento';
+            tempData = {
+              _flow_type: 'documento_pagamento',
+              ...dati,
+              file_url: uploadedFileUrl,
+            };
           }
 
           else if (geminiResult.category === 'ddt' && geminiResult.extracted_data) {

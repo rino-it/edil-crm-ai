@@ -17,6 +17,7 @@ export interface ScadenzaPagamento {
   metodo_pagamento?: string;
   categoria?: string | null;
   fattura_vendita_id?: string | null;
+  file_url?: string | null;
 }
 
 export interface ScadenzaWithSoggetto extends ScadenzaPagamento {
