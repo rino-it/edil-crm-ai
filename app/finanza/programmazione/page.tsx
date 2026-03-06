@@ -1,9 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle, TrendingUp, Wallet } from "lucide-react"
-import { getCashflowProjection } from '@/utils/data-fetcher'
+import { getCashflowProjection, getCashflowProjectionPerConto, getContiBanca } from '@/utils/data-fetcher'
 import ProgrammazioneChart from './ProgrammazioneChart'
 import { CashflowTable } from './CashflowTable'
+import { CashflowPerContoSection } from './CashflowPerContoSection'
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 
@@ -14,9 +15,14 @@ export default async function ProgrammazionePage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // FETCH SUL SERVER: Sicuro, usa l'admin key, nessun errore "supabaseKey is required"
-  // Aspettiamo i dati prima ancora di inviare l'HTML al browser. Addio caricamento infinito!
-  const data = await getCashflowProjection(90)
+  // Fetch parallelo: cashflow totale + per-conto + lista conti
+  const [data, perContoData, conti] = await Promise.all([
+    getCashflowProjection(90),
+    getCashflowProjectionPerConto(90),
+    getContiBanca(),
+  ])
+
+  const contiLista = conti.map((c: any) => ({ id: c.id, label: `${c.nome_banca} - ${c.nome_conto}` }))
 
   const formatEuro = (val: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val)
 
@@ -77,6 +83,12 @@ export default async function ProgrammazionePage() {
           <CashflowTable weeks={data.weeks} daPianificare={data.daPianificare} />
         </CardContent>
       </Card>
+
+      {/* Cashflow Per-Conto con suggerimenti giroconto */}
+      <CashflowPerContoSection
+        perContoData={perContoData}
+        contiLista={contiLista}
+      />
 
     </div>
   )

@@ -3120,6 +3120,258 @@ export async function getCashflowProjection(days = 90): Promise<CashflowProjecti
 }
 
 // ============================================================
+// CASHFLOW PER-CONTO: Proiezione per singolo conto bancario
+// ============================================================
+
+export interface CashflowContoDetail {
+  contoId: string;
+  nomeBanca: string;
+  nomeConto: string;
+  saldoAttuale: number;
+  weeks: CashflowWeek[];
+  hasNegativeWeeks: boolean;
+}
+
+export interface SuggerimentoGiroconto {
+  contoOrigineId: string;
+  contoOrigineNome: string;
+  contoDestinazioneId: string;
+  contoDestinazioneNome: string;
+  settimana: string;            // weekLabel
+  importo: number;
+  motivazione: string;
+}
+
+export interface CashflowPerContoProjection {
+  conti: CashflowContoDetail[];
+  nonAssegnate: CashflowWeek[];
+  suggerimentiGiroconto: SuggerimentoGiroconto[];
+}
+
+export async function getCashflowProjectionPerConto(days = 90): Promise<CashflowPerContoProjection> {
+  const supabase = getSupabaseAdmin();
+
+  // 1. Recupera tutti i conti attivi
+  const { data: contiRaw } = await supabase
+    .from('conti_banca')
+    .select('id, nome_banca, nome_conto, saldo_attuale')
+    .eq('attivo', true)
+    .order('nome_banca');
+
+  const contiAttivi = contiRaw || [];
+
+  // 2. Recupera scadenze aperte con conto_banca_id
+  const endDate = addDays(new Date(), days).toISOString().split('T')[0];
+  const { data: scadenze } = await supabase
+    .from('scadenze_pagamento')
+    .select(`
+      id, tipo, importo_totale, importo_pagato, data_scadenza, data_pianificata, stato,
+      fattura_riferimento, conto_banca_id,
+      anagrafica_soggetti:soggetto_id (ragione_sociale)
+    `)
+    .neq('stato', 'pagato')
+    .lte('data_scadenza', endDate);
+
+  const safeScadenze = scadenze || [];
+
+  // 3. Helper: genera le settimane vuote
+  const today = new Date();
+  const generateWeekBuckets = () => {
+    const map = new Map<string, { entrate: number; uscite: number; dettagli: CashflowDetailRow[]; weekStart: Date }>();
+    for (let i = 0; i < Math.ceil(days / 7); i++) {
+      const ws = startOfWeek(addDays(today, i * 7), { weekStartsOn: 1 });
+      const we = endOfWeek(ws, { weekStartsOn: 1 });
+      const label = `Dal ${format(ws, 'dd/MM')} al ${format(we, 'dd/MM')}`;
+      if (!map.has(label)) {
+        map.set(label, { entrate: 0, uscite: 0, dettagli: [], weekStart: ws });
+      }
+    }
+    return map;
+  };
+
+  // 4. Raggruppa le scadenze per conto_banca_id (null = non assegnate)
+  const perContoMap = new Map<string | null, typeof safeScadenze>();
+  safeScadenze.forEach(s => {
+    const contoId = (s as any).conto_banca_id as string | null;
+    if (!perContoMap.has(contoId)) perContoMap.set(contoId, []);
+    perContoMap.get(contoId)!.push(s);
+  });
+
+  // 5. Helper: processa un set di scadenze in weeks
+  const processScadenze = (items: typeof safeScadenze, weeksMap: ReturnType<typeof generateWeekBuckets>) => {
+    items.forEach(s => {
+      const residuo = Number(s.importo_totale) - Number(s.importo_pagato || 0);
+      if (residuo <= 0) return;
+
+      const dataPianificata = (s as any).data_pianificata as string | null | undefined;
+      const detail: CashflowDetailRow = {
+        id: (s as any).id,
+        ragione_sociale: (s as any).anagrafica_soggetti?.ragione_sociale || 'N/D',
+        fattura_riferimento: s.fattura_riferimento ?? null,
+        data_effettiva: dataPianificata || s.data_scadenza,
+        importo_residuo: residuo,
+        tipo: s.tipo as 'entrata' | 'uscita',
+      };
+
+      if (!dataPianificata) return; // skip non pianificate per la vista per-conto
+
+      const dScadenza = new Date(dataPianificata);
+      if (isBefore(dScadenza, startOfWeek(today, { weekStartsOn: 1 }))) return; // passate → ignora
+
+      const ws = startOfWeek(dScadenza, { weekStartsOn: 1 });
+      const we = endOfWeek(ws, { weekStartsOn: 1 });
+      const label = `Dal ${format(ws, 'dd/MM')} al ${format(we, 'dd/MM')}`;
+
+      if (weeksMap.has(label)) {
+        const current = weeksMap.get(label)!;
+        if (s.tipo === 'entrata') current.entrate += residuo;
+        else current.uscite += residuo;
+        current.dettagli.push(detail);
+      }
+    });
+  };
+
+  // 6. Genera proiezione per ogni conto
+  const contiResult: CashflowContoDetail[] = [];
+
+  for (const conto of contiAttivi) {
+    const weeksMap = generateWeekBuckets();
+    const scadenzeConto = perContoMap.get(conto.id) || [];
+    processScadenze(scadenzeConto, weeksMap);
+
+    let runningBalance = Number(conto.saldo_attuale) || 0;
+    let hasNegativeWeeks = false;
+    const weeks: CashflowWeek[] = [];
+
+    Array.from(weeksMap.entries()).forEach(([weekLabel, vals]) => {
+      runningBalance += vals.entrate;
+      runningBalance -= vals.uscite;
+      if (runningBalance < 0) hasNegativeWeeks = true;
+
+      weeks.push({
+        weekLabel,
+        weekStart: vals.weekStart.toISOString(),
+        entrate: vals.entrate,
+        uscite: vals.uscite,
+        saldoPrevisto: runningBalance,
+        dettagli: vals.dettagli.sort((a, b) => a.data_effettiva.localeCompare(b.data_effettiva)),
+      });
+    });
+
+    contiResult.push({
+      contoId: conto.id,
+      nomeBanca: conto.nome_banca,
+      nomeConto: conto.nome_conto,
+      saldoAttuale: Number(conto.saldo_attuale) || 0,
+      weeks,
+      hasNegativeWeeks,
+    });
+  }
+
+  // 7. Scadenze non assegnate (conto_banca_id = null)
+  const nonAssegnateScadenze = perContoMap.get(null) || [];
+  const nonAssegnateWeeksMap = generateWeekBuckets();
+  // Includi anche le non pianificate per il bucket non assegnate
+  const nonAssegnateAll: CashflowWeek[] = [];
+  nonAssegnateScadenze.forEach(s => {
+    const residuo = Number(s.importo_totale) - Number(s.importo_pagato || 0);
+    if (residuo <= 0) return;
+
+    const dataPianificata = (s as any).data_pianificata as string | null | undefined;
+    const detail: CashflowDetailRow = {
+      id: (s as any).id,
+      ragione_sociale: (s as any).anagrafica_soggetti?.ragione_sociale || 'N/D',
+      fattura_riferimento: s.fattura_riferimento ?? null,
+      data_effettiva: dataPianificata || s.data_scadenza,
+      importo_residuo: residuo,
+      tipo: s.tipo as 'entrata' | 'uscita',
+    };
+
+    if (!dataPianificata || isBefore(new Date(dataPianificata), startOfWeek(today, { weekStartsOn: 1 }))) {
+      // Non pianificate o passate → prima settimana
+      const firstKey = Array.from(nonAssegnateWeeksMap.keys())[0];
+      if (firstKey) {
+        const bucket = nonAssegnateWeeksMap.get(firstKey)!;
+        if (s.tipo === 'entrata') bucket.entrate += residuo;
+        else bucket.uscite += residuo;
+        bucket.dettagli.push(detail);
+      }
+      return;
+    }
+
+    const ws = startOfWeek(new Date(dataPianificata), { weekStartsOn: 1 });
+    const we = endOfWeek(ws, { weekStartsOn: 1 });
+    const label = `Dal ${format(ws, 'dd/MM')} al ${format(we, 'dd/MM')}`;
+
+    if (nonAssegnateWeeksMap.has(label)) {
+      const current = nonAssegnateWeeksMap.get(label)!;
+      if (s.tipo === 'entrata') current.entrate += residuo;
+      else current.uscite += residuo;
+      current.dettagli.push(detail);
+    }
+  });
+
+  Array.from(nonAssegnateWeeksMap.entries()).forEach(([weekLabel, vals]) => {
+    if (vals.entrate > 0 || vals.uscite > 0 || vals.dettagli.length > 0) {
+      nonAssegnateAll.push({
+        weekLabel,
+        weekStart: vals.weekStart.toISOString(),
+        entrate: vals.entrate,
+        uscite: vals.uscite,
+        saldoPrevisto: 0, // non ha saldo proprio
+        dettagli: vals.dettagli.sort((a, b) => a.data_effettiva.localeCompare(b.data_effettiva)),
+      });
+    }
+  });
+
+  // 8. Algoritmo suggerimento giroconti
+  const suggerimentiGiroconto: SuggerimentoGiroconto[] = [];
+
+  for (const conto of contiResult) {
+    if (!conto.hasNegativeWeeks) continue;
+
+    for (let i = 0; i < conto.weeks.length; i++) {
+      const week = conto.weeks[i];
+      if (week.saldoPrevisto >= 0) continue;
+
+      const deficit = Math.abs(week.saldoPrevisto);
+      const importoSuggerito = Math.ceil(deficit * 1.1); // +10% buffer
+
+      // Cerca conto con surplus sufficiente nella stessa settimana
+      let miglioreOrigine: CashflowContoDetail | null = null;
+      let miglioreRiserva = 0;
+
+      for (const altro of contiResult) {
+        if (altro.contoId === conto.contoId) continue;
+        const altroWeek = altro.weeks[i];
+        if (!altroWeek) continue;
+        const surplusDisponibile = altroWeek.saldoPrevisto - importoSuggerito;
+        if (altroWeek.saldoPrevisto > importoSuggerito && altroWeek.saldoPrevisto > miglioreRiserva) {
+          miglioreOrigine = altro;
+          miglioreRiserva = altroWeek.saldoPrevisto;
+        }
+      }
+
+      if (miglioreOrigine) {
+        // Suggerisci per la settimana PRECEDENTE (per anticipare)
+        const settimanaTarget = i > 0 ? conto.weeks[i - 1].weekLabel : week.weekLabel;
+        suggerimentiGiroconto.push({
+          contoOrigineId: miglioreOrigine.contoId,
+          contoOrigineNome: `${miglioreOrigine.nomeBanca} - ${miglioreOrigine.nomeConto}`,
+          contoDestinazioneId: conto.contoId,
+          contoDestinazioneNome: `${conto.nomeBanca} - ${conto.nomeConto}`,
+          settimana: settimanaTarget,
+          importo: importoSuggerito,
+          motivazione: `Deficit previsto di ${new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(deficit)} nella settimana "${week.weekLabel}"`,
+        });
+      }
+    }
+  }
+
+  return { conti: contiResult, nonAssegnate: nonAssegnateAll, suggerimentiGiroconto };
+}
+
+// ============================================================
 // FASE 5: RICONCILIAZIONE E CONTI BANCA
 // ============================================================
 
@@ -3759,14 +4011,17 @@ export async function inserisciMutuoConRate(input: {
     if (stato === 'da_pagare') {
       scadenzeBatch.push({
         descrizione: `Rata ${i + 1}/${input.numero_rate} mutuo ${input.banca_erogante}${input.scopo ? ' - ' + input.scopo : ''}`,
-        importo: input.importo_rata,
+        importo_totale: input.importo_rata,
+        importo_pagato: 0,
         data_scadenza: dataStr,
+        data_pianificata: dataStr,
         tipo: 'uscita',
         stato: 'da_pagare',
         categoria: 'rata_mutuo',
         soggetto_id: input.soggetto_id || null,
         fonte: 'mutuo',
         auto_domiciliazione: true,
+        conto_banca_id: input.conto_banca_id,
       });
     }
   }

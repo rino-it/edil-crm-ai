@@ -13,6 +13,7 @@ export interface ScadenzaPagamento {
   stato: 'da_pagare' | 'parziale' | 'pagato' | 'scaduto' | 'in_contestazione';
   soggetto_id: string;
   cantiere_id?: string | null;
+  conto_banca_id?: string | null;
   descrizione?: string;
   metodo_pagamento?: string;
   categoria?: string | null;
@@ -33,6 +34,10 @@ export interface ScadenzaWithSoggetto extends ScadenzaPagamento {
     codice: string;
     titolo: string;
   };
+  conti_banca?: {
+    nome_banca: string;
+    nome_conto: string;
+  } | null;
 }
 
 export interface ScadenzaCantiereAllocation {
