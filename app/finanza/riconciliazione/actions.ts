@@ -122,11 +122,27 @@ export async function creaTitolo(formData: FormData) {
     throw new Error("Dati obbligatori mancanti per il titolo");
   }
 
+  const soggetto_id = (formData.get("soggetto_id") as string) || undefined;
+
+  // Risolvi il nome del fornitore dal soggetto selezionato
+  let fornitore: string | undefined
+  if (soggetto_id) {
+    const { createClient: createAdminClient } = await import('@/utils/supabase/server')
+    const supabase = await createAdminClient()
+    const { data: sogg } = await supabase
+      .from('anagrafica_soggetti')
+      .select('ragione_sociale')
+      .eq('id', soggetto_id)
+      .single()
+    fornitore = sogg?.ragione_sociale || undefined
+  }
+
   await inserisciTitolo({
     tipo,
     importo,
     data_scadenza,
-    soggetto_id: (formData.get("soggetto_id") as string) || undefined,
+    soggetto_id,
+    fornitore,
     data_emissione: (formData.get("data_emissione") as string) || undefined,
     banca_incasso: (formData.get("banca_incasso") as string) || undefined,
     numero_titolo: (formData.get("numero_titolo") as string) || undefined,

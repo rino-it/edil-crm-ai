@@ -701,6 +701,7 @@ export async function POST(request: NextRequest) {
                 numero_titolo: titData.numero_titolo || undefined,
                 banca_incasso: titData.banca || undefined,
                 soggetto_id: soggettoId,
+                fornitore: titData.emittente || undefined,
                 note: titData.emittente ? `Fornitore: ${titData.emittente}` : undefined,
                 file_url: titData.file_url || undefined,
                 ocr_data: titData as unknown as Record<string, unknown>,

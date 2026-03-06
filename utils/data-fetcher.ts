@@ -3835,6 +3835,7 @@ export async function getTitoli(filtroStato?: string): Promise<Titolo[]> {
 export async function inserisciTitolo(input: {
   tipo: 'assegno' | 'cambiale';
   soggetto_id?: string;
+  fornitore?: string;
   importo: number;
   data_scadenza: string;
   data_emissione?: string;
@@ -3847,11 +3848,13 @@ export async function inserisciTitolo(input: {
   const supabase = getSupabaseAdmin();
 
   // 1. Crea la scadenza associata
-  const tipoLabel = input.tipo === 'assegno' ? 'Assegno' : 'Cambiale';
+  const tipoLabel = input.tipo === 'assegno' ? 'ASSEGNO' : 'CAMBIALE';
+  const numeroLabel = input.numero_titolo ? ` N. ${input.numero_titolo}` : '';
+  const fornitoreLabel = input.fornitore ? ` - ${input.fornitore}` : (input.banca_incasso ? ` - ${input.banca_incasso}` : '');
   const { data: scadenza, error: errSc } = await supabase
     .from('scadenze_pagamento')
     .insert({
-      descrizione: `${tipoLabel} ${input.numero_titolo ? '#' + input.numero_titolo : ''} - ${input.banca_incasso || 'Da pagare'}`.trim(),
+      descrizione: `${tipoLabel}${numeroLabel}${fornitoreLabel}`.trim(),
       importo_totale: input.importo,
       importo_pagato: 0,
       data_scadenza: input.data_scadenza,
