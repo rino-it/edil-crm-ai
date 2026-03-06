@@ -1953,6 +1953,48 @@ export async function confermaRiconciliazione(
       ai_confidence,
       ai_motivo
     });
+
+    // ==========================================
+    // POST-CONFERMA: Aggiorna rate_mutuo se collegata
+    // ==========================================
+    const { data: rataCollegata } = await supabase
+      .from('rate_mutuo')
+      .select('id')
+      .eq('scadenza_id', scadenza_id)
+      .single();
+
+    if (rataCollegata) {
+      await supabase
+        .from('rate_mutuo')
+        .update({
+          stato: 'pagato',
+          data_pagamento: new Date().toISOString().split('T')[0],
+          movimento_banca_id: movimento_id,
+        })
+        .eq('id', rataCollegata.id);
+      console.log(`🏦 Rata mutuo ${rataCollegata.id} marcata come pagata`);
+    }
+
+    // ==========================================
+    // POST-CONFERMA: Aggiorna titolo se collegato
+    // ==========================================
+    const { data: titoloCollegato } = await supabase
+      .from('titoli')
+      .select('id')
+      .eq('scadenza_id', scadenza_id)
+      .single();
+
+    if (titoloCollegato) {
+      await supabase
+        .from('titoli')
+        .update({
+          stato: 'pagato',
+          data_pagamento: new Date().toISOString().split('T')[0],
+          movimento_banca_id: movimento_id,
+        })
+        .eq('id', titoloCollegato.id);
+      console.log(`📝 Titolo ${titoloCollegato.id} marcato come pagato`);
+    }
   }
 }
 
@@ -2283,6 +2325,7 @@ export function normalizzaNome(nome: string): string {
 export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[], soggetti: any[], personale: any[] = [], conti_banca: any[] = []) {
   const matchati: any[] = [];
   const nonMatchati: any[] = [];
+  const supabase = getSupabaseAdmin();
 
   console.log(`\n🔍 INIZIO PRE-MATCH DETERMINISTICO su ${movimenti.length} movimenti.`);
 
@@ -2335,12 +2378,91 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
     }
 
     // ==========================================
-    // 0.7. Pre-Filtro RATA MUTUO
+    // 0.7. Pre-Filtro RATA MUTUO (con match rate_mutuo)
     // ==========================================
     const regexMutuo = /\b(rata\s+mutuo|mutuo\s+n|est\.?\s*mutuo|rimborso\s+mutuo|addeb.*mutuo)\b/i;
     const isMutuo = regexMutuo.test(causale) || (m.xml_causale && regexMutuo.test(m.xml_causale));
-    // Non fare continue qui — lascia proseguire allo Step 3 (soggetti speciali)
-    // per linkare il soggetto_id della banca che eroga il mutuo
+
+    if (isMutuo) {
+      // Cerca la rata_mutuo corrispondente per importo e data
+      const importoAbs = Math.abs(m.importo);
+      const dataMov = m.data_operazione || m.data_valuta;
+
+      const { data: rataMatch } = await supabase
+        .from('rate_mutuo')
+        .select('id, mutuo_id, numero_rata, importo_rata, data_scadenza, mutui!inner(banca_erogante, scopo)')
+        .eq('stato', 'da_pagare')
+        .gte('data_scadenza', new Date(new Date(dataMov).getTime() - 15 * 86400000).toISOString().slice(0, 10))
+        .lte('data_scadenza', new Date(new Date(dataMov).getTime() + 15 * 86400000).toISOString().slice(0, 10))
+        .order('data_scadenza', { ascending: true });
+
+      let rataFound: any = null;
+      if (rataMatch) {
+        // Match per importo (tolleranza 1€ per spese incasso)
+        rataFound = rataMatch.find((r: any) => Math.abs(r.importo_rata - importoAbs) <= 1.0);
+      }
+
+      if (rataFound) {
+        const mutuoInfo = rataFound.mutui as any;
+        matchati.push({
+          movimento_id: m.id,
+          scadenza_id: rataFound.scadenza_id || null,
+          soggetto_id: null,
+          confidence: 0.98,
+          motivo: `Rata mutuo ${mutuoInfo?.banca_erogante || ''} ${mutuoInfo?.scopo || ''} - rata ${rataFound.numero_rata}`,
+          ragione_sociale: mutuoInfo?.banca_erogante || 'Mutuo',
+          categoria: 'rata_mutuo',
+          rata_mutuo_id: rataFound.id,
+        });
+        continue;
+      } else {
+        // Mutuo generico senza match rata_mutuo specifico — lascia proseguire per soggetto match
+      }
+    }
+
+    // ==========================================
+    // 0.8. Pre-Filtro ASSEGNI e CAMBIALI (titoli)
+    // ==========================================
+    const regexAssegno = /\b(assegno|versamento\s+assegn[io]|incasso\s+assegn[io]|assegn[io]\s+n|a\/b\s+n)\b/i;
+    const regexCambiale = /\b(cambiale|pagar[oò]|tratta|effett[io]\s+n|ri\.?ba\.?)\b/i;
+    const isTitolo = regexAssegno.test(causale) || regexCambiale.test(causale) ||
+      (m.xml_causale && (regexAssegno.test(m.xml_causale) || regexCambiale.test(m.xml_causale)));
+
+    if (isTitolo && m.importo > 0) {
+      // Solo incassi (entrate positive)
+      const importoAbs = Math.abs(m.importo);
+      const dataMov = m.data_operazione || m.data_valuta;
+
+      const { data: titoloMatch } = await supabase
+        .from('titoli')
+        .select('id, tipo, importo, data_scadenza, numero_titolo, scadenza_id, anagrafica_soggetti(ragione_sociale)')
+        .eq('stato', 'in_essere')
+        .gte('data_scadenza', new Date(new Date(dataMov).getTime() - 30 * 86400000).toISOString().slice(0, 10))
+        .lte('data_scadenza', new Date(new Date(dataMov).getTime() + 30 * 86400000).toISOString().slice(0, 10))
+        .order('data_scadenza', { ascending: true });
+
+      let titoloFound: any = null;
+      if (titoloMatch) {
+        // Match per importo esatto (tolleranza 0.50€)
+        titoloFound = titoloMatch.find((t: any) => Math.abs(t.importo - importoAbs) <= 0.50);
+      }
+
+      if (titoloFound) {
+        const sogg = titoloFound.anagrafica_soggetti as any;
+        const tipoLabel = titoloFound.tipo === 'assegno' ? 'Assegno' : 'Cambiale';
+        matchati.push({
+          movimento_id: m.id,
+          scadenza_id: titoloFound.scadenza_id || null,
+          soggetto_id: null,
+          confidence: 0.96,
+          motivo: `${tipoLabel} ${titoloFound.numero_titolo ? '#' + titoloFound.numero_titolo : ''} ${sogg?.ragione_sociale || ''}`.trim(),
+          ragione_sociale: sogg?.ragione_sociale || tipoLabel,
+          categoria: 'titolo',
+          titolo_id: titoloFound.id,
+        });
+        continue;
+      }
+    }
 
     // ==========================================
     // 1. STEP STIPENDI: Match con tabella personale 
@@ -3455,4 +3577,298 @@ export async function getGirocontiVersoCartaConto(contoDestinazioneId: string) {
     .order('data_operazione', { ascending: false });
 
   return enrichWithContiBanca(viaText || []);
+}
+// ============================================================
+// GESTIONE MUTUI
+// ============================================================
+
+import { Mutuo, MutuoConRate, RataMutuo, Titolo } from '@/types/finanza';
+
+/**
+ * Recupera tutti i mutui con il conteggio delle rate pagate/rimanenti
+ * e la prossima scadenza. Incluso il nome del conto bancario associato.
+ */
+export async function getMutuiConRate(): Promise<MutuoConRate[]> {
+  const supabase = getSupabaseAdmin();
+
+  const { data: mutui, error } = await supabase
+    .from('mutui')
+    .select('*, conti_banca!inner(nome_banca, nome_conto)')
+    .order('stato', { ascending: true })
+    .order('created_at', { ascending: false });
+
+  if (error || !mutui) {
+    console.error("❌ Errore getMutuiConRate:", error);
+    return [];
+  }
+
+  const result: MutuoConRate[] = [];
+  for (const m of mutui) {
+    // conteggio rate pagate
+    const { count: pagate } = await supabase
+      .from('rate_mutuo')
+      .select('*', { count: 'exact', head: true })
+      .eq('mutuo_id', m.id)
+      .eq('stato', 'pagato');
+
+    // prossima rata da pagare
+    const { data: prossima } = await supabase
+      .from('rate_mutuo')
+      .select('data_scadenza, importo_rata')
+      .eq('mutuo_id', m.id)
+      .eq('stato', 'da_pagare')
+      .order('data_scadenza', { ascending: true })
+      .limit(1)
+      .single();
+
+    result.push({
+      ...m,
+      conti_banca: m.conti_banca || null,
+      rate_pagate: pagate || 0,
+      rate_rimanenti: m.numero_rate - (pagate || 0),
+      prossima_scadenza: prossima?.data_scadenza || null,
+      importo_rata: prossima?.importo_rata || undefined,
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Recupera le rate di un singolo mutuo, ordinate per numero rata.
+ */
+export async function getRateMutuo(mutuoId: string): Promise<RataMutuo[]> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('rate_mutuo')
+    .select('*')
+    .eq('mutuo_id', mutuoId)
+    .order('numero_rata', { ascending: true });
+
+  if (error) console.error("❌ Errore getRateMutuo:", error);
+  return (data as RataMutuo[]) || [];
+}
+
+/**
+ * Crea un mutuo e genera automaticamente tutte le rate + scadenze corrispondenti.
+ */
+export async function inserisciMutuoConRate(input: {
+  conto_banca_id: string;
+  numero_pratica?: string;
+  banca_erogante: string;
+  soggetto_id?: string;
+  numero_rate: number;
+  scopo?: string;
+  capitale_erogato: number;
+  tipo_tasso: 'fisso' | 'variabile' | 'misto';
+  taeg_isc?: number;
+  spese_istruttoria?: number;
+  spese_perizia?: number;
+  spese_incasso_rata?: number;
+  spese_gestione_pratica?: number;
+  periodicita: 'mensile' | 'trimestrale' | 'semestrale' | 'annuale';
+  data_prima_rata: string;
+  data_stipula?: string;
+  importo_rata: number;
+  note?: string;
+}) {
+  const supabase = getSupabaseAdmin();
+
+  // 1. Inserisci il mutuo
+  const { data: mutuo, error: errMutuo } = await supabase
+    .from('mutui')
+    .insert({
+      conto_banca_id: input.conto_banca_id,
+      numero_pratica: input.numero_pratica || null,
+      banca_erogante: input.banca_erogante,
+      soggetto_id: input.soggetto_id || null,
+      numero_rate: input.numero_rate,
+      scopo: input.scopo || null,
+      capitale_erogato: input.capitale_erogato,
+      tipo_tasso: input.tipo_tasso,
+      taeg_isc: input.taeg_isc || null,
+      spese_istruttoria: input.spese_istruttoria || 0,
+      spese_perizia: input.spese_perizia || 0,
+      spese_incasso_rata: input.spese_incasso_rata || 0,
+      spese_gestione_pratica: input.spese_gestione_pratica || 0,
+      periodicita: input.periodicita,
+      data_prima_rata: input.data_prima_rata,
+      data_stipula: input.data_stipula || null,
+      stato: 'attivo',
+      note: input.note || null,
+    })
+    .select('id')
+    .single();
+
+  if (errMutuo || !mutuo) {
+    console.error("❌ Errore creazione mutuo:", errMutuo);
+    throw new Error("Impossibile creare il mutuo");
+  }
+
+  // 2. Genera le rate
+  const mesiIncremento: Record<string, number> = {
+    mensile: 1,
+    trimestrale: 3,
+    semestrale: 6,
+    annuale: 12,
+  };
+  const incremento = mesiIncremento[input.periodicita];
+  const oggi = new Date().toISOString().slice(0, 10);
+
+  const rateBatch: any[] = [];
+  const scadenzeBatch: any[] = [];
+
+  for (let i = 0; i < input.numero_rate; i++) {
+    const dataScadenza = new Date(input.data_prima_rata);
+    dataScadenza.setMonth(dataScadenza.getMonth() + i * incremento);
+    const dataStr = dataScadenza.toISOString().slice(0, 10);
+    const stato = dataStr < oggi ? 'pagato' : 'da_pagare';
+
+    rateBatch.push({
+      mutuo_id: mutuo.id,
+      numero_rata: i + 1,
+      importo_rata: input.importo_rata,
+      data_scadenza: dataStr,
+      stato,
+    });
+
+    // Crea scadenza corrispondente solo per rate future
+    if (stato === 'da_pagare') {
+      scadenzeBatch.push({
+        descrizione: `Rata ${i + 1}/${input.numero_rate} mutuo ${input.banca_erogante}${input.scopo ? ' - ' + input.scopo : ''}`,
+        importo: input.importo_rata,
+        data_scadenza: dataStr,
+        tipo: 'uscita',
+        stato: 'da_pagare',
+        categoria: 'rata_mutuo',
+        soggetto_id: input.soggetto_id || null,
+        fonte: 'mutuo',
+        auto_domiciliazione: true,
+      });
+    }
+  }
+
+  // 3. Inserisci tutte le rate
+  const { error: errRate } = await supabase.from('rate_mutuo').insert(rateBatch);
+  if (errRate) {
+    console.error("❌ Errore inserimento rate:", errRate);
+    throw new Error("Mutuo creato ma errore nelle rate");
+  }
+
+  // 4. Inserisci le scadenze per le rate future
+  if (scadenzeBatch.length > 0) {
+    const { data: scadenzeInserite, error: errSc } = await supabase
+      .from('scadenze_pagamento')
+      .insert(scadenzeBatch)
+      .select('id');
+
+    if (errSc) {
+      console.error("❌ Errore inserimento scadenze mutuo:", errSc);
+    } else if (scadenzeInserite) {
+      // Associa le scadenze alle rate (solo rate future, in ordine)
+      const rateFuture = rateBatch.filter(r => r.stato === 'da_pagare');
+      for (let i = 0; i < scadenzeInserite.length; i++) {
+        const rataCorrispondente = rateFuture[i];
+        if (rataCorrispondente) {
+          await supabase
+            .from('rate_mutuo')
+            .update({ scadenza_id: scadenzeInserite[i].id })
+            .eq('mutuo_id', mutuo.id)
+            .eq('numero_rata', rataCorrispondente.numero_rata);
+        }
+      }
+    }
+  }
+
+  return mutuo.id;
+}
+
+// ============================================================
+// GESTIONE TITOLI (Assegni, Cambiali)
+// ============================================================
+
+/**
+ * Recupera tutti i titoli con join opzionale ai soggetti.
+ */
+export async function getTitoli(filtroStato?: string): Promise<Titolo[]> {
+  const supabase = getSupabaseAdmin();
+  let query = supabase
+    .from('titoli')
+    .select('*, anagrafica_soggetti(ragione_sociale)')
+    .order('data_scadenza', { ascending: true });
+
+  if (filtroStato) {
+    query = query.eq('stato', filtroStato);
+  }
+
+  const { data, error } = await query;
+  if (error) console.error("❌ Errore getTitoli:", error);
+  return (data as Titolo[]) || [];
+}
+
+/**
+ * Inserisce un nuovo titolo (assegno o cambiale) e crea la scadenza associata.
+ */
+export async function inserisciTitolo(input: {
+  tipo: 'assegno' | 'cambiale';
+  soggetto_id?: string;
+  importo: number;
+  data_scadenza: string;
+  data_emissione?: string;
+  banca_incasso?: string;
+  numero_titolo?: string;
+  note?: string;
+  file_url?: string;
+  ocr_data?: Record<string, unknown>;
+}) {
+  const supabase = getSupabaseAdmin();
+
+  // 1. Crea la scadenza associata
+  const tipoLabel = input.tipo === 'assegno' ? 'Assegno' : 'Cambiale';
+  const { data: scadenza, error: errSc } = await supabase
+    .from('scadenze_pagamento')
+    .insert({
+      descrizione: `${tipoLabel} ${input.numero_titolo ? '#' + input.numero_titolo : ''} - ${input.banca_incasso || 'Da incassare'}`.trim(),
+      importo: input.importo,
+      data_scadenza: input.data_scadenza,
+      tipo: 'entrata',
+      stato: 'da_incassare',
+      categoria: 'titolo',
+      fonte: 'titolo',
+      soggetto_id: input.soggetto_id || null,
+    })
+    .select('id')
+    .single();
+
+  if (errSc) {
+    console.error("❌ Errore creazione scadenza titolo:", errSc);
+    throw new Error("Impossibile creare la scadenza per il titolo");
+  }
+
+  // 2. Inserisci il titolo
+  const { data: titolo, error: errTitolo } = await supabase
+    .from('titoli')
+    .insert({
+      tipo: input.tipo,
+      soggetto_id: input.soggetto_id || null,
+      importo: input.importo,
+      data_scadenza: input.data_scadenza,
+      data_emissione: input.data_emissione || null,
+      banca_incasso: input.banca_incasso || null,
+      numero_titolo: input.numero_titolo || null,
+      stato: 'in_essere',
+      scadenza_id: scadenza?.id || null,
+      file_url: input.file_url || null,
+      note: input.note || null,
+      ocr_data: input.ocr_data || null,
+    })
+    .select('id')
+    .single();
+
+  if (errTitolo) {
+    console.error("❌ Errore inserimento titolo:", errTitolo);
+    throw new Error("Impossibile inserire il titolo");
+  }
+
+  return titolo?.id;
 }

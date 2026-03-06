@@ -48,7 +48,7 @@ export type DatiEstrattiDocumento = DatiEstrattiContratto | DatiEstrattiDocument
 // ============================================================
 
 export interface GeminiResponse {
-  category: "materiale" | "presenze" | "problema" | "budget" | "ddt" | "fattura" | "documento_pagamento" | "preventivo" | "altro" | "errore";
+  category: "materiale" | "presenze" | "problema" | "budget" | "ddt" | "fattura" | "documento_pagamento" | "titolo_pagamento" | "preventivo" | "altro" | "errore";
   search_key?: string | null;
   summary: string;
   reply_to_user: string;
@@ -102,6 +102,20 @@ export interface DocumentoPagamentoEstratto {
 }
 
 // ============================================================
+// INTERFACCIA: Titolo di Pagamento (assegni, cambiali)
+// ============================================================
+export interface TitoloEstratto {
+  tipo: 'assegno' | 'cambiale';
+  importo: number;
+  data_scadenza: string | null;
+  data_emissione: string | null;
+  numero_titolo: string | null;
+  banca: string | null;
+  emittente: string | null;
+  note: string | null;
+}
+
+// ============================================================
 // FUNZIONE PRINCIPALE: Analisi messaggio (testo + eventuale foto)
 // ============================================================
 
@@ -146,6 +160,15 @@ PER DDT - rispondi con struttura:
 
 PER DOCUMENTI DI PAGAMENTO (utenze, multe, tasse, avvisi):
 {"category":"documento_pagamento","search_key":null,"summary":"...","reply_to_user":"","extracted_data":{"tipo_documento":"utenza","emittente":"Nome ente","numero_documento":"...","data_documento":"YYYY-MM-DD","importo_totale":0.00,"data_scadenza":"YYYY-MM-DD","codice_pagamento":null,"descrizione_completa":"trascrizione dettagliata","note":null}}
+
+4. Se il documento è un ASSEGNO BANCARIO, ASSEGNO CIRCOLARE, CAMBIALE, PAGHERÒ, TRATTA, EFFETTO
+   → category="titolo_pagamento"
+   Estrai: tipo (assegno/cambiale), importo, data_scadenza (YYYY-MM-DD), data_emissione (YYYY-MM-DD),
+   numero_titolo (il numero stampato sull'assegno/cambiale), banca (la banca dell'assegno o della cambiale),
+   emittente (chi ha firmato/emesso il titolo), note
+
+PER TITOLI DI PAGAMENTO (assegni, cambiali):
+{"category":"titolo_pagamento","search_key":null,"summary":"...","reply_to_user":"","extracted_data":{"tipo":"assegno","importo":0.00,"data_scadenza":"YYYY-MM-DD","data_emissione":"YYYY-MM-DD","numero_titolo":"...","banca":"...","emittente":"...","note":null}}
 
 REGOLE:
 - P.IVA: ATTENZIONE — estrai la P.IVA dell'EMITTENTE/FORNITORE (chi ha emesso il documento), NON quella del DESTINATARIO/CLIENTE. In fattura il fornitore è nel blocco "Cedente/Prestatore", il cliente nel blocco "Cessionario/Committente".

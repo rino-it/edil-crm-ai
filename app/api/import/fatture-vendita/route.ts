@@ -133,11 +133,17 @@ export async function POST(request: NextRequest) {
         // 5. Scadenza Pagamento
         const datiPagamentoRaw = mainBody.DatiPagamento;
         let dataScadenza = null;
+        let isDomiciliazione = false;
         
         if (datiPagamentoRaw) {
           const pag = Array.isArray(datiPagamentoRaw) ? datiPagamentoRaw[0] : datiPagamentoRaw;
           const dett = Array.isArray(pag.DettaglioPagamento) ? pag.DettaglioPagamento[0] : pag.DettaglioPagamento;
           dataScadenza = dett.DataScadenzaPagamento;
+          // MP19 = Domiciliazione bancaria, MP20 = RID/SDD
+          const modalitaPag = dett.ModalitaPagamento;
+          if (modalitaPag === 'MP19' || modalitaPag === 'MP20') {
+            isDomiciliazione = true;
+          }
         }
 
         // Fallback: se manca la scadenza, aggiungiamo 30gg alla data fattura
@@ -160,7 +166,9 @@ export async function POST(request: NextRequest) {
             data_scadenza: dataScadenza,
             tipo: "entrata",
             stato: "da_pagare",
-            descrizione: `Fattura di Vendita n. ${numeroFattura}`
+            descrizione: `Fattura di Vendita n. ${numeroFattura}`,
+            fonte: 'fattura',
+            ...(isDomiciliazione ? { auto_domiciliazione: true } : {}),
           })
           .select("id")
           .single();

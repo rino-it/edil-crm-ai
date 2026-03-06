@@ -35,6 +35,8 @@ export function ScadenzeTable({
     sanzione: 'Sanzione',
     burocrazia: 'Tasse',
     ufficio: 'Ufficio',
+    rata_mutuo: 'Rata Mutuo',
+    titolo: 'Titolo',
   };
   const CATEGORIA_COLORS: Record<string, string> = {
     utenza: 'border-yellow-300 bg-yellow-50 text-yellow-700',
@@ -42,6 +44,8 @@ export function ScadenzeTable({
     sanzione: 'border-red-300 bg-red-50 text-red-700',
     burocrazia: 'border-purple-300 bg-purple-50 text-purple-700',
     ufficio: 'border-blue-300 bg-blue-50 text-blue-700',
+    rata_mutuo: 'border-indigo-300 bg-indigo-50 text-indigo-700',
+    titolo: 'border-amber-300 bg-amber-50 text-amber-700',
   };
 
   if (data.length === 0) {
@@ -84,11 +88,18 @@ export function ScadenzeTable({
                   </TableCell>
 
                   <TableCell>
+                    <div className="flex flex-wrap gap-1">
                     {s.categoria ? (
                       <Badge variant="outline" className={`text-[10px] ${CATEGORIA_COLORS[s.categoria] || 'border-zinc-300 bg-zinc-50 text-zinc-600'}`}>
                         {CATEGORIA_LABELS[s.categoria] || s.categoria}
                       </Badge>
                     ) : null}
+                    {(s as any).auto_domiciliazione && (
+                      <Badge variant="outline" className="text-[10px] border-cyan-300 bg-cyan-50 text-cyan-700">
+                        SDD
+                      </Badge>
+                    )}
+                    </div>
                   </TableCell>
                   
                   <TableCell className="text-xs font-mono text-zinc-600">

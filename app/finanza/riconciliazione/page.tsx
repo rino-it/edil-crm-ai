@@ -53,7 +53,7 @@ export default async function DashboardRiconciliazionePage() {
       </div>
 
       {/* KPI Globali */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card className="shadow-[var(--shadow-sm)] border-border/60">
           <CardHeader className="pb-2 border-b border-border/40">
             <div className="flex items-center justify-between gap-2">
@@ -84,6 +84,22 @@ export default async function DashboardRiconciliazionePage() {
           <F24Dialog f24={storicoF24} />
           <FinanziamentiSocioDialog movimenti={storicoFinanziamentiSocio} />
         </div>
+
+        {/* CARD: Titoli e Mutui (link) */}
+        <Link href="/finanza/riconciliazione/titoli-mutui">
+          <Card className="shadow-[var(--shadow-sm)] border-border/60 cursor-pointer hover:bg-muted/30 transition-colors h-full">
+            <CardHeader className="pb-2 border-b border-border/40">
+              <div className="flex items-center justify-between gap-2">
+                <div className="h-2 w-2 rounded-full bg-indigo-500" />
+                <CardTitle className="text-xs font-bold text-muted-foreground uppercase flex-1">Titoli e Mutui</CardTitle>
+                <ArrowRight className="h-3.5 w-3.5 text-indigo-400" />
+              </div>
+            </CardHeader>
+            <CardContent className="pt-4">
+              <p className="text-xs text-muted-foreground">Mutui, assegni, cambiali</p>
+            </CardContent>
+          </Card>
+        </Link>
 
         {/* NUOVA CARD: COSTO GESTIONE CONTI */}
         <Card className="shadow-[var(--shadow-sm)] border-border/60">

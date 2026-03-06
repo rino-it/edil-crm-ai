@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/utils/supabase/server'
 import { createClient as createAdminClient } from "@supabase/supabase-js"
-import { parseCSVBanca, parseXMLBanca, importMovimentiBanca, confermaRiconciliazione, creaLogRiconciliazione } from '@/utils/data-fetcher'
+import { parseCSVBanca, parseXMLBanca, importMovimentiBanca, confermaRiconciliazione, creaLogRiconciliazione, inserisciMutuoConRate, inserisciTitolo } from '@/utils/data-fetcher'
 
 // ==========================================
 // AZIONI PER DOCUMENTI GENERICI (NUVOLA)
@@ -65,6 +65,75 @@ export async function rinominaDocumentoBanca(id: string, nuovoNome: string) {
   
   revalidatePath('/finanza/riconciliazione')
   return true
+}
+
+// ==========================================
+// GESTIONE MUTUI
+// ==========================================
+export async function creaMutuo(formData: FormData) {
+  const conto_banca_id = formData.get("conto_banca_id") as string;
+  const banca_erogante = formData.get("banca_erogante") as string;
+  const numero_rate = parseInt(formData.get("numero_rate") as string);
+  const capitale_erogato = parseFloat(formData.get("capitale_erogato") as string);
+  const importo_rata = parseFloat(formData.get("importo_rata") as string);
+  const tipo_tasso = formData.get("tipo_tasso") as 'fisso' | 'variabile' | 'misto';
+  const periodicita = formData.get("periodicita") as 'mensile' | 'trimestrale' | 'semestrale' | 'annuale';
+  const data_prima_rata = formData.get("data_prima_rata") as string;
+
+  if (!conto_banca_id || !banca_erogante || !numero_rate || !capitale_erogato || !importo_rata || !data_prima_rata) {
+    throw new Error("Dati obbligatori mancanti per il mutuo");
+  }
+
+  const taeg = formData.get("taeg_isc") as string;
+
+  await inserisciMutuoConRate({
+    conto_banca_id,
+    banca_erogante,
+    numero_pratica: (formData.get("numero_pratica") as string) || undefined,
+    soggetto_id: (formData.get("soggetto_id") as string) || undefined,
+    numero_rate,
+    scopo: (formData.get("scopo") as string) || undefined,
+    capitale_erogato,
+    tipo_tasso,
+    taeg_isc: taeg ? parseFloat(taeg) : undefined,
+    spese_istruttoria: parseFloat((formData.get("spese_istruttoria") as string) || "0"),
+    spese_perizia: parseFloat((formData.get("spese_perizia") as string) || "0"),
+    spese_incasso_rata: parseFloat((formData.get("spese_incasso_rata") as string) || "0"),
+    spese_gestione_pratica: parseFloat((formData.get("spese_gestione_pratica") as string) || "0"),
+    periodicita,
+    data_prima_rata,
+    data_stipula: (formData.get("data_stipula") as string) || undefined,
+    importo_rata,
+    note: (formData.get("note") as string) || undefined,
+  });
+
+  revalidatePath('/finanza/riconciliazione');
+}
+
+// ==========================================
+// GESTIONE TITOLI (Assegni/Cambiali)
+// ==========================================
+export async function creaTitolo(formData: FormData) {
+  const tipo = formData.get("tipo") as 'assegno' | 'cambiale';
+  const importo = parseFloat(formData.get("importo") as string);
+  const data_scadenza = formData.get("data_scadenza") as string;
+
+  if (!tipo || !importo || !data_scadenza) {
+    throw new Error("Dati obbligatori mancanti per il titolo");
+  }
+
+  await inserisciTitolo({
+    tipo,
+    importo,
+    data_scadenza,
+    soggetto_id: (formData.get("soggetto_id") as string) || undefined,
+    data_emissione: (formData.get("data_emissione") as string) || undefined,
+    banca_incasso: (formData.get("banca_incasso") as string) || undefined,
+    numero_titolo: (formData.get("numero_titolo") as string) || undefined,
+    note: (formData.get("note") as string) || undefined,
+  });
+
+  revalidatePath('/finanza/riconciliazione');
 }
 
 // ==========================================

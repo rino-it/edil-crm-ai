@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse, NextRequest } from 'next/server'
-import { processWithGemini, synthesizeWithData, detectConfirmation, estraiFatturaFoto, type FatturaEstratta, type DocumentoPagamentoEstratto } from '@/utils/ai/gemini'
+import { processWithGemini, synthesizeWithData, detectConfirmation, estraiFatturaFoto, type FatturaEstratta, type DocumentoPagamentoEstratto, type TitoloEstratto } from '@/utils/ai/gemini'
 import { sendWhatsAppMessage, sendWhatsAppImage, downloadMedia } from '@/utils/whatsapp'
 import { uploadFileToSupabase } from '@/utils/supabase/upload'
 import {
@@ -11,6 +11,7 @@ import {
   inserisciMovimento,
   inserisciFatturaFornitore,
   inserisciDocumentoPagamento,
+  inserisciTitolo,
   risolviPersonale,
   inserisciPresenze,
   type PersonaRisolta,
@@ -509,6 +510,60 @@ export async function POST(request: NextRequest) {
         }
 
         // =====================================================
+        // CASO TITOLO PAGAMENTO: conferma salvataggio assegno/cambiale
+        // =====================================================
+        if (pendingStep === 'waiting_confirm_titolo' && type === 'text') {
+          const conf = detectConfirmation(rawContent);
+          const titData = pendingData as unknown as TitoloEstratto & { file_url?: string | null };
+
+          if (conf === 'yes') {
+            try {
+              await inserisciTitolo({
+                tipo: titData.tipo || 'assegno',
+                importo: titData.importo || 0,
+                data_scadenza: titData.data_scadenza || new Date().toISOString().split('T')[0],
+                data_emissione: titData.data_emissione || undefined,
+                numero_titolo: titData.numero_titolo || undefined,
+                banca_incasso: titData.banca || undefined,
+                note: titData.emittente ? `Emittente: ${titData.emittente}` : undefined,
+                file_url: titData.file_url || undefined,
+                ocr_data: titData as unknown as Record<string, unknown>,
+              });
+
+              const tipoLabel = titData.tipo === 'assegno' ? 'Assegno' : 'Cambiale';
+              await sendWhatsAppMessage(sender,
+                `✅ ${tipoLabel} salvato! Scadenza creata: *EUR ${(titData.importo || 0).toFixed(2)}*`
+              );
+              await supabaseAdmin.from('chat_log').insert({
+                raw_text: rawContent, sender_number: sender, status_ai: 'completed',
+                ai_response: { category: 'titolo_pagamento', summary: 'Titolo confermato e salvato' },
+                interaction_step: 'completed', temp_data: null
+              });
+            } catch (err: any) {
+              await sendWhatsAppMessage(sender, `❌ Errore: ${err.message}. Riprova.`);
+              await supabaseAdmin.from('chat_log').insert({
+                raw_text: rawContent, sender_number: sender, status_ai: 'error',
+                interaction_step: 'idle', temp_data: null
+              });
+            }
+          } else if (conf === 'no') {
+            await sendWhatsAppMessage(sender, "Annullato. Puoi inviare un'altra foto.");
+            await supabaseAdmin.from('chat_log').insert({
+              raw_text: rawContent, sender_number: sender, status_ai: 'completed',
+              ai_response: { category: 'titolo_pagamento', summary: 'Titolo annullato' },
+              interaction_step: 'idle', temp_data: null
+            });
+          } else {
+            await sendWhatsAppMessage(sender, 'Non ho capito. Rispondi *Sì* per confermare o *No* per annullare.');
+            await supabaseAdmin.from('chat_log').insert({
+              raw_text: rawContent, sender_number: sender, status_ai: 'completed',
+              interaction_step: 'waiting_confirm_titolo', temp_data: pendingData
+            });
+          }
+          return new NextResponse('Ricevuto', { status: 200 });
+        }
+
+        // =====================================================
         // CASO A-TER: L'utente sta VALIDANDO UN PREVENTIVO
         // =====================================================
         if (pendingStep === 'waiting_confirm_preventivo' && type === 'text') {
@@ -874,6 +929,33 @@ export async function POST(request: NextRequest) {
                 file_url: uploadedFileUrl,
               };
             }
+          }
+
+          // =====================================================
+          // TITOLO DI PAGAMENTO (assegno, cambiale) — FOTO
+          // =====================================================
+          else if (geminiResult.category === 'titolo_pagamento' && geminiResult.extracted_data) {
+            const dati = geminiResult.extracted_data as unknown as TitoloEstratto;
+            const tipoLabel = dati.tipo === 'assegno' ? '📝 ASSEGNO' : '📜 CAMBIALE';
+
+            const riepilogo =
+              `*${tipoLabel} RILEVATO*\n\n` +
+              `Tipo: *${dati.tipo === 'assegno' ? 'Assegno' : 'Cambiale'}*\n` +
+              `Importo: *EUR ${(dati.importo || 0).toFixed(2)}*\n` +
+              `Scadenza: ${dati.data_scadenza || 'non specificata'}\n` +
+              `Emissione: ${dati.data_emissione || 'N/D'}\n` +
+              (dati.numero_titolo ? `N° Titolo: ${dati.numero_titolo}\n` : '') +
+              (dati.banca ? `Banca: ${dati.banca}\n` : '') +
+              (dati.emittente ? `Emittente: ${dati.emittente}\n` : '') +
+              `\nConfermi il salvataggio? Rispondi *Sì* o *No*`;
+
+            finalReply = riepilogo;
+            interactionStep = 'waiting_confirm_titolo';
+            tempData = {
+              _flow_type: 'titolo_pagamento',
+              ...dati,
+              file_url: uploadedFileUrl,
+            };
           }
 
           else if (geminiResult.category === 'ddt' && geminiResult.extracted_data) {

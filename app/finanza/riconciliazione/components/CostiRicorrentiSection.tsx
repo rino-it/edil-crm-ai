@@ -38,6 +38,7 @@ function formatMese(mese: string) {
 export function CostiRicorrentiSection({ costiMensili, annoSelezionato, anni }: CostiRicorrentiProps) {
   const [aperta, setAperta] = useState(false)
   const [meseEspanso, setMeseEspanso] = useState<string | null>(null)
+  const [categoriaFocus, setCategoriaFocus] = useState<keyof typeof CATEGORIE_CONFIG | null>(null)
 
   // KPI aggregati
   const totaleLeasing = costiMensili.reduce((acc, m) => acc + m.totale_leasing, 0)
@@ -118,10 +119,17 @@ export function CostiRicorrentiSection({ costiMensili, annoSelezionato, anni }: 
             const totale = key === 'leasing' ? totaleLeasing : key === 'assicurazione' ? totaleAssicurazione : key === 'mutuo' ? totaleMutuo : totaleInteressi;
             if (totale === 0) return null;
             const Icon = cfg.icon;
+            const isActive = categoriaFocus === key;
             return (
-              <div key={key} className={`${cfg.bgKpi} border rounded-lg p-3`}>
+              <div
+                key={key}
+                className={`${cfg.bgKpi} border rounded-lg p-3 cursor-pointer transition-all hover:shadow-md ${isActive ? 'ring-2 ring-offset-1 ring-current' : 'hover:brightness-95'}`}
+                onClick={() => setCategoriaFocus(isActive ? null : key)}
+                title={`Clicca per vedere tutti i movimenti ${cfg.label}`}
+              >
                 <p className={`text-[10px] font-bold ${cfg.labelKpi} uppercase flex items-center gap-1`}>
                   <Icon size={11} /> {cfg.label}
+                  {isActive && <span className="ml-auto">▲</span>}
                 </p>
                 <p className={`text-lg font-black ${cfg.textKpi} mt-0.5`}>{formatEuro(totale)}</p>
               </div>
@@ -136,6 +144,63 @@ export function CostiRicorrentiSection({ costiMensili, annoSelezionato, anni }: 
             <p className="text-lg font-black text-zinc-800 mt-0.5">{formatEuro(mediaMensile)}</p>
           </div>
         </div>
+
+        {/* Drilldown annuale per categoria — si apre cliccando la card KPI */}
+        {categoriaFocus && (() => {
+          const cfgFocus = CATEGORIE_CONFIG[categoriaFocus];
+          const tuttiMovimenti = costiMensili
+            .flatMap(m => m.dettagli)
+            .filter(d => d.categoria_dedotta === categoriaFocus)
+            .sort((a, b) => new Date(a.data_operazione).getTime() - new Date(b.data_operazione).getTime());
+          const totaleAnno = tuttiMovimenti.reduce((acc, d) => acc + Math.abs(d.importo), 0);
+          return (
+            <div className={`rounded-lg border ${cfgFocus.bgKpi} p-4 space-y-3`}>
+              <div className="flex items-center justify-between">
+                <p className={`text-sm font-bold ${cfgFocus.textKpi} uppercase flex items-center gap-2`}>
+                  <cfgFocus.icon size={14} />
+                  Tutti i movimenti {cfgFocus.label} — {annoSelezionato}
+                  <span className="font-normal text-xs opacity-70">({tuttiMovimenti.length} mov.)</span>
+                </p>
+                <div className="flex items-center gap-3">
+                  <span className={`text-sm font-black ${cfgFocus.textKpi}`}>{formatEuro(totaleAnno)}</span>
+                  <button
+                    className="text-xs text-muted-foreground hover:text-foreground px-2 py-0.5 rounded border border-current opacity-50 hover:opacity-100 transition-opacity"
+                    onClick={() => setCategoriaFocus(null)}
+                  >
+                    ✕ Chiudi
+                  </button>
+                </div>
+              </div>
+              {tuttiMovimenti.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Nessun movimento trovato.</p>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-[10px] font-bold text-muted-foreground uppercase border-b">
+                      <th className="text-left px-3 py-1.5">Data</th>
+                      <th className="text-left px-3 py-1.5">Descrizione</th>
+                      <th className="text-left px-3 py-1.5">Soggetto</th>
+                      <th className="text-right px-3 py-1.5">Importo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tuttiMovimenti.map(d => (
+                      <tr key={d.id} className="border-t border-border/20 hover:bg-white/60 transition-colors">
+                        <td className="px-3 py-1.5 whitespace-nowrap font-medium">{new Date(d.data_operazione).toLocaleDateString('it-IT')}</td>
+                        <td className="px-3 py-1.5 font-mono max-w-[300px]">
+                          <span className="truncate block" title={d.descrizione}>{d.descrizione}</span>
+                          {d.note_riconciliazione && <p className="text-[10px] text-zinc-500 italic mt-0.5 font-sans">{d.note_riconciliazione}</p>}
+                        </td>
+                        <td className="px-3 py-1.5 text-zinc-600">{d.ragione_sociale || '—'}</td>
+                        <td className={`px-3 py-1.5 text-right font-bold ${cfgFocus.textKpi}`}>{formatEuro(Math.abs(d.importo))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Tabella mensile espandibile con barre stacked */}
         {aperta && (

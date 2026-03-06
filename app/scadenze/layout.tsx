@@ -1,5 +1,6 @@
 import { getScadenzeKPIs } from '@/utils/data-fetcher';
 import ScadenzeNav from './components/ScadenzeNav';
+import { ScadenzeSearchBar } from './components/ScadenzeSearchBar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TrendingUp, TrendingDown, AlertTriangle, Inbox } from 'lucide-react';
 
@@ -77,6 +78,9 @@ export default async function ScadenzeLayout({
 
       {/* Navigazione Tab */}
       <ScadenzeNav badgeDaSmistare={kpis.daSmistare} />
+
+      {/* Barra di ricerca */}
+      <ScadenzeSearchBar />
 
       {/* Contenuto dinamico delle sotto-pagine */}
       <div className="min-h-[500px]">
