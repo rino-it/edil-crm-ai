@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { getScadenzeKPIs } from '@/utils/data-fetcher';
 import ScadenzeNav from './components/ScadenzeNav';
 import { ScadenzeSearchBar } from './components/ScadenzeSearchBar';
@@ -80,7 +81,9 @@ export default async function ScadenzeLayout({
       <ScadenzeNav badgeDaSmistare={kpis.daSmistare} />
 
       {/* Barra di ricerca */}
-      <ScadenzeSearchBar />
+      <Suspense fallback={<div className="h-10" />}>
+        <ScadenzeSearchBar />
+      </Suspense>
 
       {/* Contenuto dinamico delle sotto-pagine */}
       <div className="min-h-[500px]">
