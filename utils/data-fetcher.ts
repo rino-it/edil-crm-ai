@@ -3204,19 +3204,23 @@ export async function getCashflowProjectionPerConto(days = 90): Promise<Cashflow
       if (residuo <= 0) return;
 
       const dataPianificata = (s as any).data_pianificata as string | null | undefined;
+      // Fallback: se non c'è data_pianificata, usa data_scadenza
+      const dataEffettiva = dataPianificata || s.data_scadenza;
       const detail: CashflowDetailRow = {
         id: (s as any).id,
         ragione_sociale: (s as any).anagrafica_soggetti?.ragione_sociale || 'N/D',
         fattura_riferimento: s.fattura_riferimento ?? null,
-        data_effettiva: dataPianificata || s.data_scadenza,
+        data_effettiva: dataEffettiva,
         importo_residuo: residuo,
         tipo: s.tipo as 'entrata' | 'uscita',
       };
 
-      if (!dataPianificata) return; // skip non pianificate per la vista per-conto
-
-      const dScadenza = new Date(dataPianificata);
-      if (isBefore(dScadenza, startOfWeek(today, { weekStartsOn: 1 }))) return; // passate → ignora
+      let dScadenza = new Date(dataEffettiva);
+      // Se la data è nel passato, posiziona nella prima settimana disponibile
+      if (isBefore(dScadenza, startOfWeek(today, { weekStartsOn: 1 }))) {
+        dScadenza = startOfWeek(today, { weekStartsOn: 1 });
+        detail.data_effettiva = dScadenza.toISOString().split('T')[0];
+      }
 
       const ws = startOfWeek(dScadenza, { weekStartsOn: 1 });
       const we = endOfWeek(ws, { weekStartsOn: 1 });

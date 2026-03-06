@@ -295,3 +295,25 @@ export async function riprogrammaScadenza(scadenzaId: string, nuovaData: string)
 
   return { success: true };
 }
+
+/**
+ * 9. Aggiorna il riferimento fattura di una scadenza
+ */
+export async function aggiornaFatturaRiferimento(scadenzaId: string, valore: string | null) {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from('scadenze_pagamento')
+    .update({ fattura_riferimento: valore })
+    .eq('id', scadenzaId);
+
+  if (error) {
+    console.error('❌ Errore aggiornaFatturaRiferimento:', error);
+    throw new Error('Errore aggiornamento fattura');
+  }
+
+  revalidatePath('/scadenze');
+  revalidatePath('/scadenze/da-smistare');
+
+  return { success: true };
+}

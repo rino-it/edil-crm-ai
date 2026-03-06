@@ -1,4 +1,4 @@
-import { getScadenzePaginated } from '@/utils/data-fetcher'
+import { getScadenzePaginated, getCantieriAttivi } from '@/utils/data-fetcher'
 import { ScadenzeTable } from '../components/ScadenzeTable'
 import { DEFAULT_PAGE_SIZE } from '@/types/pagination'
 
@@ -11,15 +11,20 @@ export default async function DaSmistarePage({
   const page = Number(params.page) || 1
   const pageSize = Number(params.pageSize) || DEFAULT_PAGE_SIZE
 
-  // Fetch specifico: cantiere_id passato come `null` esplicito per forzare la query `IS NULL`
-  const result = await getScadenzePaginated(
-    { 
-      stato: ['da_pagare', 'parziale'], 
-      cantiere_id: null,
-      search: params.search 
-    },
-    { page, pageSize }
-  )
+  // Fetch parallelo: scadenze da smistare + lista cantieri per dropdown inline
+  const [result, cantieriRaw] = await Promise.all([
+    getScadenzePaginated(
+      { 
+        stato: ['da_pagare', 'parziale'], 
+        cantiere_id: null,
+        search: params.search 
+      },
+      { page, pageSize }
+    ),
+    getCantieriAttivi(),
+  ])
+
+  const cantieri = cantieriRaw.map(c => ({ id: c.id, label: `${c.codice} - ${c.titolo}` }))
 
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
@@ -34,7 +39,8 @@ export default async function DaSmistarePage({
         data={result.data} 
         pagination={result} 
         showCantiereColumn={true} 
-        showPagamentoActions={true} 
+        showPagamentoActions={true}
+        cantieri={cantieri}
       />
     </div>
   )

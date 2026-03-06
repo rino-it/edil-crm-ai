@@ -1,9 +1,10 @@
 'use client'
 
+import { useState, useTransition } from 'react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { CheckCircle2, MoreHorizontal, MessageCircle, CalendarPlus, ArrowRight, Paperclip } from "lucide-react"
+import { CheckCircle2, MoreHorizontal, MessageCircle, CalendarPlus, ArrowRight, Paperclip, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { ScadenzaWithSoggetto } from "@/types/finanza"
 import { PaginatedResult } from "@/types/pagination"
@@ -11,19 +12,137 @@ import { PaginationControls } from "@/components/ui/pagination-controls"
 import { WhatsAppReminderButton } from "@/app/finanza/components/WhatsAppReminderButton"
 import { CalendarLinkButton } from "@/app/finanza/components/CalendarLinkButton"
 import { IncassoManualeDialog } from "./IncassoManualeDialog"
+import { aggiornaFatturaRiferimento, assegnaCantiereAScadenza } from '../actions'
+import { toast } from 'sonner'
 
 interface ScadenzeTableProps {
   data: ScadenzaWithSoggetto[];
   pagination: PaginatedResult<any>;
   showCantiereColumn?: boolean;
   showPagamentoActions?: boolean;
+  cantieri?: { id: string; label: string }[];
+}
+
+// ─── Cella Fattura inline edit ─────────────────────────────
+function FatturaEditCell({ scadenzaId, initial, fileUrl }: { scadenzaId: string; initial: string | null; fileUrl?: string | null }) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState(initial || '')
+  const [isPending, startTransition] = useTransition()
+
+  const commit = (newVal: string) => {
+    setEditing(false)
+    if (newVal === (initial || '')) return
+    setValue(newVal)
+    startTransition(async () => {
+      try {
+        await aggiornaFatturaRiferimento(scadenzaId, newVal || null)
+        toast.success('Fattura aggiornata')
+      } catch {
+        setValue(initial || '')
+        toast.error('Errore aggiornamento fattura')
+      }
+    })
+  }
+
+  if (editing) {
+    return (
+      <input
+        type="text"
+        value={value}
+        autoFocus
+        onChange={e => setValue(e.target.value)}
+        onBlur={e => commit(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') commit(value)
+          if (e.key === 'Escape') { setEditing(false); setValue(initial || '') }
+        }}
+        className="text-xs border border-blue-300 rounded px-1.5 py-0.5 bg-blue-50 text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-400 w-full max-w-[120px] font-mono"
+      />
+    )
+  }
+
+  return (
+    <div className={`flex items-center gap-1.5 ${isPending ? 'opacity-40' : ''}`}>
+      {isPending ? (
+        <Loader2 size={12} className="animate-spin text-zinc-400" />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="text-xs font-mono text-zinc-600 hover:text-blue-600 hover:underline cursor-pointer truncate max-w-[120px]"
+          title="Clicca per modificare"
+        >
+          {value || '-'}
+        </button>
+      )}
+      {fileUrl && (
+        <a href={fileUrl} target="_blank" rel="noopener noreferrer" title="Apri documento allegato">
+          <Paperclip className="h-3.5 w-3.5 text-blue-500 hover:text-blue-700 transition-colors" />
+        </a>
+      )}
+    </div>
+  )
+}
+
+// ─── Cella Cantiere inline dropdown ────────────────────────
+function CantiereEditCell({ scadenzaId, current, cantieri }: { scadenzaId: string; current: { codice: string; titolo: string } | null; cantieri: { id: string; label: string }[] }) {
+  const [editing, setEditing] = useState(false)
+  const [isPending, startTransition] = useTransition()
+
+  const commit = (cantiereId: string) => {
+    setEditing(false)
+    startTransition(async () => {
+      try {
+        await assegnaCantiereAScadenza(scadenzaId, cantiereId || 'null')
+        toast.success('Cantiere assegnato')
+      } catch {
+        toast.error('Errore assegnazione cantiere')
+      }
+    })
+  }
+
+  if (editing) {
+    return (
+      <select
+        autoFocus
+        defaultValue=""
+        onBlur={e => { if (!e.target.value) setEditing(false) }}
+        onChange={e => commit(e.target.value)}
+        className="text-xs border border-blue-300 rounded px-1 py-0.5 bg-blue-50 text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-400 w-full max-w-[150px]"
+      >
+        <option value="">— Seleziona —</option>
+        <option value="null">Rimuovi cantiere</option>
+        {cantieri.map(c => (
+          <option key={c.id} value={c.id}>{c.label}</option>
+        ))}
+      </select>
+    )
+  }
+
+  return (
+    <div className={isPending ? 'opacity-40' : ''}>
+      {isPending ? (
+        <Loader2 size={12} className="animate-spin text-zinc-400" />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="text-xs text-zinc-600 hover:text-blue-600 hover:underline cursor-pointer truncate max-w-[150px] block text-left"
+          title="Clicca per assegnare cantiere"
+        >
+          {current ? `${current.codice} - ${current.titolo}` : <span className="text-zinc-400 italic">Non assegnato</span>}
+        </button>
+      )}
+    </div>
+  )
 }
 
 export function ScadenzeTable({ 
   data, 
   pagination, 
   showCantiereColumn = true, 
-  showPagamentoActions = true 
+  showPagamentoActions = true,
+  cantieri = [],
 }: ScadenzeTableProps) {
   
   const formatEuro = (val: number) => 
@@ -61,12 +180,12 @@ export function ScadenzeTable({
       
       {/* VISTA DESKTOP: Tabella classica */}
       <div className="hidden md:block overflow-x-auto">
-        <Table>
+        <Table className="table-fixed">
           <TableHeader className="bg-zinc-50/80">
             <TableRow>
-              <TableHead className="font-semibold">Soggetto</TableHead>
-              <TableHead className="font-semibold">Fattura / Rif.</TableHead>
-              {showCantiereColumn && <TableHead className="font-semibold">Cantiere</TableHead>}
+              <TableHead className="font-semibold max-w-[200px] w-[200px]">Soggetto</TableHead>
+              <TableHead className="font-semibold max-w-[140px] w-[140px]">Fattura / Rif.</TableHead>
+              {showCantiereColumn && <TableHead className="font-semibold max-w-[160px] w-[160px]">Cantiere</TableHead>}
               <TableHead className="text-right font-semibold">Totale</TableHead>
               <TableHead className="text-right font-semibold">Residuo</TableHead>
               <TableHead className="font-semibold">Scadenza</TableHead>
@@ -81,9 +200,9 @@ export function ScadenzeTable({
 
               return (
                 <TableRow key={s.id} className="group hover:bg-zinc-50/50 transition-colors">
-                  <TableCell className="font-bold text-zinc-900">
+                  <TableCell className="font-bold text-zinc-900 max-w-[200px]">
                     <div className="space-y-1">
-                      <div>{s.anagrafica_soggetti?.ragione_sociale || 'N/D'}</div>
+                      <div className="truncate">{s.anagrafica_soggetti?.ragione_sociale || 'N/D'}</div>
                       {(s.categoria || (s as any).auto_domiciliazione) && (
                         <div className="flex flex-wrap gap-1">
                           {s.categoria && (
@@ -101,20 +220,17 @@ export function ScadenzeTable({
                     </div>
                   </TableCell>
                   
-                  <TableCell className="text-xs font-mono text-zinc-600">
-                    <div className="flex items-center gap-1.5">
-                      {s.fattura_riferimento || '-'}
-                      {s.file_url && (
-                        <a href={s.file_url} target="_blank" rel="noopener noreferrer" title="Apri documento allegato">
-                          <Paperclip className="h-3.5 w-3.5 text-blue-500 hover:text-blue-700 transition-colors" />
-                        </a>
-                      )}
-                    </div>
+                  <TableCell className="text-xs font-mono text-zinc-600 max-w-[140px]">
+                    <FatturaEditCell scadenzaId={s.id} initial={s.fattura_riferimento} fileUrl={s.file_url} />
                   </TableCell>
                   
                   {showCantiereColumn && (
-                    <TableCell className="text-xs text-zinc-600 truncate max-w-[150px]">
-                      {s.cantieri ? `${s.cantieri.codice} - ${s.cantieri.titolo}` : <span className="text-zinc-400 italic">Non assegnato</span>}
+                    <TableCell className="text-xs text-zinc-600 max-w-[160px]">
+                      {cantieri.length > 0 ? (
+                        <CantiereEditCell scadenzaId={s.id} current={s.cantieri} cantieri={cantieri} />
+                      ) : (
+                        <span className="truncate block">{s.cantieri ? `${s.cantieri.codice} - ${s.cantieri.titolo}` : <span className="text-zinc-400 italic">Non assegnato</span>}</span>
+                      )}
                     </TableCell>
                   )}
                   
