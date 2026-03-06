@@ -32,7 +32,7 @@ export interface ScadenzaWithSoggetto extends ScadenzaPagamento {
   };
   cantieri?: {
     codice: string;
-    titolo: string;
+    nome: string;
   };
   conti_banca?: {
     nome_banca: string;
@@ -48,7 +48,7 @@ export interface ScadenzaCantiereAllocation {
   note?: string;
   cantieri?: {
     codice: string;
-    titolo: string;
+    nome: string;
   };
 }
 

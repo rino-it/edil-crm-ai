@@ -95,25 +95,25 @@ function FatturaEditCell({ scadenzaId, initial, fileUrl }: { scadenzaId: string;
 }
 
 // ─── Cantiere: dropdown sempre visibile (stile AssegnaCantiereSelect) ────
-function CantiereDropdown({ scadenzaId, currentCantiere, cantieri }: { scadenzaId: string; currentCantiere: { codice: string; titolo: string } | null; cantieri: { id: string; label: string }[] }) {
+function CantiereDropdown({ scadenzaId, currentCantiereId, cantieri }: { scadenzaId: string; currentCantiereId: string | null; cantieri: { id: string; label: string }[] }) {
   const [isPending, startTransition] = useTransition()
-
-  // Trova l'ID attuale tra i cantieri disponibili
-  const currentId = currentCantiere 
-    ? cantieri.find(c => c.label.startsWith(currentCantiere.codice))?.id || 'null' 
-    : 'null'
+  const [selectedId, setSelectedId] = useState(currentCantiereId || 'null')
 
   const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newId = e.target.value
+    setSelectedId(newId)
     startTransition(async () => {
       try {
         await assegnaCantiereAScadenza(scadenzaId, newId)
         toast.success(newId === 'null' ? 'Cantiere rimosso' : 'Cantiere assegnato')
       } catch {
+        setSelectedId(currentCantiereId || 'null')
         toast.error('Errore assegnazione cantiere')
       }
     })
   }
+
+  const isAssigned = selectedId !== 'null'
 
   return (
     <select
@@ -121,11 +121,11 @@ function CantiereDropdown({ scadenzaId, currentCantiere, cantieri }: { scadenzaI
       className={`text-[10px] font-semibold px-1.5 py-0.5 rounded w-full max-w-[150px] border outline-none transition-all ${
         isPending ? 'opacity-40' : ''
       } ${
-        currentCantiere
+        isAssigned
           ? 'bg-blue-50 text-blue-600 border-blue-200'
           : 'bg-amber-50 text-amber-600 border-amber-200 cursor-pointer hover:bg-amber-100'
       }`}
-      defaultValue={currentId}
+      value={selectedId}
       onChange={handleChange}
     >
       <option value="null">🏗️ Assegna cantiere...</option>
@@ -228,9 +228,9 @@ export function ScadenzeTable({
                   {showCantiereColumn && (
                     <TableCell className="text-xs text-zinc-600 max-w-[160px]">
                       {cantieri.length > 0 ? (
-                        <CantiereDropdown scadenzaId={s.id} currentCantiere={s.cantieri ?? null} cantieri={cantieri} />
+                        <CantiereDropdown scadenzaId={s.id} currentCantiereId={s.cantiere_id ?? null} cantieri={cantieri} />
                       ) : (
-                        <span className="truncate block">{s.cantieri ? `${s.cantieri.codice} - ${s.cantieri.titolo}` : <span className="text-zinc-400 italic">Non assegnato</span>}</span>
+                        <span className="truncate block">{s.cantieri ? `${s.cantieri.codice} - ${s.cantieri.nome}` : <span className="text-zinc-400 italic">Non assegnato</span>}</span>
                       )}
                     </TableCell>
                   )}
@@ -334,10 +334,10 @@ export function ScadenzeTable({
                   {showCantiereColumn && (
                     <div className="mt-1">
                       {cantieri.length > 0 ? (
-                        <CantiereDropdown scadenzaId={s.id} currentCantiere={s.cantieri ?? null} cantieri={cantieri} />
+                        <CantiereDropdown scadenzaId={s.id} currentCantiereId={s.cantiere_id ?? null} cantieri={cantieri} />
                       ) : (
                         <div className="text-xs text-zinc-600 truncate">
-                          📍 {s.cantieri ? `${s.cantieri.codice} - ${s.cantieri.titolo}` : 'Non assegnato'}
+                          📍 {s.cantieri ? `${s.cantieri.codice} - ${s.cantieri.nome}` : 'Non assegnato'}
                         </div>
                       )}
                     </div>
