@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { MessageCircle, Send, Sparkles, X } from "lucide-react";
+import { MessageCircle, RotateCcw, Send, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -14,6 +14,7 @@ type ChatMessage = {
   text: string;
   link?: string;
   linkLabel?: string;
+  steps?: string[];
 };
 
 function getQuickActions(pathname: string): string[] {
@@ -30,6 +31,8 @@ function getQuickActions(pathname: string): string[] {
       "Come leggo il cashflow?",
       "Come riconcilio il conto?",
       "Come importo un XML FatturaPA?",
+      "Come inserisco un nuovo titolo?",
+      "Come creo un mutuo?",
     ];
   }
 
@@ -38,6 +41,7 @@ function getQuickActions(pathname: string): string[] {
       "Come registro un pagamento?",
       "Come importo le fatture?",
       "Come smisto una fattura?",
+      "Come cerco per soggetto?",
     ];
   }
 
@@ -46,7 +50,19 @@ function getQuickActions(pathname: string): string[] {
     "Come importo le fatture?",
     "Dove vedo le scadenze?",
     "Come funziona la riconciliazione?",
+    "Come inserisco un nuovo titolo?",
   ];
+}
+
+function sanitizeSteps(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+
+  const steps = value
+    .filter((step): step is string => typeof step === "string" && step.trim().length > 0)
+    .map((step) => step.trim())
+    .slice(0, 5);
+
+  return steps.length > 0 ? steps : undefined;
 }
 
 function TypingDots() {
@@ -106,7 +122,11 @@ export default function ChatGuida() {
       const res = await fetch("/api/chat-guida", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: cleanMessage }),
+        body: JSON.stringify({
+          message: cleanMessage,
+          currentPath: pathname,
+          history: messages.map((item) => ({ role: item.role, text: item.text })),
+        }),
       });
 
       const data = await res.json();
@@ -121,6 +141,7 @@ export default function ChatGuida() {
         text: data.reply || "Ti aiuto subito: prova a riformulare l'obiettivo in una frase.",
         link: typeof data.link === "string" ? data.link : undefined,
         linkLabel: typeof data.linkLabel === "string" ? data.linkLabel : undefined,
+        steps: sanitizeSteps(data.steps),
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
@@ -141,7 +162,12 @@ export default function ChatGuida() {
   function closeChat() {
     setOpen(false);
     setInput("");
+    setLoading(false);
+  }
+
+  function resetConversation() {
     setMessages([]);
+    setInput("");
     setLoading(false);
   }
 
@@ -191,12 +217,17 @@ export default function ChatGuida() {
                   </div>
                   <div>
                     <p className="text-sm font-semibold">EdilCRM Assistant</p>
-                    <p className="text-[11px] text-muted-foreground">Guida rapida alle funzioni</p>
+                    <p className="text-[11px] text-muted-foreground">Consulente operativo della webapp</p>
                   </div>
                 </div>
-                <Button variant="ghost" size="icon" onClick={closeChat} aria-label="Chiudi">
-                  <X className="h-4 w-4" />
-                </Button>
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="icon" onClick={resetConversation} aria-label="Nuova conversazione">
+                    <RotateCcw className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={closeChat} aria-label="Chiudi">
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
 
               <div className="px-4 py-3 border-b border-border/60">
@@ -217,7 +248,7 @@ export default function ChatGuida() {
               <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
                 {messages.length === 0 && !loading && (
                   <div className="text-xs text-muted-foreground bg-muted/40 border border-border/60 rounded-xl p-3">
-                    Scrivi cosa vuoi fare e ti indico pagina, passaggio e link diretto.
+                    Scrivi cosa vuoi fare e ti indico pagina, passaggi operativi e link diretto. Se sei già nella schermata giusta, te lo dico.
                   </div>
                 )}
 
@@ -232,6 +263,13 @@ export default function ChatGuida() {
                       )}
                     >
                       <p>{msg.text}</p>
+                      {msg.role === "assistant" && msg.steps && msg.steps.length > 0 && (
+                        <ol className="mt-2 space-y-1 text-xs list-decimal pl-4">
+                          {msg.steps.map((step, index) => (
+                            <li key={`${msg.id}-step-${index}`}>{step}</li>
+                          ))}
+                        </ol>
+                      )}
                       {msg.role === "assistant" && msg.link && (
                         <button
                           type="button"
@@ -261,7 +299,7 @@ export default function ChatGuida() {
                 <Input
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="Es: Come registro un pagamento fornitore?"
+                  placeholder="Es: Come inserisco un nuovo titolo appena emesso?"
                   className="h-10"
                 />
                 <Button type="submit" size="icon" disabled={loading || !input.trim()} aria-label="Invia domanda">
