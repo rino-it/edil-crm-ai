@@ -221,7 +221,7 @@ export function ScadenzeTable({
                   </TableCell>
                   
                   <TableCell className="text-xs font-mono text-zinc-600 max-w-[140px]">
-                    <FatturaEditCell scadenzaId={s.id} initial={s.fattura_riferimento} fileUrl={s.file_url} />
+                    <FatturaEditCell scadenzaId={s.id} initial={s.fattura_riferimento ?? null} fileUrl={s.file_url ?? null} />
                   </TableCell>
                   
                   {showCantiereColumn && (
