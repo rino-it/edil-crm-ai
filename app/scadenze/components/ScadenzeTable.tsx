@@ -227,7 +227,7 @@ export function ScadenzeTable({
                   {showCantiereColumn && (
                     <TableCell className="text-xs text-zinc-600 max-w-[160px]">
                       {cantieri.length > 0 ? (
-                        <CantiereEditCell scadenzaId={s.id} current={s.cantieri} cantieri={cantieri} />
+                        <CantiereEditCell scadenzaId={s.id} current={s.cantieri ?? null} cantieri={cantieri} />
                       ) : (
                         <span className="truncate block">{s.cantieri ? `${s.cantieri.codice} - ${s.cantieri.titolo}` : <span className="text-zinc-400 italic">Non assegnato</span>}</span>
                       )}
