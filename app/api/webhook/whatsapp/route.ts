@@ -152,6 +152,165 @@ async function getProssimaVoceDaValidare(supabaseAdmin: any) {
   return data;
 }
 
+function parseImportoItaliano(value: string): number | null {
+  const cleaned = value.replace(/[^\d,.-]/g, '').trim()
+  if (!cleaned) return null
+
+  const normalized = cleaned.includes(',')
+    ? cleaned.replace(/\./g, '').replace(',', '.')
+    : cleaned
+
+  const parsed = Number.parseFloat(normalized)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function parseDataLibera(value: string): string | null {
+  const raw = value.trim()
+  if (!raw) return null
+
+  const isoMatch = raw.match(/(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/)
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+  }
+
+  const itaMatch = raw.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/)
+  if (itaMatch) {
+    const [, day, month, yearRaw] = itaMatch
+    const year = yearRaw.length === 2 ? `20${yearRaw}` : yearRaw
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+  }
+
+  return null
+}
+
+function isProbabileNomeBanca(line: string) {
+  const upperRatio = line.replace(/[^A-Z]/g, '').length / Math.max(line.replace(/\s/g, '').length, 1)
+  return line.length <= 24 && upperRatio >= 0.55
+}
+
+function buildTitoloRiepilogo(dati: TitoloEstratto) {
+  const tipoLabel = dati.tipo === 'assegno' ? '📝 ASSEGNO' : '📜 CAMBIALE'
+
+  return (
+    `*${tipoLabel} RILEVATO*\n\n` +
+    `Tipo: *${dati.tipo === 'assegno' ? 'Assegno' : 'Cambiale'}*\n` +
+    `Importo: *EUR ${(dati.importo || 0).toFixed(2)}*\n` +
+    `Scadenza: ${dati.data_scadenza || 'non specificata'}\n` +
+    `Emissione: ${dati.data_emissione || 'N/D'}\n` +
+    (dati.numero_titolo ? `N° Titolo: ${dati.numero_titolo}\n` : '') +
+    (dati.banca ? `Banca: ${dati.banca}\n` : '') +
+    (dati.emittente ? `Emittente: ${dati.emittente}\n` : '') +
+    `\nSe qualcosa è errato, puoi correggerlo scrivendo ad esempio:\n` +
+    `*Scadenza 2026/03/10*\n*Importo 2869,42*\n*Banca BCC*\n*Emittente Fornitore Edilcommercio*\n\n` +
+    `Poi rispondi *Sì* per salvare o *No* per annullare`
+  )
+}
+
+function applyTitoloCorrections(rawContent: string, existing: TitoloEstratto): { updated: TitoloEstratto; changed: boolean } {
+  const updated: TitoloEstratto = { ...existing }
+  let changed = false
+
+  const lines = rawContent
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  for (const line of lines) {
+    const lower = line.toLowerCase()
+
+    if (lower.startsWith('tipo')) {
+      const tipoMatch = line.match(/(assegno|cambiale)/i)
+      if (tipoMatch) {
+        updated.tipo = tipoMatch[1].toLowerCase() as 'assegno' | 'cambiale'
+        changed = true
+      }
+      continue
+    }
+
+    if (lower.startsWith('importo')) {
+      const importo = parseImportoItaliano(line)
+      if (importo !== null) {
+        updated.importo = importo
+        changed = true
+      }
+      continue
+    }
+
+    if (lower.startsWith('scadenza')) {
+      const data = parseDataLibera(line)
+      if (data) {
+        updated.data_scadenza = data
+        changed = true
+      }
+      continue
+    }
+
+    if (lower.startsWith('emissione') || lower.startsWith('data emissione') || lower.startsWith('emesso')) {
+      const data = parseDataLibera(line)
+      if (data) {
+        updated.data_emissione = data
+        changed = true
+      }
+      continue
+    }
+
+    if (lower.startsWith('banca')) {
+      const banca = line.replace(/^banca\s*[:\-]?\s*/i, '').trim()
+      if (banca) {
+        updated.banca = banca
+        changed = true
+      }
+      continue
+    }
+
+    if (lower.startsWith('emittente') || lower.startsWith('fornitore') || lower.startsWith('cliente') || lower.startsWith('soggetto')) {
+      const emittente = line.replace(/^(emittente|fornitore|cliente|soggetto)\s*[:\-]?\s*/i, '').trim()
+      if (emittente) {
+        updated.emittente = emittente
+        changed = true
+      }
+      continue
+    }
+
+    if (lower.startsWith('numero titolo') || lower.startsWith('n° titolo') || lower.startsWith('n. titolo') || lower.startsWith('titolo n') || lower.startsWith('numero')) {
+      const numero = line.replace(/^(numero titolo|n° titolo|n\. titolo|titolo n|numero)\s*[:\-#]?\s*/i, '').trim()
+      if (numero) {
+        updated.numero_titolo = numero
+        changed = true
+      }
+      continue
+    }
+
+    const dataLine = parseDataLibera(line)
+    if (dataLine) {
+      updated.data_scadenza = dataLine
+      changed = true
+      continue
+    }
+
+    const importoLine = parseImportoItaliano(line)
+    if (importoLine !== null) {
+      updated.importo = importoLine
+      changed = true
+      continue
+    }
+
+    if (isProbabileNomeBanca(line)) {
+      updated.banca = line
+      changed = true
+      continue
+    }
+
+    if (line.length >= 3) {
+      updated.emittente = line
+      changed = true
+    }
+  }
+
+  return { updated, changed }
+}
+
 // ============================================================
 // GET - Verifica webhook Meta
 // ============================================================
@@ -554,7 +713,29 @@ export async function POST(request: NextRequest) {
               interaction_step: 'idle', temp_data: null
             });
           } else {
-            await sendWhatsAppMessage(sender, 'Non ho capito. Rispondi *Sì* per confermare o *No* per annullare.');
+            const { updated, changed } = applyTitoloCorrections(rawContent, titData)
+
+            if (changed) {
+              const riepilogoAggiornato = buildTitoloRiepilogo(updated)
+              const updatedWithFile = { ...updated, file_url: titData.file_url || null }
+
+              if (updatedWithFile.file_url) {
+                await sendWhatsAppImage(sender, updatedWithFile.file_url, `*✏️ DATI TITOLO AGGIORNATI*\n\n${riepilogoAggiornato}`)
+              } else {
+                await sendWhatsAppMessage(sender, `*✏️ DATI TITOLO AGGIORNATI*\n\n${riepilogoAggiornato}`)
+              }
+
+              await supabaseAdmin.from('chat_log').insert({
+                raw_text: rawContent, sender_number: sender, status_ai: 'completed',
+                interaction_step: 'waiting_confirm_titolo', temp_data: updatedWithFile
+              });
+              return new NextResponse('Ricevuto', { status: 200 });
+            }
+
+            await sendWhatsAppMessage(sender,
+              'Non ho capito. Puoi rispondere *Sì* o *No*, oppure correggere i campi scrivendo ad esempio:\n' +
+              '*Scadenza 2026/03/10*\n*Importo 2869,42*\n*Banca BCC*\n*Emittente Fornitore Edilcommercio*'
+            );
             await supabaseAdmin.from('chat_log').insert({
               raw_text: rawContent, sender_number: sender, status_ai: 'completed',
               interaction_step: 'waiting_confirm_titolo', temp_data: pendingData
@@ -936,18 +1117,7 @@ export async function POST(request: NextRequest) {
           // =====================================================
           else if (geminiResult.category === 'titolo_pagamento' && geminiResult.extracted_data) {
             const dati = geminiResult.extracted_data as unknown as TitoloEstratto;
-            const tipoLabel = dati.tipo === 'assegno' ? '📝 ASSEGNO' : '📜 CAMBIALE';
-
-            const riepilogo =
-              `*${tipoLabel} RILEVATO*\n\n` +
-              `Tipo: *${dati.tipo === 'assegno' ? 'Assegno' : 'Cambiale'}*\n` +
-              `Importo: *EUR ${(dati.importo || 0).toFixed(2)}*\n` +
-              `Scadenza: ${dati.data_scadenza || 'non specificata'}\n` +
-              `Emissione: ${dati.data_emissione || 'N/D'}\n` +
-              (dati.numero_titolo ? `N° Titolo: ${dati.numero_titolo}\n` : '') +
-              (dati.banca ? `Banca: ${dati.banca}\n` : '') +
-              (dati.emittente ? `Emittente: ${dati.emittente}\n` : '') +
-              `\nConfermi il salvataggio? Rispondi *Sì* o *No*`;
+            const riepilogo = buildTitoloRiepilogo(dati);
 
             finalReply = riepilogo;
             interactionStep = 'waiting_confirm_titolo';
