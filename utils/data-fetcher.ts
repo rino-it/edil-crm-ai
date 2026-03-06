@@ -3853,7 +3853,9 @@ export async function inserisciTitolo(input: {
     .insert({
       descrizione: `${tipoLabel} ${input.numero_titolo ? '#' + input.numero_titolo : ''} - ${input.banca_incasso || 'Da incassare'}`.trim(),
       importo_totale: input.importo,
+      importo_pagato: 0,
       data_scadenza: input.data_scadenza,
+      data_pianificata: input.data_scadenza,
       tipo: 'entrata',
       stato: 'da_incassare',
       categoria: 'titolo',

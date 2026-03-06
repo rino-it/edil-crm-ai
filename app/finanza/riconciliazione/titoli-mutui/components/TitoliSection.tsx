@@ -1,6 +1,7 @@
 'use client'
 
-import { FileText, Receipt, CheckCircle2, Clock, AlertTriangle, Ban, CalendarDays } from 'lucide-react'
+import { useState } from 'react'
+import { FileText, Receipt, CheckCircle2, Clock, AlertTriangle, Ban, CalendarDays, Image as ImageIcon, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import type { Titolo } from '@/types/finanza'
 
@@ -20,6 +21,8 @@ const tipoIcon: Record<string, React.ReactNode> = {
 }
 
 export function TitoliSection({ titoli }: { titoli: Titolo[] }) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+
   if (titoli.length === 0) {
     return (
       <div className="text-center py-8 text-zinc-400">
@@ -74,6 +77,7 @@ export function TitoliSection({ titoli }: { titoli: Titolo[] }) {
               <th className="p-3 font-medium text-right">Importo</th>
               <th className="p-3 font-medium text-center">Stato</th>
               <th className="p-3 font-medium">Banca</th>
+              <th className="p-3 font-medium text-center">Allegato</th>
             </tr>
           </thead>
           <tbody className="divide-y">
@@ -105,12 +109,58 @@ export function TitoliSection({ titoli }: { titoli: Titolo[] }) {
                     </Badge>
                   </td>
                   <td className="p-3 text-xs text-zinc-500">{t.banca_incasso || '—'}</td>
+                  <td className="p-3 text-center">
+                    {t.file_url ? (
+                      <button
+                        onClick={() => setPreviewUrl(t.file_url!)}
+                        className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 transition-colors text-xs font-medium"
+                        title="Visualizza allegato"
+                      >
+                        <ImageIcon size={14} />
+                        <span className="hidden md:inline">Vedi</span>
+                      </button>
+                    ) : (
+                      <span className="text-zinc-300">—</span>
+                    )}
+                  </td>
                 </tr>
               )
             })}
           </tbody>
         </table>
       </div>
+
+      {/* Lightbox anteprima allegato */}
+      {previewUrl && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+          onClick={() => setPreviewUrl(null)}
+        >
+          <div className="relative max-w-3xl max-h-[85vh] w-full" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={() => setPreviewUrl(null)}
+              className="absolute -top-3 -right-3 bg-white rounded-full p-1.5 shadow-lg hover:bg-zinc-100 transition-colors z-10"
+            >
+              <X size={18} />
+            </button>
+            <img
+              src={previewUrl}
+              alt="Allegato titolo"
+              className="w-full h-auto max-h-[80vh] object-contain rounded-lg shadow-2xl bg-white"
+            />
+            <div className="mt-3 text-center">
+              <a
+                href={previewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-white/80 hover:text-white underline"
+              >
+                Apri in nuova scheda
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
