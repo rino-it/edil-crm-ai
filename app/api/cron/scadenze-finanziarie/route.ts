@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
 
-  // 1. Recupera il numero WhatsApp gruppo soci
+  // 1. Recupera i numeri WhatsApp dei soci (separati da virgola)
   const { data: params, error: paramsError } = await supabase
     .from("parametri_globali")
     .select("whatsapp_gruppo_soci")
@@ -36,10 +36,26 @@ export async function GET(request: Request) {
 
   if (paramsError || !params?.whatsapp_gruppo_soci) {
     console.error("❌ whatsapp_gruppo_soci non trovato:", paramsError);
-    return NextResponse.json({ error: "whatsapp_gruppo_soci non configurato" }, { status: 500 });
+    return NextResponse.json({ error: "whatsapp_gruppo_soci non configurato. Inserisci i numeri dei soci separati da virgola (es: 393401234567,393409876543)" }, { status: 500 });
   }
 
-  const gruppoSoci = params.whatsapp_gruppo_soci;
+  // Supporta più numeri separati da virgola
+  const numeriSoci = params.whatsapp_gruppo_soci
+    .split(",")
+    .map((n: string) => n.trim())
+    .filter((n: string) => n.length > 0);
+
+  if (numeriSoci.length === 0) {
+    return NextResponse.json({ error: "Nessun numero soci configurato" }, { status: 500 });
+  }
+
+  // Helper: invia lo stesso messaggio a tutti i soci
+  const sendToSoci = async (msg: string) => {
+    for (const numero of numeriSoci) {
+      await sendWhatsAppMessage(numero, msg);
+    }
+  };
+
   const oggi = new Date();
   const oggiStr = oggi.toISOString().split("T")[0];
 
@@ -62,7 +78,8 @@ export async function GET(request: Request) {
     const { data: cambiali } = await supabase
       .from("titoli")
       .select(`
-        id, numero, importo, data_scadenza, emittente,
+        id, numero_titolo, importo, data_scadenza, soggetto_id,
+        anagrafica_soggetti(ragione_sociale),
         scadenze_pagamento:scadenza_id (id, reminder_45gg_inviato, reminder_20gg_inviato, reminder_7gg_inviato)
       `)
       .eq("tipo", "cambiale")
@@ -75,6 +92,7 @@ export async function GET(request: Request) {
         if (!scadenza) continue;
         const dataScad = c.data_scadenza;
         if (!dataScad) continue;
+        const emittente = (c as any).anagrafica_soggetti?.ragione_sociale || "N/D";
 
         const giorniMancanti = Math.ceil(
           (new Date(dataScad).getTime() - oggi.getTime()) / (1000 * 60 * 60 * 24)
@@ -82,24 +100,24 @@ export async function GET(request: Request) {
 
         // 45gg
         if (giorniMancanti <= 45 && giorniMancanti > 20 && !scadenza.reminder_45gg_inviato) {
-          const msg = `📝 *Cambiale in Scadenza (45gg)*\n\nN. ${c.numero || "N/D"}\nEmittente: ${c.emittente || "N/D"}\nImporto: ${formatEuro(Number(c.importo))}\nScadenza: ${new Date(dataScad).toLocaleDateString("it-IT")}\n\n⏳ Mancano ${giorniMancanti} giorni`;
-          await sendWhatsAppMessage(gruppoSoci, msg);
+          const msg = `📝 *Cambiale in Scadenza (45gg)*\n\nN. ${c.numero_titolo || "N/D"}\nEmittente: ${emittente}\nImporto: ${formatEuro(Number(c.importo))}\nScadenza: ${new Date(dataScad).toLocaleDateString("it-IT")}\n\n⏳ Mancano ${giorniMancanti} giorni`;
+          await sendToSoci(msg);
           await supabase.from("scadenze_pagamento").update({ reminder_45gg_inviato: true }).eq("id", scadenza.id);
           notificatiTotali++;
         }
 
         // 20gg
         if (giorniMancanti <= 20 && giorniMancanti > 7 && !scadenza.reminder_20gg_inviato) {
-          const msg = `📝 *Cambiale in Scadenza (20gg)*\n\nN. ${c.numero || "N/D"}\nEmittente: ${c.emittente || "N/D"}\nImporto: ${formatEuro(Number(c.importo))}\nScadenza: ${new Date(dataScad).toLocaleDateString("it-IT")}\n\n⚠️ Mancano ${giorniMancanti} giorni`;
-          await sendWhatsAppMessage(gruppoSoci, msg);
+          const msg = `📝 *Cambiale in Scadenza (20gg)*\n\nN. ${c.numero_titolo || "N/D"}\nEmittente: ${emittente}\nImporto: ${formatEuro(Number(c.importo))}\nScadenza: ${new Date(dataScad).toLocaleDateString("it-IT")}\n\n⚠️ Mancano ${giorniMancanti} giorni`;
+          await sendToSoci(msg);
           await supabase.from("scadenze_pagamento").update({ reminder_20gg_inviato: true }).eq("id", scadenza.id);
           notificatiTotali++;
         }
 
         // 7gg
         if (giorniMancanti <= 7 && giorniMancanti >= 0 && !scadenza.reminder_7gg_inviato) {
-          const msg = `🚨 *Cambiale URGENTE (7gg)*\n\nN. ${c.numero || "N/D"}\nEmittente: ${c.emittente || "N/D"}\nImporto: ${formatEuro(Number(c.importo))}\nScadenza: ${new Date(dataScad).toLocaleDateString("it-IT")}\n\n❗ Mancano solo ${giorniMancanti} giorni!`;
-          await sendWhatsAppMessage(gruppoSoci, msg);
+          const msg = `🚨 *Cambiale URGENTE (7gg)*\n\nN. ${c.numero_titolo || "N/D"}\nEmittente: ${emittente}\nImporto: ${formatEuro(Number(c.importo))}\nScadenza: ${new Date(dataScad).toLocaleDateString("it-IT")}\n\n❗ Mancano solo ${giorniMancanti} giorni!`;
+          await sendToSoci(msg);
           await supabase.from("scadenze_pagamento").update({ reminder_7gg_inviato: true }).eq("id", scadenza.id);
           notificatiTotali++;
         }
@@ -117,7 +135,8 @@ export async function GET(request: Request) {
     const { data: assegni } = await supabase
       .from("titoli")
       .select(`
-        id, numero, importo, data_scadenza, emittente,
+        id, numero_titolo, importo, data_scadenza, soggetto_id,
+        anagrafica_soggetti(ragione_sociale),
         scadenze_pagamento:scadenza_id (id, reminder_45gg_inviato, reminder_20gg_inviato, reminder_7gg_inviato)
       `)
       .eq("tipo", "assegno")
@@ -130,6 +149,7 @@ export async function GET(request: Request) {
         if (!scadenza) continue;
         const dataScad = a.data_scadenza;
         if (!dataScad) continue;
+        const emittente = (a as any).anagrafica_soggetti?.ragione_sociale || "N/D";
 
         const giorniMancanti = Math.ceil(
           (new Date(dataScad).getTime() - oggi.getTime()) / (1000 * 60 * 60 * 24)
@@ -137,24 +157,24 @@ export async function GET(request: Request) {
 
         // 45gg
         if (giorniMancanti <= 45 && giorniMancanti > 20 && !scadenza.reminder_45gg_inviato) {
-          const msg = `✏️ *Assegno in Scadenza (45gg)*\n\nN. ${a.numero || "N/D"}\nEmittente: ${a.emittente || "N/D"}\nImporto: ${formatEuro(Number(a.importo))}\nScadenza: ${new Date(dataScad).toLocaleDateString("it-IT")}\n\n⏳ Mancano ${giorniMancanti} giorni`;
-          await sendWhatsAppMessage(gruppoSoci, msg);
+          const msg = `✏️ *Assegno in Scadenza (45gg)*\n\nN. ${a.numero_titolo || "N/D"}\nEmittente: ${emittente}\nImporto: ${formatEuro(Number(a.importo))}\nScadenza: ${new Date(dataScad).toLocaleDateString("it-IT")}\n\n⏳ Mancano ${giorniMancanti} giorni`;
+          await sendToSoci(msg);
           await supabase.from("scadenze_pagamento").update({ reminder_45gg_inviato: true }).eq("id", scadenza.id);
           notificatiTotali++;
         }
 
         // 20gg
         if (giorniMancanti <= 20 && giorniMancanti > 7 && !scadenza.reminder_20gg_inviato) {
-          const msg = `✏️ *Assegno in Scadenza (20gg)*\n\nN. ${a.numero || "N/D"}\nEmittente: ${a.emittente || "N/D"}\nImporto: ${formatEuro(Number(a.importo))}\nScadenza: ${new Date(dataScad).toLocaleDateString("it-IT")}\n\n⚠️ Mancano ${giorniMancanti} giorni`;
-          await sendWhatsAppMessage(gruppoSoci, msg);
+          const msg = `✏️ *Assegno in Scadenza (20gg)*\n\nN. ${a.numero_titolo || "N/D"}\nEmittente: ${emittente}\nImporto: ${formatEuro(Number(a.importo))}\nScadenza: ${new Date(dataScad).toLocaleDateString("it-IT")}\n\n⚠️ Mancano ${giorniMancanti} giorni`;
+          await sendToSoci(msg);
           await supabase.from("scadenze_pagamento").update({ reminder_20gg_inviato: true }).eq("id", scadenza.id);
           notificatiTotali++;
         }
 
         // 7gg
         if (giorniMancanti <= 7 && giorniMancanti >= 0 && !scadenza.reminder_7gg_inviato) {
-          const msg = `🚨 *Assegno URGENTE (7gg)*\n\nN. ${a.numero || "N/D"}\nEmittente: ${a.emittente || "N/D"}\nImporto: ${formatEuro(Number(a.importo))}\nScadenza: ${new Date(dataScad).toLocaleDateString("it-IT")}\n\n❗ Mancano solo ${giorniMancanti} giorni!`;
-          await sendWhatsAppMessage(gruppoSoci, msg);
+          const msg = `🚨 *Assegno URGENTE (7gg)*\n\nN. ${a.numero_titolo || "N/D"}\nEmittente: ${emittente}\nImporto: ${formatEuro(Number(a.importo))}\nScadenza: ${new Date(dataScad).toLocaleDateString("it-IT")}\n\n❗ Mancano solo ${giorniMancanti} giorni!`;
+          await sendToSoci(msg);
           await supabase.from("scadenze_pagamento").update({ reminder_7gg_inviato: true }).eq("id", scadenza.id);
           notificatiTotali++;
         }
@@ -197,7 +217,7 @@ export async function GET(request: Request) {
         // 20gg
         if (giorniMancanti <= 20 && giorniMancanti > 7 && !scadenza.reminder_20gg_inviato) {
           const msg = `🏦 *Rata Mutuo in Scadenza (20gg)*\n\nRata ${r.numero_rata} — ${bancaLabel}${scopoLabel}\nImporto: ${formatEuro(Number(r.importo_rata))}\nScadenza: ${new Date(dataScad).toLocaleDateString("it-IT")}\n\n⚠️ Mancano ${giorniMancanti} giorni`;
-          await sendWhatsAppMessage(gruppoSoci, msg);
+          await sendToSoci(msg);
           await supabase.from("scadenze_pagamento").update({ reminder_20gg_inviato: true }).eq("id", scadenza.id);
           notificatiTotali++;
         }
@@ -205,7 +225,7 @@ export async function GET(request: Request) {
         // 7gg
         if (giorniMancanti <= 7 && giorniMancanti >= 0 && !scadenza.reminder_7gg_inviato) {
           const msg = `🚨 *Rata Mutuo URGENTE (7gg)*\n\nRata ${r.numero_rata} — ${bancaLabel}${scopoLabel}\nImporto: ${formatEuro(Number(r.importo_rata))}\nScadenza: ${new Date(dataScad).toLocaleDateString("it-IT")}\n\n❗ Mancano solo ${giorniMancanti} giorni!`;
-          await sendWhatsAppMessage(gruppoSoci, msg);
+          await sendToSoci(msg);
           await supabase.from("scadenze_pagamento").update({ reminder_7gg_inviato: true }).eq("id", scadenza.id);
           notificatiTotali++;
         }
@@ -275,7 +295,7 @@ export async function GET(request: Request) {
 
         msg += `\nTotale uscite previste: *${formatEuro(totale)}*`;
 
-        await sendWhatsAppMessage(gruppoSoci, msg);
+        await sendToSoci(msg);
         notificatiTotali++;
       }
     } catch (e) {
