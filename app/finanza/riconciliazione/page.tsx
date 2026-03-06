@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { getContiSummary, getStoricoF24, getStoricoFinanziamentiSocio, getStoricoGiroconti, getTotaleSpeseBancarieGlobale } from '@/utils/data-fetcher'
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Landmark, ArrowRight, Upload, Plus, AlertCircle, Receipt } from 'lucide-react'
+import { Landmark, ArrowRight, Upload, Plus, AlertCircle, Receipt, RefreshCw } from 'lucide-react'
 import { UploadCalendar } from './components/UploadCalendar'
 import { AggiungiContoDialog } from './components/AggiungiContoDialog'
 import { DocumentiContoDialog } from './components/DocumentiContoDialog'
@@ -46,6 +46,17 @@ export default async function DashboardRiconciliazionePage() {
         <div>
           <h1 className="text-xl md:text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
             <Landmark className="h-8 w-8 text-blue-600" /> Conti e Riconciliazione
+            {totaleDaRiconciliare > 0 ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-xs font-semibold text-orange-700">
+                <AlertCircle className="h-3.5 w-3.5" />
+                {totaleDaRiconciliare} da riconciliare
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                <RefreshCw className="h-3.5 w-3.5" />
+                Tutto allineato
+              </span>
+            )}
           </h1>
           <p className="text-muted-foreground mt-1">Gestisci i conti correnti, carica gli estratti conto e allinea i saldi.</p>
         </div>
@@ -53,7 +64,7 @@ export default async function DashboardRiconciliazionePage() {
       </div>
 
       {/* KPI Globali */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="shadow-[var(--shadow-sm)] border-border/60">
           <CardHeader className="pb-2 border-b border-border/40">
             <div className="flex items-center justify-between gap-2">
@@ -66,18 +77,6 @@ export default async function DashboardRiconciliazionePage() {
           </CardContent>
         </Card>
         
-        <Card className="shadow-[var(--shadow-sm)] border-border/60">
-          <CardHeader className="pb-2 border-b border-border/40">
-            <div className="flex items-center justify-between gap-2">
-              <div className="h-2 w-2 rounded-full bg-orange-500" />
-              <CardTitle className="text-xs font-bold text-muted-foreground uppercase flex-1">Totale Da Riconciliare</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-4">
-            <div className="text-3xl font-black text-orange-700">{totaleDaRiconciliare} <span className="text-sm font-medium">mov.</span></div>
-          </CardContent>
-        </Card>
-
         {/* Stack compatto: Storici speciali */}
         <div className="flex flex-col gap-2">
           <GirocontiDialog giroconti={storicoGiroconti} />
