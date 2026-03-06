@@ -3851,12 +3851,12 @@ export async function inserisciTitolo(input: {
   const { data: scadenza, error: errSc } = await supabase
     .from('scadenze_pagamento')
     .insert({
-      descrizione: `${tipoLabel} ${input.numero_titolo ? '#' + input.numero_titolo : ''} - ${input.banca_incasso || 'Da incassare'}`.trim(),
+      descrizione: `${tipoLabel} ${input.numero_titolo ? '#' + input.numero_titolo : ''} - ${input.banca_incasso || 'Da pagare'}`.trim(),
       importo_totale: input.importo,
       importo_pagato: 0,
       data_scadenza: input.data_scadenza,
       data_pianificata: input.data_scadenza,
-      tipo: 'entrata',
+      tipo: 'uscita',
       stato: 'da_pagare',
       categoria: 'titolo',
       fonte: 'titolo',

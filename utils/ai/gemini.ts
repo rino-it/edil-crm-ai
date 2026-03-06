@@ -163,12 +163,13 @@ PER DOCUMENTI DI PAGAMENTO (utenze, multe, tasse, avvisi):
 
 4. Se il documento è un ASSEGNO BANCARIO, ASSEGNO CIRCOLARE, CAMBIALE, PAGHERÒ, TRATTA, EFFETTO
    → category="titolo_pagamento"
-   Estrai: tipo (assegno/cambiale), importo, data_scadenza (YYYY-MM-DD), data_emissione (YYYY-MM-DD),
+   Estrai: tipo (assegno/cambiale), importo, data_scadenza (YYYY-MM-DD — la DATA UNICA stampata sul titolo, è sempre la SCADENZA),
    numero_titolo (il numero stampato sull'assegno/cambiale), banca (la banca dell'assegno o della cambiale),
-   emittente (chi ha firmato/emesso il titolo), note
+   emittente (il nome del fornitore/beneficiario a cui si paga, se leggibile), note
+   ⚠️ IMPORTANTE: Assegni e cambiali hanno UNA SOLA DATA che è la DATA DI SCADENZA. Metti SEMPRE la data in data_scadenza, NON in data_emissione. data_emissione deve essere null.
 
 PER TITOLI DI PAGAMENTO (assegni, cambiali):
-{"category":"titolo_pagamento","search_key":null,"summary":"...","reply_to_user":"","extracted_data":{"tipo":"assegno","importo":0.00,"data_scadenza":"YYYY-MM-DD","data_emissione":"YYYY-MM-DD","numero_titolo":"...","banca":"...","emittente":"...","note":null}}
+{"category":"titolo_pagamento","search_key":null,"summary":"...","reply_to_user":"","extracted_data":{"tipo":"assegno","importo":0.00,"data_scadenza":"YYYY-MM-DD","data_emissione":null,"numero_titolo":"...","banca":"...","emittente":"...","note":null}}
 
 REGOLE:
 - P.IVA: ATTENZIONE — estrai la P.IVA dell'EMITTENTE/FORNITORE (chi ha emesso il documento), NON quella del DESTINATARIO/CLIENTE. In fattura il fornitore è nel blocco "Cedente/Prestatore", il cliente nel blocco "Cessionario/Committente".

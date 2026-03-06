@@ -197,12 +197,11 @@ function buildTitoloRiepilogo(dati: TitoloEstratto) {
     `Tipo: *${dati.tipo === 'assegno' ? 'Assegno' : 'Cambiale'}*\n` +
     `Importo: *EUR ${(dati.importo || 0).toFixed(2)}*\n` +
     `Scadenza: ${dati.data_scadenza || 'non specificata'}\n` +
-    `Emissione: ${dati.data_emissione || 'N/D'}\n` +
     (dati.numero_titolo ? `N° Titolo: ${dati.numero_titolo}\n` : '') +
     (dati.banca ? `Banca: ${dati.banca}\n` : '') +
-    (dati.emittente ? `Emittente: ${dati.emittente}\n` : '') +
+    (dati.emittente ? `Fornitore: ${dati.emittente}\n` : '') +
     `\nSe qualcosa è errato, puoi correggerlo scrivendo ad esempio:\n` +
-    `*Scadenza 2026/03/10*\n*Importo 2869,42*\n*Banca BCC*\n*Emittente Fornitore Edilcommercio*\n\n` +
+    `*Scadenza 2026/03/10*\n*Importo 2869,42*\n*Banca BCC*\n*Fornitore Edilcassa*\n\n` +
     `Poi rispondi *Sì* per salvare o *No* per annullare`
   )
 }
@@ -677,21 +676,40 @@ export async function POST(request: NextRequest) {
 
           if (conf === 'yes') {
             try {
+              // Data scadenza: usa data_scadenza, fallback data_emissione se mancante
+              const dataScadenzaFinale = titData.data_scadenza || titData.data_emissione || new Date().toISOString().split('T')[0]
+
+              // Cerca soggetto in anagrafica per nome fornitore/emittente
+              let soggettoId: string | undefined = undefined
+              if (titData.emittente) {
+                const ricercaNome = titData.emittente.toLowerCase()
+                const { data: candidati } = await supabaseAdmin
+                  .from('anagrafica_soggetti')
+                  .select('id, ragione_sociale')
+                  .ilike('ragione_sociale', `%${ricercaNome}%`)
+                  .limit(1)
+                if (candidati && candidati.length > 0) {
+                  soggettoId = candidati[0].id
+                  console.log(`✅ Soggetto trovato: ${candidati[0].ragione_sociale} → ${soggettoId}`)
+                }
+              }
+
               await inserisciTitolo({
                 tipo: titData.tipo || 'assegno',
                 importo: titData.importo || 0,
-                data_scadenza: titData.data_scadenza || new Date().toISOString().split('T')[0],
-                data_emissione: titData.data_emissione || undefined,
+                data_scadenza: dataScadenzaFinale,
                 numero_titolo: titData.numero_titolo || undefined,
                 banca_incasso: titData.banca || undefined,
-                note: titData.emittente ? `Emittente: ${titData.emittente}` : undefined,
+                soggetto_id: soggettoId,
+                note: titData.emittente ? `Fornitore: ${titData.emittente}` : undefined,
                 file_url: titData.file_url || undefined,
                 ocr_data: titData as unknown as Record<string, unknown>,
               });
 
               const tipoLabel = titData.tipo === 'assegno' ? 'Assegno' : 'Cambiale';
+              const fornitoreLabel = titData.emittente ? ` a ${titData.emittente}` : ''
               await sendWhatsAppMessage(sender,
-                `✅ ${tipoLabel} salvato! Scadenza creata: *EUR ${(titData.importo || 0).toFixed(2)}*`
+                `✅ ${tipoLabel} salvato${fornitoreLabel}! Scadenza ${dataScadenzaFinale}: *EUR ${(titData.importo || 0).toFixed(2)}*`
               );
               await supabaseAdmin.from('chat_log').insert({
                 raw_text: rawContent, sender_number: sender, status_ai: 'completed',
