@@ -3857,7 +3857,7 @@ export async function inserisciTitolo(input: {
       data_scadenza: input.data_scadenza,
       data_pianificata: input.data_scadenza,
       tipo: 'entrata',
-      stato: 'da_incassare',
+      stato: 'da_pagare',
       categoria: 'titolo',
       fonte: 'titolo',
       soggetto_id: input.soggetto_id || null,

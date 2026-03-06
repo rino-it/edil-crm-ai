@@ -375,27 +375,41 @@ async function callGemini(
   try {
     console.log(`🤖 Chiamata Gemini ${modelToUse} (immagine: ${hasImage ? "SI" : "NO"})...`);
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ parts }] }),
-    });
+    let lastError: Error | null = null;
+    const maxRetries = 3;
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error(`🔥 Errore API ${modelToUse}:`, JSON.stringify(errorData, null, 2));
-      throw new Error(`Errore API: ${response.status}`);
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts }] }),
+      });
+
+      if (response.status === 503 && attempt < maxRetries) {
+        const waitMs = attempt * 3000;
+        console.warn(`⏳ Gemini 503 (tentativo ${attempt}/${maxRetries}), retry tra ${waitMs / 1000}s...`);
+        await new Promise(resolve => setTimeout(resolve, waitMs));
+        continue;
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error(`🔥 Errore API ${modelToUse}:`, JSON.stringify(errorData, null, 2));
+        throw new Error(`Errore API: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+      if (!aiText) throw new Error("Risposta vuota da Gemini");
+
+      const cleanJson = aiText.replace(/```json\s*|```\s*/g, "").trim();
+      console.log("✅ Gemini ha risposto!");
+
+      return JSON.parse(cleanJson);
     }
 
-    const data = await response.json();
-    const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!aiText) throw new Error("Risposta vuota da Gemini");
-
-    const cleanJson = aiText.replace(/```json\s*|```\s*/g, "").trim();
-    console.log("✅ Gemini ha risposto!");
-
-    return JSON.parse(cleanJson);
+    throw lastError || new Error("Gemini non disponibile dopo i tentativi");
   } catch (error) {
     console.error("🔥 Errore Gemini:", error);
     return fallbackError(
