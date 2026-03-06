@@ -24,7 +24,7 @@ export default async function DaSmistarePage({
     getCantieriAttivi(),
   ])
 
-  const cantieri = cantieriRaw.map(c => ({ id: c.id, label: `${c.codice} - ${c.titolo}` }))
+  const cantieri = cantieriRaw.map(c => ({ id: c.id, label: c.nome }))
 
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
