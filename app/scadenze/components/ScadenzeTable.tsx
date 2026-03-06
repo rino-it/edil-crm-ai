@@ -65,12 +65,10 @@ export function ScadenzeTable({
           <TableHeader className="bg-zinc-50/80">
             <TableRow>
               <TableHead className="font-semibold">Soggetto</TableHead>
-              <TableHead className="w-20 font-semibold">Tipo</TableHead>
               <TableHead className="font-semibold">Fattura / Rif.</TableHead>
               {showCantiereColumn && <TableHead className="font-semibold">Cantiere</TableHead>}
               <TableHead className="text-right font-semibold">Totale</TableHead>
               <TableHead className="text-right font-semibold">Residuo</TableHead>
-              <TableHead className="font-semibold">Emissione</TableHead>
               <TableHead className="font-semibold">Scadenza</TableHead>
               <TableHead className="font-semibold">Stato</TableHead>
               <TableHead className="text-right font-semibold">Azioni</TableHead>
@@ -84,21 +82,22 @@ export function ScadenzeTable({
               return (
                 <TableRow key={s.id} className="group hover:bg-zinc-50/50 transition-colors">
                   <TableCell className="font-bold text-zinc-900">
-                    {s.anagrafica_soggetti?.ragione_sociale || 'N/D'}
-                  </TableCell>
-
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                    {s.categoria ? (
-                      <Badge variant="outline" className={`text-[10px] ${CATEGORIA_COLORS[s.categoria] || 'border-zinc-300 bg-zinc-50 text-zinc-600'}`}>
-                        {CATEGORIA_LABELS[s.categoria] || s.categoria}
-                      </Badge>
-                    ) : null}
-                    {(s as any).auto_domiciliazione && (
-                      <Badge variant="outline" className="text-[10px] border-cyan-300 bg-cyan-50 text-cyan-700">
-                        SDD
-                      </Badge>
-                    )}
+                    <div className="space-y-1">
+                      <div>{s.anagrafica_soggetti?.ragione_sociale || 'N/D'}</div>
+                      {(s.categoria || (s as any).auto_domiciliazione) && (
+                        <div className="flex flex-wrap gap-1">
+                          {s.categoria && (
+                            <Badge variant="outline" className={`text-[10px] ${CATEGORIA_COLORS[s.categoria] || 'border-zinc-300 bg-zinc-50 text-zinc-600'}`}>
+                              {CATEGORIA_LABELS[s.categoria] || s.categoria}
+                            </Badge>
+                          )}
+                          {(s as any).auto_domiciliazione && (
+                            <Badge variant="outline" className="text-[10px] border-cyan-300 bg-cyan-50 text-cyan-700">
+                              SDD
+                            </Badge>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </TableCell>
                   
@@ -125,10 +124,6 @@ export function ScadenzeTable({
                   
                   <TableCell className={`text-right font-black ${importoResiduo > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                     {formatEuro(importoResiduo)}
-                  </TableCell>
-                  
-                  <TableCell className="text-sm text-zinc-500">
-                    {s.data_emissione ? new Date(s.data_emissione).toLocaleDateString('it-IT') : '-'}
                   </TableCell>
                   
                   <TableCell className="text-sm font-medium">
@@ -204,6 +199,18 @@ export function ScadenzeTable({
                   <div className="font-black text-zinc-900 text-sm leading-tight uppercase truncate">
                     {s.anagrafica_soggetti?.ragione_sociale || 'N/D'}
                   </div>
+                  {(s.categoria || (s as any).auto_domiciliazione) && (
+                    <div className="flex flex-wrap gap-1 mt-0.5">
+                      {s.categoria && (
+                        <Badge variant="outline" className={`text-[10px] ${CATEGORIA_COLORS[s.categoria] || 'border-zinc-300 bg-zinc-50 text-zinc-600'}`}>
+                          {CATEGORIA_LABELS[s.categoria] || s.categoria}
+                        </Badge>
+                      )}
+                      {(s as any).auto_domiciliazione && (
+                        <Badge variant="outline" className="text-[10px] border-cyan-300 bg-cyan-50 text-cyan-700">SDD</Badge>
+                      )}
+                    </div>
+                  )}
                   <div className="text-xs text-zinc-500 font-mono flex items-center gap-1.5">
                     Fattura: {s.fattura_riferimento || '-'}
                     {s.file_url && (
@@ -226,13 +233,7 @@ export function ScadenzeTable({
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 bg-zinc-50 p-3 rounded-xl border border-zinc-100">
-                <div>
-                  <div className="text-[9px] font-bold text-zinc-400 uppercase">Emissione</div>
-                  <div className="text-sm font-bold text-zinc-700">
-                    {s.data_emissione ? new Date(s.data_emissione).toLocaleDateString('it-IT') : '-'}
-                  </div>
-                </div>
+              <div className="grid grid-cols-2 gap-2 bg-zinc-50 p-3 rounded-xl border border-zinc-100">
                 <div>
                   <div className="text-[9px] font-bold text-zinc-400 uppercase">Scadenza</div>
                   <div className="text-sm font-bold text-zinc-700">

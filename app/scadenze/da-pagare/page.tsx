@@ -11,11 +11,12 @@ export default async function DaPagarePage({
   const page = Number(params.page) || 1
   const pageSize = Number(params.pageSize) || DEFAULT_PAGE_SIZE
 
-  // Fetch dei dati specifici per "Da Pagare"
+  // Fetch dei dati specifici per "Da Pagare": scaduti + scadenze entro 30gg
   const result = await getScadenzePaginated(
     { 
       tipo: 'uscita', 
-      stato: ['da_pagare'], 
+      stato: ['da_pagare', 'parziale', 'scaduto'], 
+      scadenzaEntroGiorni: 30,
       search: params.search 
     },
     { page, pageSize }
@@ -26,7 +27,7 @@ export default async function DaPagarePage({
       <div className="flex justify-between items-end">
         <div>
           <h2 className="text-xl font-bold text-zinc-800">Uscite da Pagare</h2>
-          <p className="text-sm text-zinc-500">Fatture fornitori e uscite non ancora saldate.</p>
+          <p className="text-sm text-zinc-500">Fatture scadute e in scadenza nei prossimi 30 giorni.</p>
         </div>
       </div>
       

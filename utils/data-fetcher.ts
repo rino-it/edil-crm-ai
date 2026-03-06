@@ -2877,6 +2877,7 @@ export interface FiltriScadenze {
   cantiere_id?: string | null; // null = Da Smistare (senza cantiere)
   categoria?: string;
   search?: string;
+  scadenzaEntroGiorni?: number; // mostra scaduti + da pagare/parziale con scadenza entro N giorni da oggi
 }
 
 /**
@@ -2917,6 +2918,16 @@ export async function getScadenzePaginated(
 
   if (filtri.categoria) {
     query = query.eq('categoria', filtri.categoria);
+  }
+
+  if (filtri.scadenzaEntroGiorni !== undefined) {
+    // Mostra: tutti gli scaduti (qualunque data) + da_pagare/parziale con scadenza entro N giorni
+    const maxDate = new Date();
+    maxDate.setDate(maxDate.getDate() + filtri.scadenzaEntroGiorni);
+    const maxDateStr = maxDate.toISOString().split('T')[0];
+    const today = new Date().toISOString().split('T')[0];
+    // scaduto: data_scadenza < oggi  |  da_pagare/parziale: data_scadenza <= maxDate
+    query = query.or(`stato.eq.scaduto,data_scadenza.lte.${maxDateStr}`);
   }
 
   if (filtri.search) {
