@@ -2920,9 +2920,21 @@ export async function getScadenzePaginated(
   }
 
   if (filtri.search) {
-    // Ricerca testuale su fattura o descrizione
+    // Ricerca testuale su soggetto, fattura o descrizione
     const searchTerm = `%${filtri.search}%`;
-    query = query.or(`fattura_riferimento.ilike.${searchTerm},descrizione.ilike.${searchTerm}`);
+    // Prima risolviamo i soggetti corrispondenti (PostgREST non supporta .or() su risorse embedded)
+    const { data: soggettiMatch } = await supabase
+      .from('anagrafica_soggetti')
+      .select('id')
+      .ilike('ragione_sociale', searchTerm);
+    const soggettiIds = (soggettiMatch || []).map((s: { id: string }) => s.id);
+    if (soggettiIds.length > 0) {
+      query = query.or(
+        `fattura_riferimento.ilike.${searchTerm},descrizione.ilike.${searchTerm},soggetto_id.in.(${soggettiIds.join(',')})`
+      );
+    } else {
+      query = query.or(`fattura_riferimento.ilike.${searchTerm},descrizione.ilike.${searchTerm}`);
+    }
   }
 
   // 3. Ordinamento (le scadenze più imminenti prima, se da pagare/incassare, altrimenti le più recenti)
