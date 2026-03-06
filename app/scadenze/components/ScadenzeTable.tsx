@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useRef } from 'react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { CheckCircle2, MoreHorizontal, MessageCircle, CalendarPlus, ArrowRight, Paperclip, Loader2 } from "lucide-react"
+import { CheckCircle2, MoreHorizontal, MessageCircle, CalendarPlus, ArrowRight, Paperclip, Loader2, Pencil, Check, X } from "lucide-react"
 import Link from "next/link"
 import { ScadenzaWithSoggetto } from "@/types/finanza"
 import { PaginatedResult } from "@/types/pagination"
@@ -23,11 +23,12 @@ interface ScadenzeTableProps {
   cantieri?: { id: string; label: string }[];
 }
 
-// ─── Cella Fattura inline edit ─────────────────────────────
-function FatturaEditCell({ scadenzaId, initial, fileUrl }: { scadenzaId: string; initial: string | null; fileUrl?: string | null }) {
+// ─── Fattura: badge cliccabile → input inline ─────────────────
+function FatturaEditCell({ scadenzaId, initial, fileUrl }: { scadenzaId: string; initial: string | null; fileUrl: string | null }) {
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(initial || '')
   const [isPending, startTransition] = useTransition()
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const commit = (newVal: string) => {
     setEditing(false)
@@ -46,94 +47,94 @@ function FatturaEditCell({ scadenzaId, initial, fileUrl }: { scadenzaId: string;
 
   if (editing) {
     return (
-      <input
-        type="text"
-        value={value}
-        autoFocus
-        onChange={e => setValue(e.target.value)}
-        onBlur={e => commit(e.target.value)}
-        onKeyDown={e => {
-          if (e.key === 'Enter') commit(value)
-          if (e.key === 'Escape') { setEditing(false); setValue(initial || '') }
-        }}
-        className="text-xs border border-blue-300 rounded px-1.5 py-0.5 bg-blue-50 text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-400 w-full max-w-[120px] font-mono"
-      />
+      <div className="flex items-center gap-1">
+        <input
+          ref={inputRef}
+          type="text"
+          value={value}
+          autoFocus
+          onChange={e => setValue(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') commit(value)
+            if (e.key === 'Escape') { setEditing(false); setValue(initial || '') }
+          }}
+          className="text-[10px] font-semibold px-1.5 py-0.5 rounded border border-blue-300 bg-blue-50 text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-400 w-full max-w-[110px] font-mono"
+          placeholder="N. fattura..."
+        />
+        <button onClick={() => commit(value)} className="text-emerald-500 hover:text-emerald-700" title="Conferma"><Check size={12} /></button>
+        <button onClick={() => { setEditing(false); setValue(initial || '') }} className="text-zinc-400 hover:text-zinc-600" title="Annulla"><X size={12} /></button>
+      </div>
     )
   }
 
   return (
-    <div className={`flex items-center gap-1.5 ${isPending ? 'opacity-40' : ''}`}>
+    <div className={`flex items-center gap-1.5 ${isPending ? 'opacity-40 pointer-events-none' : ''}`}>
       {isPending ? (
-        <Loader2 size={12} className="animate-spin text-zinc-400" />
-      ) : (
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          className="text-xs font-mono text-zinc-600 hover:text-blue-600 hover:underline cursor-pointer truncate max-w-[120px]"
-          title="Clicca per modificare"
-        >
-          {value || '-'}
-        </button>
-      )}
+        <Loader2 size={11} className="animate-spin text-zinc-400" />
+      ) : null}
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border transition-all inline-flex items-center gap-1 ${
+          value
+            ? 'bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-100'
+            : 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100 cursor-pointer'
+        }`}
+        title="Clicca per modificare fattura"
+      >
+        {value || 'Inserisci'}
+        <Pencil size={9} className="opacity-50" />
+      </button>
       {fileUrl && (
         <a href={fileUrl} target="_blank" rel="noopener noreferrer" title="Apri documento allegato">
-          <Paperclip className="h-3.5 w-3.5 text-blue-500 hover:text-blue-700 transition-colors" />
+          <Paperclip className="h-3 w-3 text-blue-500 hover:text-blue-700 transition-colors" />
         </a>
       )}
     </div>
   )
 }
 
-// ─── Cella Cantiere inline dropdown ────────────────────────
-function CantiereEditCell({ scadenzaId, current, cantieri }: { scadenzaId: string; current: { codice: string; titolo: string } | null; cantieri: { id: string; label: string }[] }) {
-  const [editing, setEditing] = useState(false)
+// ─── Cantiere: dropdown sempre visibile (stile AssegnaCantiereSelect) ────
+function CantiereDropdown({ scadenzaId, currentCantiere, cantieri }: { scadenzaId: string; currentCantiere: { codice: string; titolo: string } | null; cantieri: { id: string; label: string }[] }) {
   const [isPending, startTransition] = useTransition()
 
-  const commit = (cantiereId: string) => {
-    setEditing(false)
+  // Trova l'ID attuale tra i cantieri disponibili
+  const currentId = currentCantiere 
+    ? cantieri.find(c => c.label.startsWith(currentCantiere.codice))?.id || 'null' 
+    : 'null'
+
+  const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newId = e.target.value
     startTransition(async () => {
       try {
-        await assegnaCantiereAScadenza(scadenzaId, cantiereId || 'null')
-        toast.success('Cantiere assegnato')
+        await assegnaCantiereAScadenza(scadenzaId, newId)
+        toast.success(newId === 'null' ? 'Cantiere rimosso' : 'Cantiere assegnato')
       } catch {
         toast.error('Errore assegnazione cantiere')
       }
     })
   }
 
-  if (editing) {
-    return (
-      <select
-        autoFocus
-        defaultValue=""
-        onBlur={e => { if (!e.target.value) setEditing(false) }}
-        onChange={e => commit(e.target.value)}
-        className="text-xs border border-blue-300 rounded px-1 py-0.5 bg-blue-50 text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-400 w-full max-w-[150px]"
-      >
-        <option value="">— Seleziona —</option>
-        <option value="null">Rimuovi cantiere</option>
-        {cantieri.map(c => (
-          <option key={c.id} value={c.id}>{c.label}</option>
-        ))}
-      </select>
-    )
-  }
-
   return (
-    <div className={isPending ? 'opacity-40' : ''}>
-      {isPending ? (
-        <Loader2 size={12} className="animate-spin text-zinc-400" />
-      ) : (
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          className="text-xs text-zinc-600 hover:text-blue-600 hover:underline cursor-pointer truncate max-w-[150px] block text-left"
-          title="Clicca per assegnare cantiere"
-        >
-          {current ? `${current.codice} - ${current.titolo}` : <span className="text-zinc-400 italic">Non assegnato</span>}
-        </button>
-      )}
-    </div>
+    <select
+      disabled={isPending}
+      className={`text-[10px] font-semibold px-1.5 py-0.5 rounded w-full max-w-[150px] border outline-none transition-all ${
+        isPending ? 'opacity-40' : ''
+      } ${
+        currentCantiere
+          ? 'bg-blue-50 text-blue-600 border-blue-200'
+          : 'bg-amber-50 text-amber-600 border-amber-200 cursor-pointer hover:bg-amber-100'
+      }`}
+      defaultValue={currentId}
+      onChange={handleChange}
+    >
+      <option value="null">🏗️ Assegna cantiere...</option>
+      {cantieri.map(c => (
+        <option key={c.id} value={c.id}>
+          {c.label.length > 25 ? c.label.substring(0, 25) + '...' : c.label}
+        </option>
+      ))}
+    </select>
   )
 }
 
@@ -227,7 +228,7 @@ export function ScadenzeTable({
                   {showCantiereColumn && (
                     <TableCell className="text-xs text-zinc-600 max-w-[160px]">
                       {cantieri.length > 0 ? (
-                        <CantiereEditCell scadenzaId={s.id} current={s.cantieri ?? null} cantieri={cantieri} />
+                        <CantiereDropdown scadenzaId={s.id} currentCantiere={s.cantieri ?? null} cantieri={cantieri} />
                       ) : (
                         <span className="truncate block">{s.cantieri ? `${s.cantieri.codice} - ${s.cantieri.titolo}` : <span className="text-zinc-400 italic">Non assegnato</span>}</span>
                       )}
@@ -328,16 +329,17 @@ export function ScadenzeTable({
                     </div>
                   )}
                   <div className="text-xs text-zinc-500 font-mono flex items-center gap-1.5">
-                    Fattura: {s.fattura_riferimento || '-'}
-                    {s.file_url && (
-                      <a href={s.file_url} target="_blank" rel="noopener noreferrer">
-                        <Paperclip className="h-3 w-3 text-blue-500" />
-                      </a>
-                    )}
+                    <FatturaEditCell scadenzaId={s.id} initial={s.fattura_riferimento ?? null} fileUrl={s.file_url ?? null} />
                   </div>
                   {showCantiereColumn && (
-                    <div className="text-xs text-zinc-600 truncate mt-1">
-                      📍 {s.cantieri ? s.cantieri.codice : 'Cantiere N/D'}
+                    <div className="mt-1">
+                      {cantieri.length > 0 ? (
+                        <CantiereDropdown scadenzaId={s.id} currentCantiere={s.cantieri ?? null} cantieri={cantieri} />
+                      ) : (
+                        <div className="text-xs text-zinc-600 truncate">
+                          📍 {s.cantieri ? `${s.cantieri.codice} - ${s.cantieri.titolo}` : 'Non assegnato'}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

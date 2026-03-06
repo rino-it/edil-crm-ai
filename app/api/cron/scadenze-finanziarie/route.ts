@@ -9,10 +9,17 @@ const formatEuro = (val: number) =>
   new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(val);
 
 export async function GET(request: Request) {
-  // Protezione: verifica il secret Vercel Cron
+  // Protezione: verifica il secret Vercel Cron (skip se non configurato, per test manuali)
   const authHeader = request.headers.get("authorization");
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (process.env.CRON_SECRET) {
+    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+      // Consenti anche query param ?secret=xxx per test da browser
+      const url = new URL(request.url);
+      const secretParam = url.searchParams.get("secret");
+      if (secretParam !== process.env.CRON_SECRET) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+    }
   }
 
   const supabase = createClient(
