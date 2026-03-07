@@ -4,7 +4,7 @@ import { useState, useTransition, useRef } from 'react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { CheckCircle2, MoreHorizontal, MessageCircle, CalendarPlus, ArrowRight, Paperclip, Loader2, Pencil, Check, X } from "lucide-react"
+import { CheckCircle2, MoreHorizontal, MessageCircle, CalendarPlus, ArrowRight, FileText, Loader2, Pencil, Check, X } from "lucide-react"
 import Link from "next/link"
 import { ScadenzaWithSoggetto } from "@/types/finanza"
 import { PaginatedResult } from "@/types/pagination"
@@ -58,7 +58,7 @@ function FatturaEditCell({ scadenzaId, initial, fileUrl }: { scadenzaId: string;
             if (e.key === 'Enter') commit(value)
             if (e.key === 'Escape') { setEditing(false); setValue(initial || '') }
           }}
-          className="text-[10px] font-semibold px-1.5 py-0.5 rounded border border-blue-300 bg-blue-50 text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-400 w-full max-w-[110px] font-mono"
+          className="text-[10px] font-semibold px-1.5 py-0.5 rounded border border-blue-300 bg-blue-50 text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-400 w-full max-w-[100px] font-mono"
           placeholder="N. fattura..."
         />
         <button onClick={() => commit(value)} className="text-emerald-500 hover:text-emerald-700" title="Conferma"><Check size={12} /></button>
@@ -85,11 +85,6 @@ function FatturaEditCell({ scadenzaId, initial, fileUrl }: { scadenzaId: string;
         {value || 'Inserisci'}
         <Pencil size={9} className="opacity-50" />
       </button>
-      {fileUrl && (
-        <a href={fileUrl} target="_blank" rel="noopener noreferrer" title="Apri documento allegato">
-          <Paperclip className="h-3 w-3 text-blue-500 hover:text-blue-700 transition-colors" />
-        </a>
-      )}
     </div>
   )
 }
@@ -118,7 +113,7 @@ function CantiereDropdown({ scadenzaId, currentCantiereId, cantieri }: { scadenz
   return (
     <select
       disabled={isPending}
-      className={`text-[10px] font-semibold px-1.5 py-0.5 rounded w-full max-w-[150px] border outline-none transition-all ${
+      className={`text-[10px] font-semibold px-1.5 py-0.5 rounded w-full max-w-[130px] border outline-none transition-all ${
         isPending ? 'opacity-40' : ''
       } ${
         isAssigned
@@ -184,13 +179,14 @@ export function ScadenzeTable({
         <Table className="table-fixed">
           <TableHeader className="bg-zinc-50/80">
             <TableRow>
-              <TableHead className="font-semibold max-w-[200px] w-[200px]">Soggetto</TableHead>
-              <TableHead className="font-semibold max-w-[140px] w-[140px]">Fattura / Rif.</TableHead>
-              {showCantiereColumn && <TableHead className="font-semibold max-w-[160px] w-[160px]">Cantiere</TableHead>}
-              <TableHead className="text-right font-semibold">Totale</TableHead>
-              <TableHead className="text-right font-semibold">Residuo</TableHead>
-              <TableHead className="font-semibold">Scadenza</TableHead>
-              <TableHead className="font-semibold">Stato</TableHead>
+              <TableHead className="font-semibold w-[180px]">Soggetto</TableHead>
+              <TableHead className="font-semibold w-[110px] pr-2">Fattura / Rif.</TableHead>
+              {showCantiereColumn && <TableHead className="font-semibold w-[140px] pl-2">Cantiere</TableHead>}
+              <TableHead className="text-right font-semibold w-[90px]">Totale</TableHead>
+              <TableHead className="text-right font-semibold w-[90px]">Residuo</TableHead>
+              <TableHead className="font-semibold w-[90px]">Scadenza</TableHead>
+              <TableHead className="font-semibold w-[90px]">Stato</TableHead>
+              <TableHead className="text-center font-semibold w-[40px]" title="Allegato PDF">FT</TableHead>
               <TableHead className="text-right font-semibold">Azioni</TableHead>
             </TableRow>
           </TableHeader>
@@ -201,9 +197,9 @@ export function ScadenzeTable({
 
               return (
                 <TableRow key={s.id} className="group hover:bg-zinc-50/50 transition-colors">
-                  <TableCell className="font-bold text-zinc-900 max-w-[200px]">
+                  <TableCell className="font-bold text-zinc-900 w-[180px]">
                     <div className="space-y-1">
-                      <div className="truncate">{s.anagrafica_soggetti?.ragione_sociale || 'N/D'}</div>
+                      <div className="truncate max-w-[170px]">{s.anagrafica_soggetti?.ragione_sociale || 'N/D'}</div>
                       {(s.categoria || (s as any).auto_domiciliazione) && (
                         <div className="flex flex-wrap gap-1">
                           {s.categoria && (
@@ -221,12 +217,12 @@ export function ScadenzeTable({
                     </div>
                   </TableCell>
                   
-                  <TableCell className="text-xs font-mono text-zinc-600 max-w-[140px]">
+                  <TableCell className="text-xs font-mono text-zinc-600 w-[110px] pr-2">
                     <FatturaEditCell scadenzaId={s.id} initial={s.fattura_riferimento ?? null} fileUrl={s.file_url ?? null} />
                   </TableCell>
                   
                   {showCantiereColumn && (
-                    <TableCell className="text-xs text-zinc-600 max-w-[160px]">
+                    <TableCell className="text-xs text-zinc-600 w-[140px] pl-2">
                       {cantieri.length > 0 ? (
                         <CantiereDropdown scadenzaId={s.id} currentCantiereId={s.cantiere_id ?? null} cantieri={cantieri} />
                       ) : (
@@ -256,7 +252,24 @@ export function ScadenzeTable({
                       {isScaduta && s.stato !== 'pagato' ? 'SCADUTA' : s.stato.toUpperCase().replace('_', ' ')}
                     </Badge>
                   </TableCell>
-                  
+
+                  {/* Colonna FT - allegato PDF */}
+                  <TableCell className="text-center">
+                    {s.file_url ? (
+                      <a
+                        href={s.file_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Apri fattura PDF"
+                        className="inline-flex items-center justify-center size-7 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 transition-colors"
+                      >
+                        <FileText size={13} />
+                      </a>
+                    ) : (
+                      <span className="text-zinc-200 text-[10px]">—</span>
+                    )}
+                  </TableCell>
+
                   <TableCell className="text-right py-3 pr-4">
                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                       {s.anagrafica_soggetti?.telefono ? (
@@ -330,6 +343,17 @@ export function ScadenzeTable({
                   )}
                   <div className="text-xs text-zinc-500 font-mono flex items-center gap-1.5">
                     <FatturaEditCell scadenzaId={s.id} initial={s.fattura_riferimento ?? null} fileUrl={s.file_url ?? null} />
+                    {s.file_url && (
+                      <a
+                        href={s.file_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Apri fattura PDF"
+                        className="inline-flex items-center justify-center size-5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 transition-colors flex-shrink-0"
+                      >
+                        <FileText size={10} />
+                      </a>
+                    )}
                   </div>
                   {showCantiereColumn && (
                     <div className="mt-1">
