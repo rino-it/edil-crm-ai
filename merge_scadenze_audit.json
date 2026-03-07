@@ -1,0 +1,996 @@
+[
+  {
+    "action": "MERGED",
+    "keeper_id": "626d9c9d-8868-516f-9102-2642d77ce12e",
+    "donor_id": "fcd91aba-0bc3-4db4-bfba-eadab6bd8511",
+    "fattura": "0000000003118235",
+    "data_emissione": "2026-02-28",
+    "keeper_fonte_before": null,
+    "donor_fonte": "fattura",
+    "fields_merged": [
+      "auto_domiciliazione copiata",
+      "descrizione copiata"
+    ],
+    "update_payload": {
+      "auto_domiciliazione": true,
+      "descrizione": "Fattura n. 0000000003118235 da TELEPASS S.P.A. (Rata 1/1)",
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "0a5ee988-f139-5626-ba0c-b4983c3df37f",
+    "donor_id": "77f0723e-76c3-48e1-8084-05a84bef4191",
+    "fattura": "000000001341919D",
+    "data_emissione": "2026-02-28",
+    "keeper_fonte_before": null,
+    "donor_fonte": "fattura",
+    "fields_merged": [
+      "auto_domiciliazione copiata",
+      "descrizione copiata"
+    ],
+    "update_payload": {
+      "auto_domiciliazione": true,
+      "descrizione": "Fattura n. 000000001341919D da AUTOSTRADE PER L'ITALIA S.P.A. (Rata 1/1)",
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "461e4364-3a2a-5b1f-b2cd-bafa0fe23c77",
+    "donor_id": "441f9d14-5039-44a5-a47c-ddc2894d7571",
+    "fattura": "000000052912921T",
+    "data_emissione": "2026-02-28",
+    "keeper_fonte_before": null,
+    "donor_fonte": "fattura",
+    "fields_merged": [
+      "auto_domiciliazione copiata",
+      "descrizione copiata"
+    ],
+    "update_payload": {
+      "auto_domiciliazione": true,
+      "descrizione": "Fattura n. 000000052912921T da TELEPASS S.P.A. (Rata 1/1)",
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "9d38368a-96ec-51b7-aa73-d2ed9778c1c7",
+    "donor_id": "2733c5fe-d93a-4eef-8933-c90de30fbd25",
+    "fattura": "000000108005867P",
+    "data_emissione": "2026-02-28",
+    "keeper_fonte_before": null,
+    "donor_fonte": "fattura",
+    "fields_merged": [
+      "auto_domiciliazione copiata",
+      "descrizione copiata"
+    ],
+    "update_payload": {
+      "auto_domiciliazione": true,
+      "descrizione": "Fattura n. 000000108005867P da PARCHEGGI ITALIA SPA (Rata 1/1)",
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "6f8f054d-9a0f-5691-bb24-1be9c5544f41",
+    "donor_id": "d87a2176-abfd-4ff4-b606-dd97d6222020",
+    "fattura": "05387-4160271898-76",
+    "data_emissione": "2026-02-03",
+    "keeper_fonte_before": null,
+    "donor_fonte": "fattura",
+    "fields_merged": [
+      "descrizione copiata"
+    ],
+    "update_payload": {
+      "descrizione": "Fattura n. 05387-4160271898-76 da BPER Banca S.p.A.",
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "f852794e-3de3-5baf-86d2-eb814b29cb50",
+    "donor_id": "bf3d3661-028e-5fe3-bb6c-ec08755081c7",
+    "fattura": "08",
+    "data_emissione": "2024-01-31",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "f852794e-3de3-5baf-86d2-eb814b29cb50",
+    "donor_id": "ec9a8040-2a6a-54e5-9e67-decb2af1bbe8",
+    "fattura": "08",
+    "data_emissione": "2024-01-31",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "6c5c2e49-7d4e-575c-b6b5-23f056750d06",
+    "donor_id": "2f658785-4ae4-480b-87f5-3b6bacaf3159",
+    "fattura": "084530266900384",
+    "data_emissione": "2026-02-27",
+    "keeper_fonte_before": null,
+    "donor_fonte": "fattura",
+    "fields_merged": [
+      "descrizione copiata"
+    ],
+    "update_payload": {
+      "descrizione": "Fattura n. 084530266900384 da BCC DI MILANO (Rata 1/1)",
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "148e1b5c-e3a0-5cf2-95fc-63312bf0a953",
+    "donor_id": "f1da7ef0-0cb4-5698-b944-45d2e91e8965",
+    "fattura": "1/001",
+    "data_emissione": "2025-01-10",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "2d127293-db15-58a7-a316-036f188328c7",
+    "donor_id": "fe480afd-cb4c-5ea3-a94a-911e6bafa533",
+    "fattura": "10",
+    "data_emissione": "2025-02-06",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "2d127293-db15-58a7-a316-036f188328c7",
+    "donor_id": "21525e8e-f66f-5b59-a36a-67c0497993c7",
+    "fattura": "10",
+    "data_emissione": "2025-02-06",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "6e5e2c50-ec92-5079-86fc-b84bb9728a84",
+    "donor_id": "3db184c3-0fd8-594e-be5b-e528c647c089",
+    "fattura": "11-FE",
+    "data_emissione": "2025-02-25",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "0a410044-e60a-5a17-992e-2e6a811c8e45",
+    "donor_id": "cc4218de-ee59-5a43-8730-7634690418ef",
+    "fattura": "132",
+    "data_emissione": "2025-01-20",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "384fb9de-7818-5efa-bfcd-6b3a4a901811",
+    "donor_id": "91c8d4d9-46e7-547a-9124-3a6dbe73b233",
+    "fattura": "139",
+    "data_emissione": "2025-03-24",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "6898a9b4-b81c-5537-ae00-640a420d7a20",
+    "donor_id": "d1c67a0e-d417-56e3-99d4-c65eef988325",
+    "fattura": "1390/00",
+    "data_emissione": "2025-04-30",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "4f2dcabf-11ac-57c6-b6ec-9f3558443ec5",
+    "donor_id": "aaa1aa72-4850-504a-9730-3fddd39b40e0",
+    "fattura": "143",
+    "data_emissione": "2024-10-04",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "4f2dcabf-11ac-57c6-b6ec-9f3558443ec5",
+    "donor_id": "08598c85-c7b6-5d41-9e6d-ab99c72e243a",
+    "fattura": "143",
+    "data_emissione": "2024-10-04",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "a1ac2153-3740-50dd-9e86-d4c0d10707b8",
+    "donor_id": "c0a0b0d7-15da-5d9f-9ed2-0ddf984835a7",
+    "fattura": "15-FE",
+    "data_emissione": "2025-03-27",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "6cff333c-a070-5c52-a50b-0a09130065f9",
+    "donor_id": "e20bf102-76ce-5d48-bffc-fc3ed9be003b",
+    "fattura": "159",
+    "data_emissione": "2025-01-31",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "07b6ef8f-e48c-54bf-808e-bf362cabd0ac",
+    "donor_id": "87a1e3b5-b543-567b-9837-7cd3c2e6152f",
+    "fattura": "18",
+    "data_emissione": "2025-01-13",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "57c98e82-70d9-5d1a-befb-06aaec01d925",
+    "donor_id": "e2668270-b2db-54e6-bb08-7f7f3b966c24",
+    "fattura": "1855/1",
+    "data_emissione": "2025-12-13",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "d06ecc7b-8b04-4d52-a91c-17c01e0f5cd8",
+    "donor_id": "35b25326-b97a-5ee9-ad3f-a4255e3c40f6",
+    "fattura": "19",
+    "data_emissione": "2025-07-30",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "d06ecc7b-8b04-4d52-a91c-17c01e0f5cd8",
+    "donor_id": "2117dde1-a411-5197-830e-4fcfc3519aad",
+    "fattura": "19",
+    "data_emissione": "2025-07-30",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "7b22637f-4086-5f28-812e-be72e56e1039",
+    "donor_id": "4a851d90-794b-5766-8a3a-80f61924ba7b",
+    "fattura": "191",
+    "data_emissione": "2024-01-31",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "7b22637f-4086-5f28-812e-be72e56e1039",
+    "donor_id": "6d7159c6-5e17-561c-8894-4f044a565961",
+    "fattura": "191",
+    "data_emissione": "2024-01-31",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "10bd112e-772a-5fa0-9bea-bf655f2c2281",
+    "donor_id": "4b982619-019a-5c9f-aa75-79fa6e649177",
+    "fattura": "2",
+    "data_emissione": "2025-12-11",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "10bd112e-772a-5fa0-9bea-bf655f2c2281",
+    "donor_id": "baa1812b-6e4e-51c7-a800-94df7eafa1fb",
+    "fattura": "2",
+    "data_emissione": "2025-12-11",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "10bd112e-772a-5fa0-9bea-bf655f2c2281",
+    "donor_id": "c00ea84f-7aee-5fb2-8f06-a15cc1160216",
+    "fattura": "2",
+    "data_emissione": "2025-12-11",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "ac58cfd2-3a5b-527b-b10e-26bd5c1f154a",
+    "donor_id": "07ac43fc-da24-4601-aa77-112b80b88be4",
+    "fattura": "2001/260030378",
+    "data_emissione": "2026-02-28",
+    "keeper_fonte_before": null,
+    "donor_fonte": "fattura",
+    "fields_merged": [
+      "descrizione copiata"
+    ],
+    "update_payload": {
+      "descrizione": "Fattura n. 2001/260030378 da MYO SPA (Rata 1/1)",
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "8a81d3fc-83a7-5576-97dd-0b8879c3b1bd",
+    "donor_id": "48d92d93-9ce3-503a-9ff9-ab05e07a56c5",
+    "fattura": "202510892147",
+    "data_emissione": "2025-09-19",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "8a81d3fc-83a7-5576-97dd-0b8879c3b1bd",
+    "donor_id": "f95fec4c-361a-5cd3-869a-e6f9ccd2b528",
+    "fattura": "202510892147",
+    "data_emissione": "2025-09-19",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "75983715-7540-553b-af43-1135f95bc91b",
+    "donor_id": "bfd363f7-4e6f-5322-b4a2-8671499d27ed",
+    "fattura": "223/25",
+    "data_emissione": "2025-10-16",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "0ef70d01-ab18-57e2-89fa-dfd734b9b587",
+    "donor_id": "095e4080-e4ed-5014-b76c-3ba51893b208",
+    "fattura": "224/25",
+    "data_emissione": "2025-10-16",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "b41ac81c-b2f2-5780-a407-1150f22bc28f",
+    "donor_id": "2554edc7-2e04-513f-a26a-5a0cb72bd254",
+    "fattura": "23",
+    "data_emissione": "2025-10-10",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "d4503f1d-e67b-5a12-9562-ffde59ed29d4",
+    "donor_id": "15f26519-ad1c-5f4a-9053-5238db201970",
+    "fattura": "256",
+    "data_emissione": "2025-01-31",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "3db3532f-06fd-5716-91fd-8af1d2796669",
+    "donor_id": "5e9640bf-c358-4785-a3a4-7023d62e9f99",
+    "fattura": "2603C0247564",
+    "data_emissione": "2026-03-01",
+    "keeper_fonte_before": null,
+    "donor_fonte": "fattura",
+    "fields_merged": [
+      "auto_domiciliazione copiata",
+      "descrizione copiata"
+    ],
+    "update_payload": {
+      "auto_domiciliazione": true,
+      "descrizione": "Fattura n. 2603C0247564 da Verisure Italy Srl (Rata 1/1)",
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "1c7c568b-e298-5358-abbb-1156a4688a0d",
+    "donor_id": "947280c9-cb15-4b85-93c5-7c92e817d72f",
+    "fattura": "2603C0302315",
+    "data_emissione": "2026-03-01",
+    "keeper_fonte_before": null,
+    "donor_fonte": "fattura",
+    "fields_merged": [
+      "auto_domiciliazione copiata",
+      "descrizione copiata"
+    ],
+    "update_payload": {
+      "auto_domiciliazione": true,
+      "descrizione": "Fattura n. 2603C0302315 da Verisure Italy Srl (Rata 1/1)",
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "bb7aba3c-b545-5334-8bc8-be88dcfd8e60",
+    "donor_id": "e0408ae2-6246-43e4-aa1a-1268386de391",
+    "fattura": "2603C0325307",
+    "data_emissione": "2026-03-01",
+    "keeper_fonte_before": null,
+    "donor_fonte": "fattura",
+    "fields_merged": [
+      "auto_domiciliazione copiata",
+      "descrizione copiata"
+    ],
+    "update_payload": {
+      "auto_domiciliazione": true,
+      "descrizione": "Fattura n. 2603C0325307 da Verisure Italy Srl (Rata 1/1)",
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "0ae7371f-a56c-57b2-bbd2-07a3164d38b1",
+    "donor_id": "d3ccd8d9-a709-5628-ba9e-bff423aff5ec",
+    "fattura": "275",
+    "data_emissione": "2025-05-31",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "f6b52f23-60c5-5c43-a3d8-5cacd6e12bca",
+    "donor_id": "58ad078e-5314-5ea0-83c7-531702bee33c",
+    "fattura": "2854",
+    "data_emissione": "2024-10-31",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "f6b52f23-60c5-5c43-a3d8-5cacd6e12bca",
+    "donor_id": "bccae482-d26a-53b0-9240-5a59f5c436bb",
+    "fattura": "2854",
+    "data_emissione": "2024-10-31",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "cbc89264-b3ad-55c6-9d1c-f9e8a8166d54",
+    "donor_id": "97a39e65-cf31-5f35-8cc8-a5239fa2e35b",
+    "fattura": "34",
+    "data_emissione": "2025-10-06",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "bc71ad7c-c159-5f8b-bd0d-a758fbc555ac",
+    "donor_id": "8304ff5b-e507-5363-8dc0-c1c83b94ae81",
+    "fattura": "351/001",
+    "data_emissione": "2025-05-15",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "459db9e1-6630-54a7-9a0f-b3c367c7c6c6",
+    "donor_id": "31b0d78f-7695-5cde-952c-33cd3a9f85c7",
+    "fattura": "37/001",
+    "data_emissione": "2025-11-18",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "f560120b-f8ac-58de-9133-112445b9ba39",
+    "donor_id": "69efdd19-04ed-52f9-8951-e40310a23a00",
+    "fattura": "43",
+    "data_emissione": "2025-05-21",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "624ed231-bf3c-5960-93c7-f74985009179",
+    "donor_id": "3d515c88-bf5d-5c52-9db2-35b36648e4b5",
+    "fattura": "45",
+    "data_emissione": "2025-10-09",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "0e05599d-a5cb-529d-9c11-22a991333dae",
+    "donor_id": "ccf33693-de71-59fa-bc06-3c905b5f1ca7",
+    "fattura": "4554",
+    "data_emissione": "2024-12-31",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "4490ace1-cd57-5b5f-8a76-0418d38b348d",
+    "donor_id": "fd4cd6f4-aed4-5b47-a5e6-4d05fd89850e",
+    "fattura": "46",
+    "data_emissione": "2025-01-15",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "4508b8cc-b402-52df-9262-6cb028efcf4c",
+    "donor_id": "79d063b9-d6a8-5edd-81b4-91161f28f9ae",
+    "fattura": "483",
+    "data_emissione": "2025-11-12",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "aa198666-02b3-5f73-b03f-686f0dfc28ed",
+    "donor_id": "908db8ed-446a-5fb9-b0e0-bdcf4fd4253d",
+    "fattura": "5",
+    "data_emissione": "2025-05-26",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "ad784037-4773-534d-9424-0e19382b3b96",
+    "donor_id": "587db775-4328-5549-b8db-c0809c9e4f07",
+    "fattura": "508/2025",
+    "data_emissione": "2025-03-15",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "3589c5fc-6165-5d30-88c4-a632e6ce1886",
+    "donor_id": "54f1f00a-b560-5ee5-9d9b-bf809c6339c3",
+    "fattura": "52",
+    "data_emissione": "2025-05-14",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "3589c5fc-6165-5d30-88c4-a632e6ce1886",
+    "donor_id": "0adcf112-c1c5-57ff-bac0-518d39dbe9f1",
+    "fattura": "52",
+    "data_emissione": "2025-05-14",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [
+      "cantiere_id copiato"
+    ],
+    "update_payload": {
+      "cantiere_id": "8b7a6e5f-cf0c-44bc-882a-17377c609a9f",
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "9e9e1ab3-0a1a-56a3-ac49-dc9829c84e53",
+    "donor_id": "b23afd03-a9ad-41bc-8927-d356058845ca",
+    "fattura": "558616",
+    "data_emissione": "2026-03-02",
+    "keeper_fonte_before": null,
+    "donor_fonte": "fattura",
+    "fields_merged": [
+      "descrizione copiata"
+    ],
+    "update_payload": {
+      "descrizione": "Fattura n. 558616 da IRIS MOBILI SRL (Rata 1/1)",
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "63835f65-3213-53b0-8203-db3d10e46a34",
+    "donor_id": "05bcd7e7-95f3-41df-89f7-54766e21fe69",
+    "fattura": "558617",
+    "data_emissione": "2026-03-02",
+    "keeper_fonte_before": null,
+    "donor_fonte": "fattura",
+    "fields_merged": [
+      "descrizione copiata"
+    ],
+    "update_payload": {
+      "descrizione": "Fattura n. 558617 da IRIS MOBILI SRL (Rata 1/1)",
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "fadd23d8-6496-53c1-9124-2637a77cef1f",
+    "donor_id": "114b1885-e6c4-5496-a494-53abb4b7f3c6",
+    "fattura": "62",
+    "data_emissione": "2025-01-31",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "530db78d-baf7-51ae-9e02-12b64803f73f",
+    "donor_id": "f47bca0a-641f-5ce4-b4d7-74287516d564",
+    "fattura": "7425",
+    "data_emissione": "2025-10-21",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "fbe04ddf-453d-595b-b1e4-dcdc965cc265",
+    "donor_id": "3462d4b2-8141-5797-b0de-ce3d385e55a7",
+    "fattura": "85/25",
+    "data_emissione": "2025-02-28",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "b58e15b6-4b03-507c-a977-3635207d7f16",
+    "donor_id": "a1932bd9-6d8f-5e86-956a-59415954b101",
+    "fattura": "9",
+    "data_emissione": "2025-03-14",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "46a60bf3-1678-573b-bdc3-f95a96cf7630",
+    "donor_id": "ea0bcdcf-be4f-5507-8bd5-c49bfc3718aa",
+    "fattura": "9140",
+    "data_emissione": "2025-12-05",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "fdf1edc6-e60e-5e06-b32b-536b368af433",
+    "donor_id": "f83a752d-e658-58fc-8039-b2c4b9ffde3e",
+    "fattura": "95",
+    "data_emissione": "2024-09-04",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "fdf1edc6-e60e-5e06-b32b-536b368af433",
+    "donor_id": "cda5bb7c-9323-5e75-a023-6786b4e71a97",
+    "fattura": "95",
+    "data_emissione": "2024-09-04",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "64344582-57b4-5673-aa9f-b3ad43afcb57",
+    "donor_id": "fe35c3bf-9fc3-5ff8-a051-6a3c7f44e8d3",
+    "fattura": "FT/DIF/VEN/0000697",
+    "data_emissione": "2025-02-15",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "30f0c119-efc4-514a-b980-9d71f3705d01",
+    "donor_id": "3b1939f8-9406-5182-8c7a-4faf9b467571",
+    "fattura": "FT/DIF/VEN/0002606",
+    "data_emissione": "2025-05-31",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "30f0c119-efc4-514a-b980-9d71f3705d01",
+    "donor_id": "210c2873-7905-5a04-b87a-077a51a9503a",
+    "fattura": "FT/DIF/VEN/0002606",
+    "data_emissione": "2025-05-31",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "044169f0-97ac-55ba-aef2-8f1cd43a73b6",
+    "donor_id": "e14e20b0-cff2-5e84-aa95-80e932ece35e",
+    "fattura": "FVI2500079",
+    "data_emissione": "2025-01-27",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "044169f0-97ac-55ba-aef2-8f1cd43a73b6",
+    "donor_id": "6e06a033-3c8e-5a0a-9aaa-03e1f16c4fb1",
+    "fattura": "FVI2500079",
+    "data_emissione": "2025-01-27",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "dd95eee4-85e7-533e-935a-f0453b2c4c0c",
+    "donor_id": "9a6037a7-b200-5106-ba74-4c417409bf49",
+    "fattura": "IN ATTESA DI FATTURA",
+    "data_emissione": null,
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "35ecce2b-40c7-5532-885f-e7f37a1ad8d5",
+    "donor_id": "f29cff6b-bc2a-5d20-9045-9d9b6872984f",
+    "fattura": "PJ10631845",
+    "data_emissione": "2025-10-31",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "a90fe5e6-6278-5e4d-a73c-f7648b78b3c1",
+    "donor_id": "7a809457-18ea-46cf-a2b6-3f42078f52bb",
+    "fattura": "PJ11164463",
+    "data_emissione": "2026-02-28",
+    "keeper_fonte_before": null,
+    "donor_fonte": "fattura",
+    "fields_merged": [
+      "auto_domiciliazione copiata",
+      "descrizione copiata"
+    ],
+    "update_payload": {
+      "auto_domiciliazione": true,
+      "descrizione": "Fattura n. PJ11164463 da KUWAIT PETROLEUM ITALIA SPA (Rata 1/1)",
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "c2d1aa03-e394-5694-ac76-edf5ca591515",
+    "donor_id": "b9d955c9-9dc4-5d75-862a-a699ae4d8cc6",
+    "fattura": "nota provv. 173/2023",
+    "data_emissione": "2023-08-17",
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  },
+  {
+    "action": "MERGED",
+    "keeper_id": "47647fdc-ee57-5268-85f5-85a979abff50",
+    "donor_id": "3a069407-c8de-5c17-818c-69389c42d6a6",
+    "fattura": "proforme in attesa di ricezione",
+    "data_emissione": null,
+    "keeper_fonte_before": null,
+    "donor_fonte": null,
+    "fields_merged": [],
+    "update_payload": {
+      "fonte": "verificato"
+    }
+  }
+]

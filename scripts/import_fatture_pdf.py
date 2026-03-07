@@ -1,12 +1,17 @@
 """
 Script: import_fatture_pdf.py
 Scansiona la cartella PDF fatture di tic23, le carica su Supabase Storage
-e le associa alle scadenze_pagamento tramite matching nome file.
+e le associa alle scadenze_pagamento tramite matching con l'XML gemello.
 
-Matching: i file PDF e XML condividono il pattern "N.{numero}_del_{dd-mm-yyyy}"
-  - PDF: Fatt.Acq._N.1A_del_27-01-2026_uzw00vl46t.pdf
-  - XML: Fatt.Acq._N.1A_del_27-01-2026_IT00811260165_00B8E.xml
-  => numero_fattura="1A", data_emissione="2026-01-27" => match in scadenze_pagamento
+Logica:
+  1. Per ogni PDF in Archivio_pdf, estrae il pattern _N.{xxx}_del_{dd-mm-yyyy}_
+  2. Cerca l'XML gemello in Archivio_Fatto con lo stesso pattern nel nome
+  3. Dall'XML gemello estrae:
+     a) Il tag <Numero> → fattura_riferimento reale (con / e \ originali)
+     b) La PIVA dal nome file XML → identifica il soggetto
+  4. Matching a 2 livelli (sempre con data obbligatoria):
+     1° Numero reale (da XML) + data esatta
+     2° PIVA soggetto (da nome XML) + data esatta (indipendente da fattura_riferimento)
 
 Requisiti:
   pip install supabase python-dotenv
@@ -18,6 +23,7 @@ Uso:
 import os
 import re
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from datetime import datetime
 
@@ -30,7 +36,6 @@ except ImportError:
 from dotenv import load_dotenv
 
 # ─── Configurazione ────────────────────────────────────────────────
-# Carica .env.local dalla root del progetto
 _script_dir = os.path.dirname(os.path.abspath(__file__))
 _project_root = os.path.join(_script_dir, "..")
 load_dotenv(os.path.join(_project_root, ".env.local"))
@@ -40,8 +45,15 @@ SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 BUCKET_NAME = "fatture-pdf"
 
-# Path sorgente PDF da tic23
-PDF_SOURCE_PATH = r"\\192.168.1.231\scambio\AMMINISTRAZIONE\Clienti e Fornitori\2025\contabilità\Archivio_pdf"
+# Percorsi tic23 via rete - risolvono contabilità con accento
+_base = Path(r"\\192.168.1.231\scambio\AMMINISTRAZIONE\Clienti e Fornitori\2025")
+_contab = next((d for d in _base.iterdir() if d.name.lower().startswith("contabilit")), None)
+if not _contab:
+    print("❌ Cartella contabilità non trovata sotto", _base)
+    sys.exit(1)
+
+PDF_SOURCE_PATH = _contab / "Archivio_pdf"
+XML_SOURCE_PATH = _contab / "Archivio_Fatto"
 
 if not SUPABASE_URL or not SUPABASE_KEY:
     print("❌ Variabili d'ambiente NEXT_PUBLIC_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY richieste.")
@@ -50,7 +62,7 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ─── Log ────────────────────────────────────────────────────────────
-LOG_FILE = os.path.join(os.path.dirname(__file__), "..", "import_fatture_pdf_log.txt")
+LOG_FILE = os.path.join(_project_root, "import_fatture_pdf_log.txt")
 log_lines = []
 
 def log(msg: str):
@@ -60,38 +72,75 @@ def log(msg: str):
     log_lines.append(line)
 
 
-# ─── Estrai numero fattura e data dal nome file ─────────────────────
-def estrai_da_nome_file(filename: str):
+# ─── Estrai pattern (numero_file, data) dal nome file ───────────────
+def estrai_pattern_da_nome(filename: str):
     """
-    Dal nome file tipo:
-      "Fatt.Acq._N.1A_del_27-01-2026_uzw00vl46t.pdf"
-      "237_del_02-02-2026_ovemzvg68d.pdf"
-    estrae numero_fattura e data ISO.
-    Restituisce (numero, data_iso) o (None, None).
+    Estrae (numero_nel_nome, data_ddmmyyyy) dal nome file.
+    Usato per trovare l'XML gemello (che ha lo stesso pattern).
     """
-    # Pattern 1: Fatt.Acq._N.{numero}_del_{dd-mm-yyyy}
-    # Il numero può contenere _ (es. N.17_1036, N.2_001, N.5_2026)
-    match = re.search(r"_N\.(.+?)_del_(\d{2})-(\d{2})-(\d{4})", filename)
+    # Pattern 1: _N.{numero}_del_{dd-mm-yyyy}_
+    match = re.search(r"_N\.(.+?)_del_(\d{2}-\d{2}-\d{4})_", filename)
     if match:
-        numero = match.group(1)
-        giorno, mese, anno = match.group(2), match.group(3), match.group(4)
-        return numero, f"{anno}-{mese}-{giorno}"
+        return match.group(1), match.group(2)
     
-    # Pattern 2: {numero}_del_{dd-mm-yyyy} (senza prefisso Fatt.Acq._N.)
-    match = re.search(r"^([^_]+)_del_(\d{2})-(\d{2})-(\d{4})", filename)
+    # Pattern 2: {numero}_del_{dd-mm-yyyy}_ (senza prefisso Fatt.Acq._N.)
+    match = re.search(r"^(.+?)_del_(\d{2}-\d{2}-\d{4})_", filename)
     if match:
-        numero = match.group(1)
-        giorno, mese, anno = match.group(2), match.group(3), match.group(4)
-        return numero, f"{anno}-{mese}-{giorno}"
+        return match.group(1), match.group(2)
     
     return None, None
+
+
+# ─── Indice XML: mappa (numero_file, data) → (xml_path, piva) ───────
+def estrai_piva_da_nome_xml(filename: str) -> str | None:
+    """
+    Estrae la PIVA dal nome XML.
+    Es: "Fatt.Acq._N.2601C240477_del_01-01-2026_IT12454611000.xml" → "12454611000"
+    Es: "Fatt.Acq._N.8_del_26-02-2026_IT016417907022026n_01TPx (1).xml" → "016417907022026n"
+    La PIVA è il blocco dopo _del_dd-mm-yyyy_ e prima del prossimo _ o .xml
+    """
+    match = re.search(r"_del_\d{2}-\d{2}-\d{4}_([A-Z]{2}\d[\w]+)", filename)
+    if match:
+        raw = match.group(1)
+        # Rimuovi prefisso paese (IT, NL, ecc.)
+        if len(raw) > 2 and raw[:2].isalpha():
+            return raw[2:]
+    return None
+
+
+def build_xml_index(xml_dir: Path) -> dict:
+    """Costruisce indice {(numero_nel_nome, data_ddmmyyyy): (xml_path, piva)}"""
+    index = {}
+    for xml_file in xml_dir.glob("*.xml"):
+        num, data = estrai_pattern_da_nome(xml_file.name)
+        if num and data:
+            piva = estrai_piva_da_nome_xml(xml_file.name)
+            index[(num, data)] = (xml_file, piva)
+    return index
+
+
+# ─── Leggi <Numero> dal contenuto XML ────────────────────────────────
+def leggi_numero_da_xml(xml_path: Path) -> str | None:
+    """
+    Legge il tag <Numero> dalla fattura elettronica XML.
+    Questo è il vero numero fattura (con /, \\, ecc.) come salvato nel DB.
+    """
+    try:
+        tree = ET.parse(str(xml_path))
+        root = tree.getroot()
+        for elem in root.iter():
+            tag = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
+            if tag == "Numero" and elem.text:
+                return elem.text.strip()
+    except Exception as e:
+        log(f"  ⚠️ Errore lettura XML {xml_path.name}: {e}")
+    return None
 
 
 # ─── Upload su Supabase Storage ─────────────────────────────────────
 def upload_pdf(filepath: str, filename: str) -> str | None:
     """Upload del file su Supabase Storage. Restituisce l'URL pubblico."""
     try:
-        # Organizza per anno
         anno = "2026"
         match = re.search(r"(\d{4})", filename)
         if match:
@@ -102,41 +151,34 @@ def upload_pdf(filepath: str, filename: str) -> str | None:
         with open(filepath, "rb") as f:
             file_bytes = f.read()
         
-        # Upload (upsert per evitare errori su file già esistenti)
         supabase.storage.from_(BUCKET_NAME).upload(
             storage_path,
             file_bytes,
             file_options={"content-type": "application/pdf", "upsert": "true"}
         )
         
-        # Genera URL pubblico
-        res = supabase.storage.from_(BUCKET_NAME).get_public_url(storage_path)
-        return res
+        return supabase.storage.from_(BUCKET_NAME).get_public_url(storage_path)
     except Exception as e:
         log(f"  ❌ Errore upload {filename}: {e}")
         return None
 
 
 # ─── Matching con scadenze_pagamento ─────────────────────────────────
-def match_e_aggiorna(numero_fattura: str, data_emissione: str, file_url: str) -> bool:
+def match_e_aggiorna(numero_fattura: str | None, data_emissione: str, piva: str | None, file_url: str) -> bool:
     """
-    Cerca la scadenza con fattura_riferimento + data_emissione matching 
-    e aggiorna file_url.
+    Cerca la scadenza e aggiorna file_url. Data sempre obbligatoria.
     
-    Strategia di matching (in ordine di precisione):
+    Strategia (in ordine):
     1. fattura_riferimento ESATTO + data_emissione ESATTA
-    2. fattura_riferimento ESATTO (senza filtro data)
-    3. fattura_riferimento ILIKE parziale + data_emissione ESATTA
+    2. PIVA soggetto + data_emissione ESATTA (indipendente da come fattura_riferimento è salvato)
     """
-    if not numero_fattura:
+    if not data_emissione:
         return False
     
-    matched = False
-    
-    # Strategia 1: Match esatto fattura + data
-    if data_emissione:
+    # Strategia 1: fattura_riferimento + data
+    if numero_fattura:
         result = supabase.table("scadenze_pagamento") \
-            .select("id, fattura_riferimento, data_emissione, file_url") \
+            .select("id, fattura_riferimento, data_emissione") \
             .eq("fattura_riferimento", numero_fattura) \
             .eq("data_emissione", data_emissione) \
             .is_("file_url", "null") \
@@ -148,42 +190,81 @@ def match_e_aggiorna(numero_fattura: str, data_emissione: str, file_url: str) ->
                     .update({"file_url": file_url}) \
                     .eq("id", scadenza["id"]) \
                     .execute()
-                log(f"  ✅ Match esatto → scadenza {scadenza['id']} (fatt: {scadenza['fattura_riferimento']}, data: {scadenza.get('data_emissione', 'N/D')})")
+                log(f"  ✅ Match numero+data → scadenza {scadenza['id']} (fatt: {scadenza['fattura_riferimento']})")
             return True
     
-    # Strategia 2: Match solo per fattura_riferimento esatto
-    result = supabase.table("scadenze_pagamento") \
-        .select("id, fattura_riferimento, data_emissione, file_url") \
-        .eq("fattura_riferimento", numero_fattura) \
-        .is_("file_url", "null") \
-        .execute()
-    
-    if result.data and len(result.data) > 0:
-        for scadenza in result.data:
-            supabase.table("scadenze_pagamento") \
-                .update({"file_url": file_url}) \
-                .eq("id", scadenza["id"]) \
-                .execute()
-            log(f"  ✅ Match fattura → scadenza {scadenza['id']} (fatt: {scadenza['fattura_riferimento']})")
-        return True
-    
-    # Strategia 3: Match parziale (ILIKE) + data
-    if data_emissione:
-        result = supabase.table("scadenze_pagamento") \
-            .select("id, fattura_riferimento, data_emissione, file_url") \
-            .ilike("fattura_riferimento", f"%{numero_fattura}%") \
-            .eq("data_emissione", data_emissione) \
-            .is_("file_url", "null") \
-            .execute()
+    # Strategia 2: PIVA soggetto + data
+    if piva:
+        # Trova soggetto_id dalla PIVA (prova esatta, poi i primi 11 caratteri)
+        soggetto_id = None
         
-        if result.data and len(result.data) > 0:
-            for scadenza in result.data:
+        # Prova PIVA esatta
+        r = supabase.table("anagrafica_soggetti") \
+            .select("id") \
+            .eq("partita_iva", piva) \
+            .execute()
+        if r.data:
+            soggetto_id = r.data[0]["id"]
+        
+        # Prova primi 11 caratteri (PIVA standard italiana)
+        if not soggetto_id and len(piva) > 11:
+            piva_short = piva[:11]
+            r = supabase.table("anagrafica_soggetti") \
+                .select("id") \
+                .eq("partita_iva", piva_short) \
+                .execute()
+            if r.data:
+                soggetto_id = r.data[0]["id"]
+        
+        # Prova come codice_fiscale
+        if not soggetto_id:
+            r = supabase.table("anagrafica_soggetti") \
+                .select("id") \
+                .eq("codice_fiscale", piva) \
+                .execute()
+            if r.data:
+                soggetto_id = r.data[0]["id"]
+        
+        if soggetto_id:
+            result = supabase.table("scadenze_pagamento") \
+                .select("id, fattura_riferimento, data_emissione") \
+                .eq("soggetto_id", soggetto_id) \
+                .eq("data_emissione", data_emissione) \
+                .is_("file_url", "null") \
+                .execute()
+            
+            if result.data and len(result.data) > 0:
+                # Se c'è una sola scadenza, è quella giusta
+                # Se ce ne sono multiple, prendi quella col fattura_riferimento più simile
+                if len(result.data) == 1:
+                    target = result.data[0]
+                else:
+                    # Scegli la scadenza col fattura_riferimento più simile al numero
+                    def similarity(fatt_db: str) -> int:
+                        if not fatt_db or not numero_fattura:
+                            return 0
+                        # Normalizza: rimuovi / \ spazi
+                        norm_db = re.sub(r"[/\\\s]", "", fatt_db).upper()
+                        norm_xml = re.sub(r"[/\\\s]", "", numero_fattura).upper()
+                        if norm_db == norm_xml:
+                            return 1000
+                        # Prefisso comune
+                        common = 0
+                        for a, b in zip(norm_db, norm_xml):
+                            if a == b:
+                                common += 1
+                            else:
+                                break
+                        return common
+                    
+                    target = max(result.data, key=lambda s: similarity(s.get("fattura_riferimento", "")))
+                
                 supabase.table("scadenze_pagamento") \
                     .update({"file_url": file_url}) \
-                    .eq("id", scadenza["id"]) \
+                    .eq("id", target["id"]) \
                     .execute()
-                log(f"  ✅ Match parziale → scadenza {scadenza['id']} (fatt: {scadenza['fattura_riferimento']})")
-            return True
+                log(f"  ✅ Match PIVA+data → scadenza {target['id']} (fatt: {target['fattura_riferimento']})")
+                return True
     
     return False
 
@@ -192,37 +273,65 @@ def match_e_aggiorna(numero_fattura: str, data_emissione: str, file_url: str) ->
 def main():
     log("=" * 60)
     log("📄 IMPORT FATTURE PDF → Supabase Storage + Associazione Scadenze")
-    log(f"Sorgente: {PDF_SOURCE_PATH}")
+    log(f"Sorgente PDF: {PDF_SOURCE_PATH}")
+    log(f"Sorgente XML: {XML_SOURCE_PATH}")
     log(f"Bucket: {BUCKET_NAME}")
     log("=" * 60)
     
-    source_dir = Path(PDF_SOURCE_PATH)
-    if not source_dir.exists():
-        log(f"❌ Cartella sorgente non trovata: {PDF_SOURCE_PATH}")
-        log("   Assicurarsi che il percorso di rete sia accessibile.")
+    if not PDF_SOURCE_PATH.exists():
+        log(f"❌ Cartella PDF non trovata: {PDF_SOURCE_PATH}")
+        sys.exit(1)
+    if not XML_SOURCE_PATH.exists():
+        log(f"❌ Cartella XML non trovata: {XML_SOURCE_PATH}")
         sys.exit(1)
     
-    pdf_files = list(source_dir.glob("*.pdf")) + list(source_dir.glob("*.PDF"))
-    # Rimuovi duplicati
+    # 1. Costruisci indice XML
+    log("🔧 Costruzione indice XML...")
+    xml_index = build_xml_index(XML_SOURCE_PATH)
+    log(f"   {len(xml_index)} XML indicizzati")
+    
+    # 2. Scansiona PDF
+    pdf_files = list(PDF_SOURCE_PATH.glob("*.pdf")) + list(PDF_SOURCE_PATH.glob("*.PDF"))
     pdf_files = list({p.resolve(): p for p in pdf_files}.values())
     log(f"📁 Trovati {len(pdf_files)} file PDF")
     
-    stats = {"uploadati": 0, "matchati": 0, "non_matchati": 0, "errori": 0}
+    stats = {"uploadati": 0, "matchati": 0, "non_matchati": 0, "errori": 0, "no_xml": 0}
     non_matchati_list = []
     
     for pdf_path in sorted(pdf_files):
         filename = pdf_path.name
         log(f"\n📄 {filename}")
         
-        # 1. Estrai numero fattura e data dal nome file
-        numero_fattura, data_emissione = estrai_da_nome_file(filename)
+        # 1. Estrai pattern dal nome PDF
+        num_file, data_file = estrai_pattern_da_nome(filename)
+        if not num_file:
+            log(f"  ⚠️ Pattern non riconosciuto nel nome file")
+            stats["non_matchati"] += 1
+            non_matchati_list.append(f"  - {filename} → (pattern non riconosciuto)")
+            continue
         
-        if numero_fattura:
-            log(f"  🔍 Estratto: N.{numero_fattura} del {data_emissione}")
+        # Converti data dd-mm-yyyy → ISO yyyy-mm-dd
+        parts = data_file.split("-")
+        data_iso = f"{parts[2]}-{parts[1]}-{parts[0]}"
+        
+        # 2. Cerca XML gemello
+        xml_entry = xml_index.get((num_file, data_file))
+        piva = None
+        if xml_entry:
+            xml_path, piva = xml_entry
+            # 3. Leggi il vero numero fattura dall'XML
+            numero_reale = leggi_numero_da_xml(xml_path)
+            if numero_reale:
+                log(f"  🔍 XML → Numero: {numero_reale!r}, PIVA: {piva}, data: {data_iso}")
+            else:
+                log(f"  ⚠️ XML trovato ma tag <Numero> non leggibile, uso nome file")
+                numero_reale = num_file
         else:
-            log(f"  ⚠️ Pattern N.xxx_del_dd-mm-yyyy non trovato nel nome file")
+            log(f"  ⚠️ Nessun XML gemello trovato, uso nome file: {num_file}")
+            numero_reale = num_file
+            stats["no_xml"] += 1
         
-        # 2. Upload su Storage
+        # 4. Upload su Storage
         file_url = upload_pdf(str(pdf_path), filename)
         if not file_url:
             stats["errori"] += 1
@@ -231,18 +340,14 @@ def main():
         stats["uploadati"] += 1
         log(f"  ☁️ Caricato su Storage")
         
-        # 3. Matching con scadenze
-        if numero_fattura:
-            matched = match_e_aggiorna(numero_fattura, data_emissione, file_url)
-            if matched:
-                stats["matchati"] += 1
-            else:
-                stats["non_matchati"] += 1
-                non_matchati_list.append(f"  - {filename} → N.{numero_fattura} del {data_emissione}")
-                log(f"  ℹ️ Nessuna scadenza trovata per N.{numero_fattura} del {data_emissione}")
+        # 5. Matching con scadenze (numero reale da XML + data + PIVA)
+        matched = match_e_aggiorna(numero_reale, data_iso, piva, file_url)
+        if matched:
+            stats["matchati"] += 1
         else:
             stats["non_matchati"] += 1
-            non_matchati_list.append(f"  - {filename} → (pattern non riconosciuto)")
+            non_matchati_list.append(f"  - {filename} → fatt={numero_reale!r} del {data_iso}")
+            log(f"  ℹ️ Nessuna scadenza trovata per fatt={numero_reale!r} del {data_iso}")
     
     # Riepilogo
     log("\n" + "=" * 60)
@@ -251,6 +356,7 @@ def main():
     log(f"  Caricati su Storage:    {stats['uploadati']}")
     log(f"  Associati a scadenze:   {stats['matchati']}")
     log(f"  Non associati:          {stats['non_matchati']}")
+    log(f"  Senza XML gemello:      {stats['no_xml']}")
     log(f"  Errori upload:          {stats['errori']}")
     
     if non_matchati_list:

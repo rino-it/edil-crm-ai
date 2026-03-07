@@ -1,0 +1,416 @@
+======================================================================
+  MERGE SCADENZE SAFE — 🚀 ESECUZIONE REALE
+  2026-03-07 18:49:17
+======================================================================
+
+📥 Caricamento dati...
+   Scadenze totali: 909
+   - fonte=NULL: 888
+   - fonte=fattura: 19
+   - fonte=titolo: 2
+   Fatture fornitori (indice): 679
+
+📊 Analisi duplicati...
+   Gruppi duplicati: 59
+   Record singoli: 778
+
+──────────────────────────────────────────────────────────────────────
+🔄 MERGE DUPLICATI
+──────────────────────────────────────────────────────────────────────
+
+   📄 Fattura '0000000003118235' del 2026-02-28
+      KEEPER [NULL] id=626d9c9d… imp=10.0 stato=pagato cantiere=— pdf=✅
+      DONOR  [fattura] id=fcd91aba… imp=10.0 stato=da_pagare cantiere=— pdf=✅
+      📝 Merge: auto_domiciliazione copiata, descrizione copiata
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '000000001341919D' del 2026-02-28
+      KEEPER [NULL] id=0a5ee988… imp=274.4 stato=pagato cantiere=— pdf=✅
+      DONOR  [fattura] id=77f0723e… imp=274.4 stato=da_pagare cantiere=— pdf=✅
+      📝 Merge: auto_domiciliazione copiata, descrizione copiata
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '000000052912921T' del 2026-02-28
+      KEEPER [NULL] id=461e4364… imp=91.31 stato=pagato cantiere=— pdf=✅
+      DONOR  [fattura] id=441f9d14… imp=91.31 stato=da_pagare cantiere=— pdf=✅
+      📝 Merge: auto_domiciliazione copiata, descrizione copiata
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '000000108005867P' del 2026-02-28
+      KEEPER [NULL] id=9d38368a… imp=18.7 stato=pagato cantiere=— pdf=✅
+      DONOR  [fattura] id=2733c5fe… imp=18.7 stato=da_pagare cantiere=— pdf=✅
+      📝 Merge: auto_domiciliazione copiata, descrizione copiata
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '05387-4160271898-76' del 2026-02-03
+      KEEPER [NULL] id=6f8f054d… imp=8.54 stato=pagato cantiere=— pdf=✅
+      DONOR  [fattura] id=d87a2176… imp=8.54 stato=da_pagare cantiere=— pdf=✅
+      📝 Merge: descrizione copiata
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '08' del 2024-01-31
+      KEEPER [NULL] id=f852794e… imp=9360.0 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=bf3d3661… imp=13200.0 stato=scaduto cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '08' del 2024-01-31
+      KEEPER [NULL] id=f852794e… imp=9360.0 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=ec9a8040… imp=9928.5 stato=scaduto cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '084530266900384' del 2026-02-27
+      KEEPER [NULL] id=6c5c2e49… imp=0.61 stato=pagato cantiere=— pdf=✅
+      DONOR  [fattura] id=2f658785… imp=0.61 stato=da_pagare cantiere=— pdf=✅
+      📝 Merge: descrizione copiata
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '1/001' del 2025-01-10
+      KEEPER [NULL] id=148e1b5c… imp=3459.2 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=f1da7ef0… imp=640.0 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '10' del 2025-02-06
+      KEEPER [NULL] id=2d127293… imp=3500.0 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=fe480afd… imp=7481.6 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '10' del 2025-02-06
+      KEEPER [NULL] id=2d127293… imp=3500.0 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=21525e8e… imp=3981.6000000000004 stato=scaduto cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '11-FE' del 2025-02-25
+      KEEPER [NULL] id=6e5e2c50… imp=2000.0 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=3db184c3… imp=1050.0 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '132' del 2025-01-20
+      KEEPER [NULL] id=0a410044… imp=300.0 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=cc4218de… imp=51.06 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '139' del 2025-03-24
+      KEEPER [NULL] id=384fb9de… imp=1282.19 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=91c8d4d9… imp=197.8 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '1390/00' del 2025-04-30
+      KEEPER [NULL] id=6898a9b4… imp=266.32 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=d1c67a0e… imp=29.3 stato=scaduto cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '143' del 2024-10-04
+      KEEPER [NULL] id=4f2dcabf… imp=19743.5 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=aaa1aa72… imp=10256.5 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '143' del 2024-10-04
+      KEEPER [NULL] id=4f2dcabf… imp=19743.5 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=08598c85… imp=9487.0 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '15-FE' del 2025-03-27
+      KEEPER [NULL] id=a1ac2153… imp=450.0 stato=pagato cantiere=✅ pdf=—
+      DONOR  [NULL] id=c0a0b0d7… imp=1611.8000000000002 stato=pagato cantiere=✅ pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '159' del 2025-01-31
+      KEEPER [NULL] id=6cff333c… imp=5655.13 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=e20bf102… imp=1244.13 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '18' del 2025-01-13
+      KEEPER [NULL] id=07b6ef8f… imp=830.72 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=87a1e3b5… imp=256.2 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '1855/1' del 2025-12-13
+      KEEPER [NULL] id=57c98e82… imp=1175.78 stato=da_pagare cantiere=— pdf=—
+      DONOR  [NULL] id=e2668270… imp=1175.77 stato=da_pagare cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '19' del 2025-07-30
+      KEEPER [NULL] id=d06ecc7b… imp=10000.0 stato=pagato cantiere=✅ pdf=—
+      DONOR  [NULL] id=35b25326… imp=10000.0 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '19' del 2025-07-30
+      KEEPER [NULL] id=d06ecc7b… imp=10000.0 stato=pagato cantiere=✅ pdf=—
+      DONOR  [NULL] id=2117dde1… imp=5000.0 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '191' del 2024-01-31
+      KEEPER [NULL] id=7b22637f… imp=16000.0 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=4a851d90… imp=34596.83 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '191' del 2024-01-31
+      KEEPER [NULL] id=7b22637f… imp=16000.0 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=6d7159c6… imp=-2098.7400000000016 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '2' del 2025-12-11
+      KEEPER [NULL] id=10bd112e… imp=2000.0 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=4b982619… imp=1100.0 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '2' del 2025-12-11
+      KEEPER [NULL] id=10bd112e… imp=2000.0 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=baa1812b… imp=3000.0 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '2' del 2025-12-11
+      KEEPER [NULL] id=10bd112e… imp=2000.0 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=c00ea84f… imp=10900.0 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '2001/260030378' del 2026-02-28
+      KEEPER [NULL] id=ac58cfd2… imp=153.54 stato=da_pagare cantiere=— pdf=✅
+      DONOR  [fattura] id=07ac43fc… imp=153.54 stato=da_pagare cantiere=— pdf=✅
+      📝 Merge: descrizione copiata
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '202510892147' del 2025-09-19
+      KEEPER [NULL] id=8a81d3fc… imp=752.58 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=48d92d93… imp=188.0 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '202510892147' del 2025-09-19
+      KEEPER [NULL] id=8a81d3fc… imp=752.58 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=f95fec4c… imp=188.58 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '223/25' del 2025-10-16
+      KEEPER [NULL] id=75983715… imp=859.92 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=bfd363f7… imp=160.0 stato=scaduto cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '224/25' del 2025-10-16
+      KEEPER [NULL] id=0ef70d01… imp=1140.08 stato=pagato cantiere=✅ pdf=—
+      DONOR  [NULL] id=095e4080… imp=212.13 stato=scaduto cantiere=✅ pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '23' del 2025-10-10
+      KEEPER [NULL] id=b41ac81c… imp=3300.0 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=2554edc7… imp=597.59 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '256' del 2025-01-31
+      KEEPER [NULL] id=d4503f1d… imp=3850.0 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=15f26519… imp=3226.0 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '2603C0247564' del 2026-03-01
+      KEEPER [NULL] id=3db3532f… imp=57.78 stato=scaduto cantiere=— pdf=✅
+      DONOR  [fattura] id=5e9640bf… imp=57.78 stato=da_pagare cantiere=— pdf=✅
+      📝 Merge: auto_domiciliazione copiata, descrizione copiata
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '2603C0302315' del 2026-03-01
+      KEEPER [NULL] id=1c7c568b… imp=51.4 stato=scaduto cantiere=— pdf=✅
+      DONOR  [fattura] id=947280c9… imp=51.4 stato=da_pagare cantiere=— pdf=✅
+      📝 Merge: auto_domiciliazione copiata, descrizione copiata
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '2603C0325307' del 2026-03-01
+      KEEPER [NULL] id=bb7aba3c… imp=58.8 stato=scaduto cantiere=— pdf=✅
+      DONOR  [fattura] id=e0408ae2… imp=58.8 stato=da_pagare cantiere=— pdf=✅
+      📝 Merge: auto_domiciliazione copiata, descrizione copiata
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '275' del 2025-05-31
+      KEEPER [NULL] id=0ae7371f… imp=2000.0 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=d3ccd8d9… imp=930.0 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '2854' del 2024-10-31
+      KEEPER [NULL] id=f6b52f23… imp=2276.379999999999 stato=pagato cantiere=✅ pdf=—
+      DONOR  [NULL] id=58ad078e… imp=3850.0 stato=pagato cantiere=✅ pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '2854' del 2024-10-31
+      KEEPER [NULL] id=f6b52f23… imp=2276.379999999999 stato=pagato cantiere=✅ pdf=—
+      DONOR  [NULL] id=bccae482… imp=343.4000000000001 stato=pagato cantiere=✅ pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '34' del 2025-10-06
+      KEEPER [NULL] id=cbc89264… imp=6000.0 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=97a39e65… imp=4000.0 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '351/001' del 2025-05-15
+      KEEPER [NULL] id=bc71ad7c… imp=165.5 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=8304ff5b… imp=40.8 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '37/001' del 2025-11-18
+      KEEPER [NULL] id=459db9e1… imp=20000.0 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=31b0d78f… imp=10000.0 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '43' del 2025-05-21
+      KEEPER [NULL] id=f560120b… imp=8100.0 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=69efdd19… imp=600.0 stato=scaduto cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '45' del 2025-10-09
+      KEEPER [NULL] id=624ed231… imp=1068.8 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=3d515c88… imp=534.4 stato=scaduto cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '4554' del 2024-12-31
+      KEEPER [NULL] id=0e05599d… imp=4688.15 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=ccf33693… imp=4688.16 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '46' del 2025-01-15
+      KEEPER [NULL] id=4490ace1… imp=2145.209999999999 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=fd4cd6f4… imp=9901.95 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '483' del 2025-11-12
+      KEEPER [NULL] id=4508b8cc… imp=2579.42 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=79d063b9… imp=977.42 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '5' del 2025-05-26
+      KEEPER [NULL] id=aa198666… imp=7000.0 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=908db8ed… imp=11000.0 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '508/2025' del 2025-03-15
+      KEEPER [NULL] id=ad784037… imp=469.6 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=587db775… imp=103.30999999999995 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '52' del 2025-05-14
+      KEEPER [NULL] id=3589c5fc… imp=3045.0 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=54f1f00a… imp=3000.0 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '52' del 2025-05-14
+      KEEPER [NULL] id=3589c5fc… imp=3045.0 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=0adcf112… imp=3090.0 stato=scaduto cantiere=✅ pdf=—
+      📝 Merge: cantiere_id copiato
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '558616' del 2026-03-02
+      KEEPER [NULL] id=9e9e1ab3… imp=546.38 stato=pagato cantiere=— pdf=✅
+      DONOR  [fattura] id=b23afd03… imp=546.38 stato=da_pagare cantiere=— pdf=✅
+      📝 Merge: descrizione copiata
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '558617' del 2026-03-02
+      KEEPER [NULL] id=63835f65… imp=111.62 stato=pagato cantiere=— pdf=✅
+      DONOR  [fattura] id=05bcd7e7… imp=111.62 stato=da_pagare cantiere=— pdf=✅
+      📝 Merge: descrizione copiata
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '62' del 2025-01-31
+      KEEPER [NULL] id=fadd23d8… imp=2737.38 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=114b1885… imp=2737.37 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '7425' del 2025-10-21
+      KEEPER [NULL] id=530db78d… imp=360.88 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=f47bca0a… imp=65.08 stato=scaduto cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '85/25' del 2025-02-28
+      KEEPER [NULL] id=fbe04ddf… imp=2216.05 stato=pagato cantiere=✅ pdf=—
+      DONOR  [NULL] id=3462d4b2… imp=2216.04 stato=pagato cantiere=✅ pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '9' del 2025-03-14
+      KEEPER [NULL] id=b58e15b6… imp=3000.0 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=a1932bd9… imp=555.04 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '9140' del 2025-12-05
+      KEEPER [NULL] id=46a60bf3… imp=5155.11 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=ea0bcdcf… imp=36.600000000000364 stato=scaduto cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '95' del 2024-09-04
+      KEEPER [NULL] id=fdf1edc6… imp=2750.0 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=f83a752d… imp=3200.0 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura '95' del 2024-09-04
+      KEEPER [NULL] id=fdf1edc6… imp=2750.0 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=cda5bb7c… imp=5950.0 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura 'FT/DIF/VEN/0000697' del 2025-02-15
+      KEEPER [NULL] id=64344582… imp=1453.1699999999996 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=fe35c3bf… imp=2906.35 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura 'FT/DIF/VEN/0002606' del 2025-05-31
+      KEEPER [NULL] id=30f0c119… imp=2857.54 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=3b1939f8… imp=2963.54 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura 'FT/DIF/VEN/0002606' del 2025-05-31
+      KEEPER [NULL] id=30f0c119… imp=2857.54 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=210c2873… imp=1297.54 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura 'FVI2500079' del 2025-01-27
+      KEEPER [NULL] id=044169f0… imp=13000.0 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=e14e20b0… imp=27090.0 stato=scaduto cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura 'FVI2500079' del 2025-01-27
+      KEEPER [NULL] id=044169f0… imp=13000.0 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=6e06a033… imp=53090.0 stato=scaduto cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura 'IN ATTESA DI FATTURA' del None
+      KEEPER [NULL] id=dd95eee4… imp=900.0 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=9a6037a7… imp=1600.0 stato=da_pagare cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura 'PJ10631845' del 2025-10-31
+      KEEPER [NULL] id=35ecce2b… imp=758.4 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=f29cff6b… imp=328.43 stato=pagato cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura 'PJ11164463' del 2026-02-28
+      KEEPER [NULL] id=a90fe5e6… imp=550.69 stato=scaduto cantiere=— pdf=✅
+      DONOR  [fattura] id=7a809457… imp=550.69 stato=da_pagare cantiere=— pdf=✅
+      📝 Merge: auto_domiciliazione copiata, descrizione copiata
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura 'nota provv. 173/2023' del 2023-08-17
+      KEEPER [NULL] id=c2d1aa03… imp=720.0 stato=pagato cantiere=— pdf=—
+      DONOR  [NULL] id=b9d955c9… imp=1869.6399999999999 stato=scaduto cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+   📄 Fattura 'proforme in attesa di ricezione' del None
+      KEEPER [NULL] id=47647fdc… imp=5001.26 stato=da_pagare cantiere=— pdf=—
+      DONOR  [NULL] id=3a069407… imp=7362.68 stato=da_pagare cantiere=— pdf=—
+      📝 Solo etichettatura (nessun dato da copiare)
+      ✅ MERGE OK — donor eliminato
+
+──────────────────────────────────────────────────────────────────────
+📈 RISULTATO MERGE:
+   ✅ Merge riusciti: 72
+   🔒 Bloccati da FK: 0
+   ⚠️ Skippati (ambigui): 0
+   ❌ Errori: 0
+──────────────────────────────────────────────────────────────────────
+
+🏷️ ETICHETTATURA RECORD SINGOLI
+──────────────────────────────────────────────────────────────────────
+
+   🟢 fonte='verificato' (Excel + XML match): 417
+   🟡 fonte='excel' (con data, no XML match): 309
+   🟠 fonte='excel' (senza data emissione):  44
+   🔵 fonte='fattura' (solo XML, no Excel):  6
+   ⚪ Già etichettati (skip): 2
+
+======================================================================
+📋 SOMMARIO FINALE
+======================================================================
+   Record prima:  909
+   Eliminati:     72
+   Record dopo:   837
+   Verificati:    489
+   Solo Excel:    353
+    - con data:   309
+    - senza data: 44 (acconti/rate/spese)
+   Solo XML:      6
+   Bloccati FK:   0
+
+   ✅ Merge completato con successo.
+
+   Log salvato in: merge_scadenze_log.txt
+======================================================================
+   Audit dettagliato: merge_scadenze_audit.json
