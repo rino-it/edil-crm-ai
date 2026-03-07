@@ -12,7 +12,7 @@ export default async function PagatePage({
   const pageSize = Number(params.pageSize) || DEFAULT_PAGE_SIZE
 
   // Fetch parallelo: scadenze + cantieri attivi
-  const [result, cantieri] = await Promise.all([
+  const [result, cantieriRaw] = await Promise.all([
     getScadenzePaginated(
       { 
         stato: ['pagato'], 
@@ -22,6 +22,8 @@ export default async function PagatePage({
     ),
     getCantieriAttivi(),
   ])
+
+  const cantieri = cantieriRaw.map(c => ({ id: c.id, label: c.nome }))
 
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
