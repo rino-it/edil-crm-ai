@@ -4,12 +4,11 @@ import { useState, useTransition, useRef } from 'react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { CheckCircle2, MoreHorizontal, MessageCircle, CalendarPlus, ArrowRight, FileText, Loader2, Pencil, Check, X } from "lucide-react"
+import { CheckCircle2, CalendarPlus, ArrowRight, FileText, Loader2, Pencil, Check, X } from "lucide-react"
 import Link from "next/link"
 import { ScadenzaWithSoggetto } from "@/types/finanza"
 import { PaginatedResult } from "@/types/pagination"
 import { PaginationControls } from "@/components/ui/pagination-controls"
-import { WhatsAppReminderButton } from "@/app/finanza/components/WhatsAppReminderButton"
 import { CalendarLinkButton } from "@/app/finanza/components/CalendarLinkButton"
 import { IncassoManualeDialog } from "./IncassoManualeDialog"
 import { aggiornaFatturaRiferimento, assegnaCantiereAScadenza } from '../actions'
@@ -176,18 +175,18 @@ export function ScadenzeTable({
       
       {/* VISTA DESKTOP: Tabella classica */}
       <div className="hidden md:block overflow-x-auto">
-        <Table className="table-fixed">
+        <Table>
           <TableHeader className="bg-zinc-50/80">
             <TableRow>
-              <TableHead className="font-semibold w-[180px]">Soggetto</TableHead>
-              <TableHead className="font-semibold w-[110px] pr-2">Fattura / Rif.</TableHead>
-              {showCantiereColumn && <TableHead className="font-semibold w-[140px] pl-2">Cantiere</TableHead>}
-              <TableHead className="text-right font-semibold w-[90px]">Totale</TableHead>
-              <TableHead className="text-right font-semibold w-[90px]">Residuo</TableHead>
-              <TableHead className="font-semibold w-[90px]">Scadenza</TableHead>
-              <TableHead className="font-semibold w-[90px]">Stato</TableHead>
-              <TableHead className="text-center font-semibold w-[40px]" title="Allegato PDF">FT</TableHead>
-              <TableHead className="text-right font-semibold">Azioni</TableHead>
+              <TableHead className="font-semibold">Soggetto</TableHead>
+              <TableHead className="font-semibold w-[120px]">Fattura / Rif.</TableHead>
+              {showCantiereColumn && <TableHead className="font-semibold w-[150px]">Cantiere</TableHead>}
+              <TableHead className="text-right font-semibold w-[95px]">Totale</TableHead>
+              <TableHead className="text-right font-semibold w-[95px]">Residuo</TableHead>
+              <TableHead className="font-semibold w-[85px]">Scadenza</TableHead>
+              <TableHead className="font-semibold w-[80px]">Stato</TableHead>
+              <TableHead className="text-center font-semibold w-[36px]" title="Allegato PDF">FT</TableHead>
+              <TableHead className="text-center font-semibold w-[36px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -197,9 +196,9 @@ export function ScadenzeTable({
 
               return (
                 <TableRow key={s.id} className="group hover:bg-zinc-50/50 transition-colors">
-                  <TableCell className="font-bold text-zinc-900 w-[180px]">
+                  <TableCell className="font-bold text-zinc-900">
                     <div className="space-y-1">
-                      <div className="truncate max-w-[170px]">{s.anagrafica_soggetti?.ragione_sociale || 'N/D'}</div>
+                      <div className="truncate max-w-[200px]">{s.anagrafica_soggetti?.ragione_sociale || 'N/D'}</div>
                       {(s.categoria || (s as any).auto_domiciliazione) && (
                         <div className="flex flex-wrap gap-1">
                           {s.categoria && (
@@ -217,12 +216,12 @@ export function ScadenzeTable({
                     </div>
                   </TableCell>
                   
-                  <TableCell className="text-xs font-mono text-zinc-600 w-[110px] pr-2">
+                  <TableCell className="text-xs font-mono text-zinc-600">
                     <FatturaEditCell scadenzaId={s.id} initial={s.fattura_riferimento ?? null} fileUrl={s.file_url ?? null} />
                   </TableCell>
                   
                   {showCantiereColumn && (
-                    <TableCell className="text-xs text-zinc-600 w-[140px] pl-2">
+                    <TableCell className="text-xs text-zinc-600">
                       {cantieri.length > 0 ? (
                         <CantiereDropdown scadenzaId={s.id} currentCantiereId={s.cantiere_id ?? null} cantieri={cantieri} />
                       ) : (
@@ -254,7 +253,7 @@ export function ScadenzeTable({
                   </TableCell>
 
                   {/* Colonna FT - allegato PDF */}
-                  <TableCell className="text-center">
+                  <TableCell className="text-center px-1">
                     {s.file_url ? (
                       <a
                         href={s.file_url}
@@ -270,44 +269,19 @@ export function ScadenzeTable({
                     )}
                   </TableCell>
 
-                  <TableCell className="text-right py-3 pr-4">
-                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                      {s.anagrafica_soggetti?.telefono ? (
-                        <WhatsAppReminderButton scadenzaId={s.id} />
-                      ) : (
-                        <button
-                          disabled
-                          className="inline-flex items-center justify-center size-8 rounded-md text-zinc-300 cursor-not-allowed bg-zinc-50"
-                          title="Telefono mancante in anagrafica"
-                        >
-                          <MessageCircle size={15} />
-                        </button>
-                      )}
-
-                      {s.data_scadenza ? (
-                        <CalendarLinkButton scadenza={s} />
-                      ) : (
-                        <button
-                          disabled
-                          className="inline-flex items-center justify-center size-8 rounded-md text-zinc-300 cursor-not-allowed bg-zinc-50"
-                          title="Data scadenza mancante"
-                        >
-                          <CalendarPlus size={15} />
-                        </button>
-                      )}
-
-                      {showPagamentoActions && s.stato !== 'pagato' && (
-                        s.tipo === 'entrata' ? (
-                          <IncassoManualeDialog scadenza={s} />
-                        ) : (
-                          <Link href={`?pagamento_id=${s.id}`}>
-                            <Button variant="outline" size="sm" className="h-8 text-blue-600 border-blue-200 hover:bg-blue-50">
-                              <CheckCircle2 size={14} className="mr-1.5" /> Paga
-                            </Button>
-                          </Link>
-                        )
-                      )}
-                    </div>
+                  {/* Colonna Azione: solo calendario */}
+                  <TableCell className="text-center px-1">
+                    {s.data_scadenza ? (
+                      <CalendarLinkButton scadenza={s} />
+                    ) : (
+                      <button
+                        disabled
+                        className="inline-flex items-center justify-center size-7 rounded-md text-zinc-300 cursor-not-allowed"
+                        title="Data scadenza mancante"
+                      >
+                        <CalendarPlus size={13} />
+                      </button>
+                    )}
                   </TableCell>
                 </TableRow>
               )
@@ -391,6 +365,17 @@ export function ScadenzeTable({
               </div>
 
               <div className="flex gap-2">
+                {s.file_url && (
+                  <a
+                    href={s.file_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Apri fattura PDF"
+                    className="inline-flex items-center justify-center h-11 w-12 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 transition-colors"
+                  >
+                    <FileText size={16} />
+                  </a>
+                )}
                 {showPagamentoActions && s.stato !== 'pagato' && (
                   s.tipo === 'entrata' ? (
                     <div className="flex-1">
@@ -404,9 +389,11 @@ export function ScadenzeTable({
                     </Link>
                   )
                 )}
-                <Button variant="outline" className="h-11 w-12 rounded-xl border-zinc-200">
-                  <MoreHorizontal size={18} className="text-zinc-400" />
-                </Button>
+                {s.data_scadenza && (
+                  <div className="flex items-center">
+                    <CalendarLinkButton scadenza={s} />
+                  </div>
+                )}
               </div>
             </div>
           )

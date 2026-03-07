@@ -1,4 +1,4 @@
-import { getScadenzePaginated } from '@/utils/data-fetcher'
+import { getScadenzePaginated, getCantieriAttivi } from '@/utils/data-fetcher'
 import { ScadenzeTable } from '../components/ScadenzeTable'
 import { DEFAULT_PAGE_SIZE } from '@/types/pagination'
 
@@ -11,14 +11,17 @@ export default async function PagatePage({
   const page = Number(params.page) || 1
   const pageSize = Number(params.pageSize) || DEFAULT_PAGE_SIZE
 
-  // Fetch specifico per archivio: solo pagati
-  const result = await getScadenzePaginated(
-    { 
-      stato: ['pagato'], 
-      search: params.search 
-    },
-    { page, pageSize }
-  )
+  // Fetch parallelo: scadenze + cantieri attivi
+  const [result, cantieri] = await Promise.all([
+    getScadenzePaginated(
+      { 
+        stato: ['pagato'], 
+        search: params.search 
+      },
+      { page, pageSize }
+    ),
+    getCantieriAttivi(),
+  ])
 
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
@@ -34,7 +37,8 @@ export default async function PagatePage({
         data={result.data} 
         pagination={result} 
         showCantiereColumn={true} 
-        showPagamentoActions={false} 
+        showPagamentoActions={false}
+        cantieri={cantieri}
       />
     </div>
   )
