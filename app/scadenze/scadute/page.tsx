@@ -1,4 +1,4 @@
-import { getScadenzePaginated } from '@/utils/data-fetcher'
+import { getScadenzePaginated, getCantieriAttivi } from '@/utils/data-fetcher'
 import { ScadenzeTable } from '../components/ScadenzeTable'
 import { DEFAULT_PAGE_SIZE } from '@/types/pagination'
 
@@ -11,14 +11,19 @@ export default async function ScadutePage({
   const page = Number(params.page) || 1
   const pageSize = Number(params.pageSize) || DEFAULT_PAGE_SIZE
 
-  // Fetch specifico per "Scaduto" (Sia entrate che uscite)
-  const result = await getScadenzePaginated(
-    { 
-      stato: ['scaduto'], 
-      search: params.search 
-    },
-    { page, pageSize }
-  )
+  // Fetch parallelo: scadenze + cantieri per dropdown inline
+  const [result, cantieriRaw] = await Promise.all([
+    getScadenzePaginated(
+      { 
+        stato: ['scaduto'], 
+        search: params.search 
+      },
+      { page, pageSize }
+    ),
+    getCantieriAttivi(),
+  ])
+
+  const cantieri = cantieriRaw.map(c => ({ id: c.id, label: c.nome }))
 
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
@@ -33,7 +38,8 @@ export default async function ScadutePage({
         data={result.data} 
         pagination={result} 
         showCantiereColumn={true} 
-        showPagamentoActions={true} 
+        showPagamentoActions={true}
+        cantieri={cantieri}
       />
     </div>
   )
