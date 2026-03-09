@@ -9,6 +9,7 @@ import {
 } from '@/utils/data-fetcher'
 import CashflowChart from './CashflowChart'
 import AgingChart from './AgingChart'
+import SyncPipelineButton from './components/SyncPipelineButton'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { TrendingUp, TrendingDown, Wallet, Activity, LineChart, HardHat, ChevronRight, AlertCircle, ArrowRight } from 'lucide-react'
 
@@ -42,12 +43,15 @@ export default async function FinanzaPage() {
             </h1>
             <p className="text-zinc-500 mt-1">Cashflow reale, con impatto immediato dello storico arretrato.</p>
           </div>
-          
-          {kpis.cassa_attuale < 0 && (
-            <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-2 rounded-lg text-sm flex items-center gap-2 font-medium animate-pulse">
-              <AlertCircle size={16} /> Attenzione: Esposizione di cassa rilevata.
-            </div>
-          )}
+
+          <div className="flex items-center gap-3">
+            {kpis.cassa_attuale < 0 && (
+              <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-2 rounded-lg text-sm flex items-center gap-2 font-medium animate-pulse">
+                <AlertCircle size={16} /> Attenzione: Esposizione di cassa rilevata.
+              </div>
+            )}
+            <SyncPipelineButton />
+          </div>
         </div>
 
         {/* SEZIONE 1: KPI Globali (Cliccabili per navigare alle nuove pagine) */}

@@ -23,6 +23,7 @@ Uso:
 import os
 import re
 import sys
+import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from datetime import datetime
@@ -371,6 +372,9 @@ def main():
         f.write("\n".join(log_lines) + "\n\n")
     
     log(f"📝 Log salvato in {LOG_FILE}")
+
+    if "--json" in sys.argv:
+        print(f"###JSON_RESULT###{json.dumps(stats)}")
 
 
 if __name__ == "__main__":

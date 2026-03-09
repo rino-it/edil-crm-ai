@@ -1,5 +1,7 @@
 import os
 import re
+import sys
+import json
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 import calendar
@@ -52,13 +54,137 @@ def calcola_data_scadenza(data_emissione_str, condizioni):
     except:
         return (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
 
+def _crea_scadenze_da_xml(percorso_file, fattura_id, soggetto_id, numero_fattura, data_fattura, importo_totale, condizioni_pag):
+    """Crea scadenze_pagamento leggendo i dettagli pagamento dall'XML.
+    Ritorna il numero di scadenze create."""
+    try:
+        with open(percorso_file, 'r', encoding='utf-8', errors='ignore') as f:
+            xml_raw = f.read()
+        xml_clean = pulisci_namespace(xml_raw)
+        root = ET.fromstring(xml_clean)
+        body = root.find(".//FatturaElettronicaBody")
+        if body is None:
+            return 0
+    except Exception as e:
+        print(f"   ❌ Errore lettura XML per scadenze: {e}")
+        return 0
+
+    # Recupera ragione_sociale per la descrizione
+    try:
+        header = root.find(".//FatturaElettronicaHeader")
+        anag = header.find(".//CedentePrestatore/DatiAnagrafici")
+        ragione_sociale = anag.find(".//Denominazione").text if anag.find(".//Denominazione") is not None else None
+        if not ragione_sociale:
+            n = anag.find(".//Nome").text if anag.find(".//Nome") is not None else ""
+            c = anag.find(".//Cognome").text if anag.find(".//Cognome") is not None else ""
+            ragione_sociale = f"{c} {n}".strip() or "Sconosciuto"
+    except:
+        ragione_sociale = "Sconosciuto"
+
+    rate_xml = body.findall(".//DettaglioPagamento")
+    modalita_pag_xml = body.findall(".//DettaglioPagamento/ModalitaPagamento")
+    is_domiciliazione = any(mp.text in ('MP19', 'MP20') for mp in modalita_pag_xml if mp.text)
+    scadenze_create = 0
+
+    if rate_xml:
+        for i, rata in enumerate(rate_xml):
+            importo_rata = float(rata.findtext('ImportoPagamento', '0'))
+            data_scad_rata = rata.findtext('DataScadenzaPagamento')
+            modalita_rata = rata.findtext('ModalitaPagamento', '')
+            is_domiciliazione_rata = modalita_rata in ('MP19', 'MP20') or is_domiciliazione
+            if not data_scad_rata:
+                data_scad_rata = calcola_data_scadenza(data_fattura, condizioni_pag)
+            scadenza_data = {
+                "tipo": "uscita",
+                "soggetto_id": soggetto_id,
+                "fattura_riferimento": numero_fattura,
+                "importo_totale": importo_rata,
+                "importo_pagato": 0,
+                "data_emissione": data_fattura,
+                "data_scadenza": data_scad_rata,
+                "data_pianificata": data_scad_rata,
+                "stato": "da_pagare",
+                "descrizione": f"Fattura n. {numero_fattura} da {ragione_sociale} (Rata {i+1}/{len(rate_xml)})",
+                "fonte": "fattura",
+            }
+            if is_domiciliazione_rata:
+                scadenza_data["auto_domiciliazione"] = True
+            supabase.table("scadenze_pagamento").insert(scadenza_data).execute()
+            scadenze_create += 1
+            dom_label = " [SDD]" if is_domiciliazione_rata else ""
+            print(f"   📅 Rata {i+1}/{len(rate_xml)}: €{importo_rata} scade {data_scad_rata}{dom_label}")
+    else:
+        data_scad = calcola_data_scadenza(data_fattura, condizioni_pag)
+        scadenza_data = {
+            "tipo": "uscita",
+            "soggetto_id": soggetto_id,
+            "fattura_riferimento": numero_fattura,
+            "importo_totale": importo_totale,
+            "importo_pagato": 0,
+            "data_emissione": data_fattura,
+            "data_scadenza": data_scad,
+            "data_pianificata": data_scad,
+            "stato": "da_pagare",
+            "descrizione": f"Fattura n. {numero_fattura} da {ragione_sociale}",
+            "fonte": "fattura",
+        }
+        if is_domiciliazione:
+            scadenza_data["auto_domiciliazione"] = True
+        supabase.table("scadenze_pagamento").insert(scadenza_data).execute()
+        scadenze_create += 1
+        dom_label = " [SDD]" if is_domiciliazione else ""
+        print(f"   📅 Scadenziario: Scadenza {data_scad} generata.{dom_label}")
+
+    return scadenze_create
+
+
+# Contatori globali per output JSON
+_stats = {"nuove": 0, "scadenze_create": 0, "scadenze_recuperate": 0, "skipped": 0, "errori": 0}
+
+
 def parse_and_upload(percorso_file):
     nome_file = os.path.basename(percorso_file)
-    
+
+    # --- CHECK FATTURA ESISTENTE (FIX: non skip se mancano scadenze) ---
+    fattura_esistente = None
     try:
-        res = supabase.table("fatture_fornitori").select("id").eq("nome_file_xml", nome_file).execute()
-        if res.data and len(res.data) > 0: return 
+        res = supabase.table("fatture_fornitori").select(
+            "id, soggetto_id, numero_fattura, data_fattura, importo_totale"
+        ).eq("nome_file_xml", nome_file).execute()
+        if res.data and len(res.data) > 0:
+            fattura_esistente = res.data[0]
     except: pass
+
+    if fattura_esistente:
+        # Fattura esiste: verifica se le scadenze sono presenti
+        sogg_id = fattura_esistente.get("soggetto_id")
+        num_fatt = fattura_esistente.get("numero_fattura")
+        data_fatt = fattura_esistente.get("data_fattura")
+        try:
+            sc_res = supabase.table("scadenze_pagamento").select("id").eq(
+                "soggetto_id", sogg_id
+            ).eq("fattura_riferimento", num_fatt).eq("data_emissione", data_fatt).execute()
+            if sc_res.data and len(sc_res.data) > 0:
+                _stats["skipped"] += 1
+                return  # Fattura E scadenze esistono: skip completo
+        except: pass
+
+        # Fattura esiste MA scadenze mancanti: recupera
+        print(f"🔧 Scadenze mancanti per fattura esistente: {nome_file}")
+        try:
+            # Recupera condizioni_pagamento dal soggetto
+            cond_res = supabase.table("anagrafica_soggetti").select("condizioni_pagamento").eq("id", sogg_id).execute()
+            condizioni_pag = cond_res.data[0].get('condizioni_pagamento', '30gg DFFM') if cond_res.data else '30gg DFFM'
+        except:
+            condizioni_pag = '30gg DFFM'
+
+        n = _crea_scadenze_da_xml(
+            percorso_file,
+            fattura_esistente["id"], sogg_id, num_fatt, data_fatt,
+            fattura_esistente.get("importo_totale", 0), condizioni_pag
+        )
+        _stats["scadenze_recuperate"] += n
+        return
 
     print(f"✨ Nuova fattura: {nome_file}")
 
@@ -117,70 +243,12 @@ def parse_and_upload(percorso_file):
         }).execute()
         
         if not res_insert.data: return
-        fattura_id = res_insert.data[0]['id'] 
+        fattura_id = res_insert.data[0]['id']
+        _stats["nuove"] += 1
 
-        # --- [PUNTO 3.5] AUTO-GENERAZIONE SCADENZE (SUPPORTO MULTI-RATA) ---
-        rate_xml = body.findall(".//DettaglioPagamento")
-
-        # Rileva domiciliazione bancaria (SDD/RID) dalla ModalitaPagamento
-        # MP19 = Domiciliazione, MP20 = RID (equivalente moderno SDD)
-        modalita_pag_xml = body.findall(".//DettaglioPagamento/ModalitaPagamento")
-        is_domiciliazione = any(
-            mp.text in ('MP19', 'MP20') for mp in modalita_pag_xml if mp.text
-        )
-
-        if rate_xml:
-            # L'XML contiene rate esplicite: creiamo una scadenza per ogni rata
-            for i, rata in enumerate(rate_xml):
-                importo_rata = float(rata.findtext('ImportoPagamento', '0'))
-                data_scad_rata = rata.findtext('DataScadenzaPagamento')
-                modalita_rata = rata.findtext('ModalitaPagamento', '')
-                is_domiciliazione_rata = modalita_rata in ('MP19', 'MP20') or is_domiciliazione
-
-                if not data_scad_rata:
-                    data_scad_rata = calcola_data_scadenza(data_fattura, condizioni_pag)
-
-                scadenza_data = {
-                    "tipo": "uscita",
-                    "soggetto_id": soggetto_id,
-                    "fattura_riferimento": numero_fattura,
-                    "importo_totale": importo_rata,
-                    "importo_pagato": 0,
-                    "data_emissione": data_fattura,
-                    "data_scadenza": data_scad_rata,
-                    "data_pianificata": data_scad_rata,
-                    "stato": "da_pagare",
-                    "descrizione": f"Fattura n. {numero_fattura} da {ragione_sociale} (Rata {i+1}/{len(rate_xml)})",
-                    "fonte": "fattura",
-                }
-                if is_domiciliazione_rata:
-                    scadenza_data["auto_domiciliazione"] = True
-                
-                supabase.table("scadenze_pagamento").insert(scadenza_data).execute()
-                dom_label = " [SDD]" if is_domiciliazione_rata else ""
-                print(f"   📅 Rata {i+1}/{len(rate_xml)}: €{importo_rata} scade {data_scad_rata}{dom_label}")
-        else:
-            # Nessuna rata nell'XML: fallback al calcolo basato su condizioni
-            data_scad = calcola_data_scadenza(data_fattura, condizioni_pag)
-            scadenza_data = {
-                "tipo": "uscita",
-                "soggetto_id": soggetto_id,
-                "fattura_riferimento": numero_fattura,
-                "importo_totale": importo_totale,
-                "importo_pagato": 0,
-                "data_emissione": data_fattura,
-                "data_scadenza": data_scad,
-                "data_pianificata": data_scad,
-                "stato": "da_pagare",
-                "descrizione": f"Fattura n. {numero_fattura} da {ragione_sociale}",
-                "fonte": "fattura",
-            }
-            if is_domiciliazione:
-                scadenza_data["auto_domiciliazione"] = True
-
-            supabase.table("scadenze_pagamento").insert(scadenza_data).execute()
-            dom_label = " [SDD]" if is_domiciliazione else ""
-            print(f"   📅 Scadenziario: Scadenza {data_scad} generata.{dom_label}")
+        # --- AUTO-GENERAZIONE SCADENZE (delega a funzione riutilizzabile) ---
+        n = _crea_scadenze_da_xml(percorso_file, fattura_id, soggetto_id, numero_fattura, data_fattura, importo_totale, condizioni_pag)
+        _stats["scadenze_create"] += n
 
         # --- LOGICA DDT (Mantenuta integra) ---
         ddt_line_map = {}
@@ -226,15 +294,25 @@ def parse_and_upload(percorso_file):
             print(f"   ✅ Caricate {len(righe_da_caricare)} righe dettaglio.")
 
     except Exception as e:
+        _stats["errori"] += 1
         print(f"   ❌ Errore su {nome_file}: {e}")
 
 def run():
     print(f"🚀 AVVIO IMPORTAZIONE E SCADENZIARIO DA: {CARTELLA_ARCHIVIO}")
-    if not os.path.exists(CARTELLA_ARCHIVIO): return
+    if not os.path.exists(CARTELLA_ARCHIVIO):
+        print(f"❌ Cartella non trovata: {CARTELLA_ARCHIVIO}")
+        if "--json" in sys.argv:
+            print(f"###JSON_RESULT###{json.dumps({'errore': 'cartella_non_trovata', **_stats})}")
+        return
     files = [f for f in os.listdir(CARTELLA_ARCHIVIO) if f.lower().endswith('.xml')]
     for f in files:
         parse_and_upload(os.path.join(CARTELLA_ARCHIVIO, f))
     print(f"✅ ELABORAZIONE COMPLETATA.")
+    print(f"   Nuove fatture: {_stats['nuove']}, Scadenze create: {_stats['scadenze_create']}, "
+          f"Scadenze recuperate: {_stats['scadenze_recuperate']}, Skip: {_stats['skipped']}, Errori: {_stats['errori']}")
+
+    if "--json" in sys.argv:
+        print(f"###JSON_RESULT###{json.dumps(_stats)}")
 
 if __name__ == "__main__":
     run()
