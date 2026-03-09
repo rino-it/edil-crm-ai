@@ -166,6 +166,24 @@ def trova_soggetto(fornitore_nome: str, mappa: dict[str, str]) -> str | None:
     return best_id if best_score >= 0.88 else None
 
 
+def trova_soggetto_best_score(fornitore_nome: str, mappa: dict[str, str]) -> float:
+    """Restituisce il miglior score fuzzy (0-1) rispetto all'anagrafica esistente."""
+    target = norm(fornitore_nome)
+    if not target:
+        return 0.0
+    if target in mappa:
+        return 1.0
+    for nome_db in mappa:
+        if nome_db in target or target in nome_db:
+            return 0.95
+    best_score = 0.0
+    for nome_db in mappa:
+        score = SequenceMatcher(None, target, nome_db).ratio()
+        if score > best_score:
+            best_score = score
+    return best_score
+
+
 def trova_cantiere(cantiere_nome: str, mappa_cantieri: dict[str, str]) -> str | None:
     """Match cantiere 3 livelli: esatto -> contains -> fuzzy >=0.85."""
     target = norm(cantiere_nome)
@@ -265,10 +283,12 @@ def leggi_main(xls: pd.ExcelFile) -> list[dict[str, Any]]:
         if not fattura_norm:
             fattura_norm = f"spesa_{re.sub(chr(91) + chr(94) + 'a-z0-9' + chr(93), '', fornitore)}_{idx}"
         note_val = row_get(row, "NOTE", "Note")
+        fornitore_raw_val = str(row_get(row, "fornitore", "Fornitore", "FORNITORE") or "").strip()
         righe.append({
             "_fonte": "main",
             "_idx": idx,
             "fornitore": fornitore,
+            "fornitore_raw": fornitore_raw_val,
             "fattura_raw": str(fattura_raw).strip() if fattura_raw else fattura_norm,
             "fattura_norm": fattura_norm,
             "importo_totale": importo,
@@ -328,11 +348,32 @@ def costruisci_riga(
     mappa_cantieri: dict[str, str],
     mancanti_soggetti: list[str],
     mancanti_cantieri: list[str],
+    nuovi_soggetti: list[dict] | None = None,
 ) -> dict[str, Any] | None:
     soggetto_id = trova_soggetto(r["fornitore"], mappa_soggetti)
     if not soggetto_id:
-        mancanti_soggetti.append(r["fornitore"])
-        return None
+        # Auto-crea anagrafica SOLO se il fornitore è davvero sconosciuto
+        # (nessuna somiglianza ragionevole con nomi esistenti, score < 0.55)
+        # Evita di creare duplicati per varianti di nome già presenti
+        if r.get("_fonte") == "main" and nuovi_soggetti is not None:
+            best_score = trova_soggetto_best_score(r["fornitore"], mappa_soggetti)
+            if best_score < 0.55:
+                from uuid import uuid4
+                nuovo_id = str(uuid4())
+                ragione_sociale_raw = r.get("fornitore_raw") or r["fornitore"]
+                nuovi_soggetti.append({
+                    "id": nuovo_id,
+                    "ragione_sociale": ragione_sociale_raw,
+                    "tipo": "fornitore",
+                })
+                mappa_soggetti[r["fornitore"]] = nuovo_id
+                soggetto_id = nuovo_id
+            else:
+                mancanti_soggetti.append(r["fornitore"])
+                return None
+        else:
+            mancanti_soggetti.append(r["fornitore"])
+            return None
 
     cantiere_id = trova_cantiere(r["cantiere"], mappa_cantieri) if r["cantiere"] else None
     if r["cantiere"] and not cantiere_id:
@@ -413,10 +454,11 @@ def run_sync(dry_run: bool = False) -> None:
     print("\nCostruzione payload DB...")
     mancanti_soggetti: list[str] = []
     mancanti_cantieri: list[str] = []
+    nuovi_soggetti: list[dict] = []
     righe_db: list[dict[str, Any]] = []
 
     for r in merged:
-        payload = costruisci_riga(r, mappa_soggetti, mappa_cantieri, mancanti_soggetti, mancanti_cantieri)
+        payload = costruisci_riga(r, mappa_soggetti, mappa_cantieri, mancanti_soggetti, mancanti_cantieri, nuovi_soggetti)
         if payload:
             righe_db.append(payload)
 
@@ -429,6 +471,7 @@ def run_sync(dry_run: bool = False) -> None:
 
     print(f"\nRiepilogo:")
     print(f"  Righe da inviare   : {len(righe_db)}")
+    print(f"  Nuovi soggetti     : {len(nuovi_soggetti)}")
     print(f"  Soggetti mancanti  : {len(set(mancanti_soggetti))}")
     print(f"  Cantieri mancanti  : {len(set(mancanti_cantieri))}")
     print(f"  Fonti merged:")
@@ -437,6 +480,11 @@ def run_sync(dry_run: bool = False) -> None:
     print(f"  Distribuzione stati:")
     for stato, n in sorted(stati.items()):
         print(f"    {stato:<12} : {n}")
+
+    if nuovi_soggetti:
+        print(f"\nAnagrafiche da creare automaticamente ({len(nuovi_soggetti)}):")
+        for s in nuovi_soggetti:
+            print(f"  + {s['ragione_sociale']}")
 
     if mancanti_soggetti:
         uniq = sorted(set(mancanti_soggetti))
@@ -449,6 +497,16 @@ def run_sync(dry_run: bool = False) -> None:
     if dry_run:
         print("\nDry-run attivo: nessuna modifica su Supabase.")
         return
+
+    # Crea le nuove anagrafiche prima dell'upsert scadenze
+    if nuovi_soggetti:
+        print(f"\nCreazione {len(nuovi_soggetti)} nuove anagrafiche...")
+        for s in nuovi_soggetti:
+            try:
+                supabase.table("anagrafica_soggetti").insert(s).execute()
+                print(f"  ✅ {s['ragione_sociale']}")
+            except Exception as e:
+                print(f"  ❌ {s['ragione_sociale']}: {e}")
 
     print(f"\nInvio {len(righe_db)} righe a Supabase...")
 
@@ -531,7 +589,7 @@ def run_sync(dry_run: bool = False) -> None:
 
     ids_da_eliminare = ids_db - ids_attesi
     if ids_da_eliminare:
-        # FK guard: escludere ID ancora referenziati in fatture_vendita.scadenza_id
+        # FK guard 1: escludere ID ancora referenziati in fatture_vendita.scadenza_id
         fv_res = (
             supabase.table("fatture_vendita")
             .select("scadenza_id")
@@ -542,6 +600,32 @@ def run_sync(dry_run: bool = False) -> None:
         ids_da_eliminare -= ids_fk_protetti
         if ids_fk_protetti:
             print(f"  Protetti da FK (fatture_vendita): {len(ids_fk_protetti)}")
+
+        # FK guard 2: escludere ID ancora referenziati in titoli.scadenza_id
+        titoli_res = (
+            supabase.table("titoli")
+            .select("scadenza_id")
+            .not_.is_("scadenza_id", "null")
+            .execute()
+        )
+        ids_titoli_protetti = set(r["scadenza_id"] for r in titoli_res.data if r.get("scadenza_id"))
+        ids_da_eliminare -= ids_titoli_protetti
+        if ids_titoli_protetti:
+            print(f"  Protetti da FK (titoli): {len(ids_titoli_protetti)}")
+
+        # Escludere scadenze da fonti non-Excel (fattura, xml_import, manuale)
+        # quelle vengono gestite da altri script e non devono essere toccate
+        non_excel_res = (
+            supabase.table("scadenze_pagamento")
+            .select("id")
+            .in_("fonte", ["fattura", "manuale", "titolo"])
+            .in_("id", list(ids_da_eliminare)[:1000] if ids_da_eliminare else ["x"])
+            .execute()
+        )
+        ids_non_excel = set(r["id"] for r in non_excel_res.data)
+        ids_da_eliminare -= ids_non_excel
+        if ids_non_excel:
+            print(f"  Protetti (fonte non-Excel): {len(ids_non_excel)}")
 
         print(f"  Scadenze obsolete da eliminare: {len(ids_da_eliminare)}")
         lista_da_eliminare = list(ids_da_eliminare)
