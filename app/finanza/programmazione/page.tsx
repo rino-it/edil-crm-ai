@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle, TrendingUp, Wallet } from "lucide-react"
-import { getCashflowProjection, getCashflowProjectionPerConto, getContiBanca } from '@/utils/data-fetcher'
+import { getCashflowProjection, getCashflowProjectionPerConto, getContiBanca, sincronizzaScadenzeMutui } from '@/utils/data-fetcher'
 import ProgrammazioneChart from './ProgrammazioneChart'
 import { CashflowTable } from './CashflowTable'
 import { CashflowPerContoSection } from './CashflowPerContoSection'
@@ -14,6 +14,9 @@ export default async function ProgrammazionePage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
+
+  // Sincronizza scadenze mancanti dei mutui (idempotente, veloce se 0 orfane)
+  await sincronizzaScadenzeMutui();
 
   // Fetch parallelo: cashflow totale + per-conto + lista conti
   const [data, perContoData, conti] = await Promise.all([

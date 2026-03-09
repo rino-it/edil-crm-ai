@@ -4047,6 +4047,7 @@ export async function inserisciMutuoConRate(input: {
 
     if (errSc) {
       console.error("❌ Errore inserimento scadenze mutuo:", errSc);
+      console.warn(`⚠️ Scadenze non create per mutuo ${mutuo.id}. Saranno sincronizzate automaticamente al prossimo caricamento del cashflow.`);
     } else if (scadenzeInserite) {
       // Associa le scadenze alle rate (solo rate future, in ordine)
       const rateFuture = rateBatch.filter(r => r.stato === 'da_pagare');
@@ -4064,6 +4065,105 @@ export async function inserisciMutuoConRate(input: {
   }
 
   return mutuo.id;
+}
+
+/**
+ * Sincronizza le rate_mutuo orfane (senza scadenza_id) creando le scadenze mancanti.
+ * Idempotente: filtra solo rate con scadenza_id IS NULL.
+ * Restituisce il numero di scadenze create/collegate.
+ */
+export async function sincronizzaScadenzeMutui(): Promise<number> {
+  const supabase = getSupabaseAdmin();
+
+  // 1. Trova tutte le rate_mutuo da_pagare senza scadenza collegata
+  const { data: rateOrfane, error: errQuery } = await supabase
+    .from('rate_mutuo')
+    .select(`
+      id, mutuo_id, numero_rata, importo_rata, data_scadenza, stato,
+      mutui!inner (
+        id, conto_banca_id, banca_erogante, scopo, soggetto_id, numero_rate
+      )
+    `)
+    .eq('stato', 'da_pagare')
+    .is('scadenza_id', null);
+
+  if (errQuery || !rateOrfane || rateOrfane.length === 0) {
+    return 0;
+  }
+
+  let count = 0;
+
+  for (const rata of rateOrfane) {
+    const mutuo = rata.mutui as any;
+
+    // 2. Controllo difensivo: verifica se esiste già una scadenza corrispondente
+    //    (protegge da run parziali falliti che hanno creato la scadenza ma non aggiornato la rata)
+    const { data: existing } = await supabase
+      .from('scadenze_pagamento')
+      .select('id')
+      .eq('fonte', 'mutuo')
+      .eq('categoria', 'rata_mutuo')
+      .eq('importo_totale', rata.importo_rata)
+      .eq('data_scadenza', rata.data_scadenza)
+      .eq('conto_banca_id', mutuo.conto_banca_id)
+      .neq('stato', 'pagato')
+      .limit(1)
+      .maybeSingle();
+
+    if (existing) {
+      // Scadenza già esistente, collega solo il link
+      await supabase
+        .from('rate_mutuo')
+        .update({ scadenza_id: existing.id })
+        .eq('id', rata.id);
+      count++;
+      continue;
+    }
+
+    // 3. Crea la scadenza mancante
+    const { data: scadenza, error: errSc } = await supabase
+      .from('scadenze_pagamento')
+      .insert({
+        descrizione: `Rata ${rata.numero_rata}/${mutuo.numero_rate} mutuo ${mutuo.banca_erogante}${mutuo.scopo ? ' - ' + mutuo.scopo : ''}`,
+        importo_totale: rata.importo_rata,
+        importo_pagato: 0,
+        data_scadenza: rata.data_scadenza,
+        data_pianificata: rata.data_scadenza,
+        tipo: 'uscita',
+        stato: 'da_pagare',
+        categoria: 'rata_mutuo',
+        soggetto_id: mutuo.soggetto_id || null,
+        fonte: 'mutuo',
+        auto_domiciliazione: true,
+        conto_banca_id: mutuo.conto_banca_id,
+      })
+      .select('id')
+      .single();
+
+    if (errSc || !scadenza) {
+      console.error(`❌ Errore creazione scadenza per rata ${rata.id}:`, errSc);
+      continue;
+    }
+
+    // 4. Collega la scadenza alla rata
+    const { error: errUpdate } = await supabase
+      .from('rate_mutuo')
+      .update({ scadenza_id: scadenza.id })
+      .eq('id', rata.id);
+
+    if (errUpdate) {
+      console.error(`❌ Errore aggiornamento scadenza_id per rata ${rata.id}:`, errUpdate);
+      continue;
+    }
+
+    count++;
+  }
+
+  if (count > 0) {
+    console.log(`✅ Sincronizzate ${count} scadenze mutui mancanti`);
+  }
+
+  return count;
 }
 
 // ============================================================
