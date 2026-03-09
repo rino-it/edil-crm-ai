@@ -32,6 +32,7 @@ SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 sb = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 EXECUTE = "--execute" in sys.argv
+JSON_OUTPUT = "--json" in sys.argv
 CSV_PATH = os.path.join(os.path.dirname(__file__), '_esposizione.csv')
 
 def log(msg):
@@ -233,6 +234,8 @@ def main():
 
     if not orphans:
         log("✅ Nessuna orfana trovata. Tutto a posto!")
+        if JSON_OUTPUT:
+            print(f"###JSON_RESULT###{json.dumps({'orphans_found': 0, 'scadenze_created': 0, 'errors': 0})}")
         return
 
     # 4. Prepara le scadenze da creare
@@ -379,8 +382,13 @@ def main():
         with open("crea_scadenze_orfane_audit.json", "w") as f:
             json.dump(audit, f, indent=2)
         log(f"\n📄 Audit salvato in crea_scadenze_orfane_audit.json")
+
+        if JSON_OUTPUT:
+            print(f"###JSON_RESULT###{json.dumps(audit)}")
     else:
         log(f"\n🟡 DRY-RUN completato. Usa --execute per creare le scadenze.")
+        if JSON_OUTPUT:
+            print(f"###JSON_RESULT###{json.dumps({'dry_run': True, 'orphans_found': len(orphans), 'da_pagare': stats['da_pagare'], 'pagate': stats['pagato'], 'importo_da_pagare': imp_aperti, 'importo_pagate': imp_pagati})}")
 
 
 if __name__ == "__main__":
