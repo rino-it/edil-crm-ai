@@ -193,6 +193,12 @@ export function ScadenzeTable({
             {data.map((s) => {
               const importoResiduo = Number(s.importo_totale) - Number(s.importo_pagato || 0);
               const isScaduta = new Date(s.data_scadenza) < new Date() && s.stato !== 'pagato';
+              const attachmentUrl = s.file_url ?? s.titolo?.file_url ?? null;
+              const attachmentTitle = s.file_url
+                ? 'Apri fattura PDF'
+                : s.titolo?.file_url
+                  ? `Apri allegato titolo ${s.titolo.tipo ?? ''}`.trim()
+                  : '';
 
               return (
                 <TableRow key={s.id} className="group hover:bg-zinc-50/50 transition-colors">
@@ -254,12 +260,12 @@ export function ScadenzeTable({
 
                   {/* Colonna FT - allegato PDF */}
                   <TableCell className="text-center px-1">
-                    {s.file_url ? (
+                    {attachmentUrl ? (
                       <a
-                        href={s.file_url}
+                        href={attachmentUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        title="Apri fattura PDF"
+                        title={attachmentTitle}
                         className="inline-flex items-center justify-center size-7 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 transition-colors"
                       >
                         <FileText size={13} />
@@ -295,6 +301,12 @@ export function ScadenzeTable({
         {data.map((s) => {
           const importoResiduo = Number(s.importo_totale) - Number(s.importo_pagato || 0);
           const isScaduta = new Date(s.data_scadenza) < new Date() && s.stato !== 'pagato';
+          const attachmentUrl = s.file_url ?? s.titolo?.file_url ?? null;
+          const attachmentTitle = s.file_url
+            ? 'Apri fattura PDF'
+            : s.titolo?.file_url
+              ? `Apri allegato titolo ${s.titolo.tipo ?? ''}`.trim()
+              : '';
 
           return (
             <div key={s.id} className="p-4 space-y-4 bg-white hover:bg-zinc-50 transition-colors">
@@ -317,12 +329,12 @@ export function ScadenzeTable({
                   )}
                   <div className="text-xs text-zinc-500 font-mono flex items-center gap-1.5">
                     <FatturaEditCell scadenzaId={s.id} initial={s.fattura_riferimento ?? null} fileUrl={s.file_url ?? null} />
-                    {s.file_url && (
+                    {attachmentUrl && (
                       <a
-                        href={s.file_url}
+                        href={attachmentUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        title="Apri fattura PDF"
+                        title={attachmentTitle}
                         className="inline-flex items-center justify-center size-5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 transition-colors flex-shrink-0"
                       >
                         <FileText size={10} />
@@ -365,12 +377,12 @@ export function ScadenzeTable({
               </div>
 
               <div className="flex gap-2">
-                {s.file_url && (
+                {attachmentUrl && (
                   <a
-                    href={s.file_url}
+                    href={attachmentUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    title="Apri fattura PDF"
+                    title={attachmentTitle}
                     className="inline-flex items-center justify-center h-11 w-12 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 transition-colors"
                   >
                     <FileText size={16} />

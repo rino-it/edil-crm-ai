@@ -2895,7 +2895,8 @@ export async function getScadenzePaginated(
     .select(`
       *,
       anagrafica_soggetti:soggetto_id (ragione_sociale, partita_iva, iban),
-      cantieri:cantiere_id (codice, nome)
+      cantieri:cantiere_id (codice, nome),
+      titolo:titolo_id (id, tipo, numero_titolo, file_url)
     `, { count: 'exact' });
 
   // 2. Applichiamo i filtri dinamicamente
@@ -3620,7 +3621,7 @@ export async function getScadenzeSoggetto(soggettoId: string) {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from('scadenze_pagamento')
-    .select('id, tipo, importo_totale, importo_pagato, data_scadenza, data_pianificata, stato, fattura_riferimento, descrizione, file_url, categoria')
+    .select('id, tipo, importo_totale, importo_pagato, data_scadenza, data_pianificata, stato, fattura_riferimento, descrizione, file_url, categoria, titolo_id, titolo:titolo_id(id, tipo, numero_titolo, file_url)')
     .eq('soggetto_id', soggettoId)
     .order('data_pianificata', { ascending: true }); // Ordina per la data operativa che abbiamo creato
 

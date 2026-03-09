@@ -140,11 +140,21 @@ def is_saldato(val: Any) -> bool:
     return True
 
 
-def genera_id(soggetto_id: str | None, fattura_norm: str, importo: float) -> str:
-    """UUID5 deterministico: stessa chiave -> stesso UUID sempre."""
+def genera_id(
+    soggetto_id: str | None,
+    fattura_norm: str,
+    importo: float,
+    dup_idx: int | None = None,
+) -> str:
+    """UUID5 deterministico.
+
+    Nota: dup_idx viene valorizzato solo per gruppi duplicati (stessa fattura+importo)
+    per evitare il collasso di piani a rate su un unico UUID.
+    """
     sid = soggetto_id or "anonimo"
     imp = f"{round(importo, 2):.2f}"
-    chiave = f"{sid}_{fattura_norm}_{imp}"
+    extra = f"_{dup_idx}" if dup_idx and dup_idx > 1 else ""
+    chiave = f"{sid}_{fattura_norm}_{imp}{extra}"
     return str(uuid5(NAMESPACE_OID, chiave))
 
 
@@ -389,7 +399,12 @@ def costruisci_riga(
     data_scad = r["data_scadenza"] or r["data_emissione"] or OGGI
 
     stato = calcola_stato(sdo, importo_pagato, importo_totale, data_scad)
-    uuid_id = genera_id(soggetto_id, r["fattura_norm"], importo_totale)
+    uuid_id = genera_id(
+        soggetto_id,
+        r["fattura_norm"],
+        importo_totale,
+        dup_idx=r.get("_dup_idx"),
+    )
 
     payload: dict[str, Any] = {
         "id": uuid_id,
@@ -457,7 +472,32 @@ def run_sync(dry_run: bool = False) -> None:
     nuovi_soggetti: list[dict] = []
     righe_db: list[dict[str, Any]] = []
 
+    # Evita collasso UUID su piani a rate: stessa fattura+importo ripetuti nel MAIN.
+    # Applichiamo un indice progressivo SOLO ai gruppi con duplicati.
+    from collections import Counter, defaultdict
+
+    dup_counter = Counter(
+        (
+            r.get("_fonte"),
+            r.get("fornitore"),
+            r.get("fattura_norm"),
+            round(float(r.get("importo_totale") or 0), 2),
+        )
+        for r in merged
+    )
+    dup_seen: dict[tuple[Any, ...], int] = defaultdict(int)
+
     for r in merged:
+        dup_key = (
+            r.get("_fonte"),
+            r.get("fornitore"),
+            r.get("fattura_norm"),
+            round(float(r.get("importo_totale") or 0), 2),
+        )
+        if dup_counter[dup_key] > 1:
+            dup_seen[dup_key] += 1
+            r["_dup_idx"] = dup_seen[dup_key]
+
         payload = costruisci_riga(r, mappa_soggetti, mappa_cantieri, mancanti_soggetti, mancanti_cantieri, nuovi_soggetti)
         if payload:
             righe_db.append(payload)

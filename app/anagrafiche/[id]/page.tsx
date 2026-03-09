@@ -370,13 +370,21 @@ export default async function SoggettoDetailPage({
                         </td>
                         <td className="p-4 text-right font-bold text-zinc-900">{formatEuro(s.importo_totale)}</td>
                         <td className="p-4 text-center">
-                          {s.file_url ? (
-                            <a href={s.file_url} target="_blank" rel="noopener noreferrer" title="Apri documento allegato">
-                              <Paperclip className="h-4 w-4 text-blue-500 hover:text-blue-700 transition-colors inline-block" />
-                            </a>
-                          ) : (
-                            <span className="text-zinc-200">—</span>
-                          )}
+                          {(() => {
+                            const attachmentUrl = s.file_url || s.titolo?.file_url;
+                            const attachmentTitle = s.file_url
+                              ? 'Apri documento allegato'
+                              : s.titolo?.file_url
+                                ? `Apri allegato titolo ${s.titolo?.tipo || ''}`.trim()
+                                : '';
+                            return attachmentUrl ? (
+                              <a href={attachmentUrl} target="_blank" rel="noopener noreferrer" title={attachmentTitle}>
+                                <Paperclip className="h-4 w-4 text-blue-500 hover:text-blue-700 transition-colors inline-block" />
+                              </a>
+                            ) : (
+                              <span className="text-zinc-200">—</span>
+                            );
+                          })()}
                         </td>
                       </tr>
                     ))}

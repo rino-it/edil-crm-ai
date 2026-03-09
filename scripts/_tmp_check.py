@@ -1,19 +1,36 @@
-import os; from dotenv import load_dotenv; load_dotenv('.env.local')
-from supabase import create_client
-sb = create_client(os.getenv('NEXT_PUBLIC_SUPABASE_URL'), os.getenv('SUPABASE_SERVICE_ROLE_KEY'))
-anag = sb.table('anagrafica_soggetti').select('id,ragione_sociale').execute()
-ids = {a['id']: a['ragione_sociale'] for a in anag.data if any(k in (a.get('ragione_sociale') or '').lower() for k in ['cofidis','manzoini','gaeni'])}
-print('Soggetti trovati:')
-for sid, nome in ids.items():
-    print(f'  {nome} -> {sid}')
+import csv,re
+from collections import defaultdict
 
-sc = sb.table('scadenze_pagamento').select('soggetto_id,stato,importo_totale,fattura_riferimento').eq('tipo','uscita').execute()
-print('\nScadenze:')
-trovate = 0
-for s in sc.data:
-    if s.get('soggetto_id') in ids:
-        trovate += 1
-        nome = ids[s['soggetto_id']]
-        print(f"  {nome:35} | {s['stato']:10} | EUR {s.get('importo_totale') or 0:>10,.2f} | {s.get('fattura_riferimento')}")
-if not trovate:
-    print('  (nessuna scadenza trovata)')
+rows=[]
+with open('scripts/_webapp_esposizione_fornitori.csv',encoding='utf-8') as f:
+    r=csv.DictReader(f)
+    for row in r:
+        if row['fornitore']=='TOTALE':
+            continue
+        rows.append((row['fornitore'], float(row['totale_residuo_webapp'])))
+
+def norm(s):
+    s=s.lower()
+    s=re.sub(r'[^a-z0-9 ]+',' ',s)
+    s=re.sub(r'\b(srl|spa|snc|sas|s p a|societa|unipersonale|di|e|c)\b',' ',s)
+    s=re.sub(r'\s+',' ',s).strip()
+    return s
+
+bucket=defaultdict(list)
+for n,v in rows:
+    bucket[norm(n)].append((n,v))
+
+dups=[]
+for k,vals in bucket.items():
+    if len(vals)>1:
+        tot=sum(v for _,v in vals)
+        top=max(v for _,v in vals)
+        extra=tot-top
+        dups.append((extra,tot,vals))
+
+dups.sort(reverse=True,key=lambda x:x[0])
+print('Possibili duplicati per nome normalizzato (extra oltre la voce maggiore):')
+for extra,tot,vals in dups[:15]:
+    if extra < 50: continue
+    names=' | '.join(f"{n}={v:,.2f}" for n,v in vals)
+    print(f"  extra={extra:>10,.2f} ; totale_gruppo={tot:>10,.2f} ; {names}")

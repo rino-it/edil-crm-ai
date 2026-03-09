@@ -38,6 +38,12 @@ export interface ScadenzaWithSoggetto extends ScadenzaPagamento {
     nome_banca: string;
     nome_conto: string;
   } | null;
+  titolo?: {
+    id: string;
+    tipo?: 'assegno' | 'cambiale';
+    numero_titolo?: string | null;
+    file_url?: string | null;
+  } | null;
 }
 
 export interface ScadenzaCantiereAllocation {
