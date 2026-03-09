@@ -281,23 +281,63 @@ export async function GET(request: Request) {
       const totRate = (rateSettimana || []).reduce((s, r) => s + Number(r.importo_rata), 0);
       const nRate = (rateSettimana || []).length;
 
-      const totale = totCambiali + totAssegni + totRate;
+      // Scadenze ordinarie USCITA (fatture da pagare) della settimana
+      const { data: scadenzeUscitaSettimana } = await supabase
+        .from("scadenze_pagamento")
+        .select("importo_totale, importo_pagato")
+        .eq("tipo", "uscita")
+        .in("stato", ["da_pagare", "scaduto", "parziale"])
+        .is("titolo_id", null)
+        .gte("data_scadenza", wsStr)
+        .lte("data_scadenza", weStr);
 
-      if (totale > 0) {
-        const wsLabel = format(ws, "dd/MM");
-        const weLabel = format(we, "dd/MM");
+      const totUsciteOrd = (scadenzeUscitaSettimana || []).reduce(
+        (s, r) => s + (Number(r.importo_totale) - Number(r.importo_pagato || 0)), 0
+      );
+      const nUsciteOrd = (scadenzeUscitaSettimana || []).length;
 
-        let msg = `📊 *Pianificazione Settimanale*\nSettimana: ${wsLabel} - ${weLabel}\n\n`;
+      // Scadenze ENTRATA (fatture da incassare) della settimana
+      const { data: scadenzeEntrataSettimana } = await supabase
+        .from("scadenze_pagamento")
+        .select("importo_totale, importo_pagato")
+        .eq("tipo", "entrata")
+        .in("stato", ["da_pagare", "scaduto", "parziale"])
+        .gte("data_scadenza", wsStr)
+        .lte("data_scadenza", weStr);
 
-        if (nRate > 0) msg += `🏦 Rate Mutui: ${formatEuro(totRate)} (${nRate} rate)\n`;
-        if (nCambiali > 0) msg += `📝 Cambiali: ${formatEuro(totCambiali)} (${nCambiali} titoli)\n`;
-        if (nAssegni > 0) msg += `✏️ Assegni: ${formatEuro(totAssegni)} (${nAssegni} titoli)\n`;
+      const totEntrate = (scadenzeEntrataSettimana || []).reduce(
+        (s, r) => s + (Number(r.importo_totale) - Number(r.importo_pagato || 0)), 0
+      );
+      const nEntrate = (scadenzeEntrataSettimana || []).length;
 
-        msg += `\nTotale uscite previste: *${formatEuro(totale)}*`;
+      const totaleUscite = totCambiali + totAssegni + totRate + totUsciteOrd;
+      const cashflowNetto = totEntrate - totaleUscite;
 
-        await sendToSoci(msg);
-        notificatiTotali++;
-      }
+      const wsLabel = format(ws, "dd/MM");
+      const weLabel = format(we, "dd/MM");
+
+      let msg = `📊 *Riepilogo Cashflow Settimanale*\nSettimana: ${wsLabel} - ${weLabel}\n`;
+
+      // USCITE
+      msg += `\n💸 *USCITE PREVISTE*\n`;
+      if (nUsciteOrd > 0) msg += `📄 Fatture fornitori: ${formatEuro(totUsciteOrd)} (${nUsciteOrd} scadenze)\n`;
+      if (nRate > 0) msg += `🏦 Rate Mutui: ${formatEuro(totRate)} (${nRate} rate)\n`;
+      if (nCambiali > 0) msg += `📝 Cambiali: ${formatEuro(totCambiali)} (${nCambiali} titoli)\n`;
+      if (nAssegni > 0) msg += `✏️ Assegni: ${formatEuro(totAssegni)} (${nAssegni} titoli)\n`;
+      if (totaleUscite === 0) msg += `Nessuna uscita prevista\n`;
+      msg += `*Totale uscite: ${formatEuro(totaleUscite)}*\n`;
+
+      // ENTRATE
+      msg += `\n💰 *ENTRATE PREVISTE*\n`;
+      if (nEntrate > 0) msg += `📄 Incassi attesi: ${formatEuro(totEntrate)} (${nEntrate} scadenze)\n`;
+      if (totEntrate === 0) msg += `Nessuna entrata prevista\n`;
+      msg += `*Totale entrate: ${formatEuro(totEntrate)}*\n`;
+
+      // SALDO NETTO
+      msg += `\n${cashflowNetto >= 0 ? "✅" : "🔴"} *Cashflow netto: ${formatEuro(cashflowNetto)}*`;
+
+      await sendToSoci(msg);
+      notificatiTotali++;
     } catch (e) {
       console.error("❌ Errore riepilogo settimanale:", e);
       errori.push("Errore riepilogo settimanale");

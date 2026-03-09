@@ -4090,11 +4090,13 @@ export async function getTitoli(filtroStato?: string): Promise<Titolo[]> {
 }
 
 /**
- * Inserisce un nuovo titolo (assegno o cambiale) e crea la scadenza associata.
+ * Inserisce un nuovo titolo (assegno o cambiale) e lo collega a una scadenza esistente.
+ * Non crea una nuova scadenza, per evitare duplicazioni di esposizione.
  */
 export async function inserisciTitolo(input: {
   tipo: 'assegno' | 'cambiale';
   soggetto_id?: string;
+  scadenza_id?: string;
   fornitore?: string;
   importo: number;
   data_scadenza: string;
@@ -4107,33 +4109,42 @@ export async function inserisciTitolo(input: {
 }) {
   const supabase = getSupabaseAdmin();
 
-  // 1. Crea la scadenza associata
-  const tipoLabel = input.tipo === 'assegno' ? 'ASSEGNO' : 'CAMBIALE';
-  const numeroLabel = input.numero_titolo ? ` N. ${input.numero_titolo}` : '';
-  const fornitoreLabel = input.fornitore ? ` - ${input.fornitore}` : (input.banca_incasso ? ` - ${input.banca_incasso}` : '');
-  const { data: scadenza, error: errSc } = await supabase
-    .from('scadenze_pagamento')
-    .insert({
-      descrizione: `${tipoLabel}${numeroLabel}${fornitoreLabel}`.trim(),
-      importo_totale: input.importo,
-      importo_pagato: 0,
-      data_scadenza: input.data_scadenza,
-      data_pianificata: input.data_scadenza,
-      tipo: 'uscita',
-      stato: 'da_pagare',
-      categoria: 'titolo',
-      fonte: 'titolo',
-      soggetto_id: input.soggetto_id || null,
-    })
-    .select('id')
-    .single();
+  // Se non viene passata una scadenza esplicita, prova ad associare il titolo
+  // a una scadenza esistente compatibile (stesso soggetto/importo, ancora aperta).
+  let linkedScadenzaId: string | null = input.scadenza_id || null;
 
-  if (errSc) {
-    console.error("❌ Errore creazione scadenza titolo:", errSc);
-    throw new Error("Impossibile creare la scadenza per il titolo");
+  if (!linkedScadenzaId && input.soggetto_id) {
+    const { data: candidateRows, error: errCandidates } = await supabase
+      .from('scadenze_pagamento')
+      .select('id, importo_totale, data_scadenza')
+      .eq('soggetto_id', input.soggetto_id)
+      .eq('tipo', 'uscita')
+      .in('stato', ['da_pagare', 'scaduto', 'parziale'])
+      .is('titolo_id', null)
+      .order('data_scadenza', { ascending: true })
+      .limit(200);
+
+    if (errCandidates) {
+      console.error('❌ Errore ricerca scadenze candidabili per titolo:', errCandidates);
+    } else {
+      const amountTolerance = 0.01;
+      const sameAmount = (candidateRows || []).filter((row) =>
+        Math.abs(Number(row.importo_totale || 0) - Number(input.importo || 0)) <= amountTolerance
+      );
+
+      if (sameAmount.length > 0) {
+        const targetDate = new Date(input.data_scadenza).getTime();
+        sameAmount.sort((a, b) => {
+          const da = Math.abs(new Date(a.data_scadenza).getTime() - targetDate);
+          const db = Math.abs(new Date(b.data_scadenza).getTime() - targetDate);
+          return da - db;
+        });
+        linkedScadenzaId = sameAmount[0].id;
+      }
+    }
   }
 
-  // 2. Inserisci il titolo
+  // 1. Inserisci il titolo
   const { data: titolo, error: errTitolo } = await supabase
     .from('titoli')
     .insert({
@@ -4145,7 +4156,7 @@ export async function inserisciTitolo(input: {
       banca_incasso: input.banca_incasso || null,
       numero_titolo: input.numero_titolo || null,
       stato: 'in_essere',
-      scadenza_id: scadenza?.id || null,
+      scadenza_id: linkedScadenzaId,
       file_url: input.file_url || null,
       note: input.note || null,
       ocr_data: input.ocr_data || null,
@@ -4156,6 +4167,18 @@ export async function inserisciTitolo(input: {
   if (errTitolo) {
     console.error("❌ Errore inserimento titolo:", errTitolo);
     throw new Error("Impossibile inserire il titolo");
+  }
+
+  // 2. Mantieni coerente anche il reverse link sulla scadenza.
+  if (titolo?.id && linkedScadenzaId) {
+    const { error: errReverseLink } = await supabase
+      .from('scadenze_pagamento')
+      .update({ titolo_id: titolo.id })
+      .eq('id', linkedScadenzaId)
+
+    if (errReverseLink) {
+      console.error('❌ Errore aggiornamento titolo_id su scadenza:', errReverseLink)
+    }
   }
 
   return titolo?.id;

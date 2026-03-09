@@ -117,6 +117,7 @@ export async function creaTitolo(formData: FormData) {
   const tipo = formData.get("tipo") as 'assegno' | 'cambiale';
   const importo = parseFloat(formData.get("importo") as string);
   const data_scadenza = formData.get("data_scadenza") as string;
+  const scadenza_id = (formData.get("scadenza_id") as string) || undefined;
 
   if (!tipo || !importo || !data_scadenza) {
     throw new Error("Dati obbligatori mancanti per il titolo");
@@ -141,6 +142,7 @@ export async function creaTitolo(formData: FormData) {
     tipo,
     importo,
     data_scadenza,
+    scadenza_id,
     soggetto_id,
     fornitore,
     data_emissione: (formData.get("data_emissione") as string) || undefined,
