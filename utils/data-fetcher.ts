@@ -2168,17 +2168,19 @@ export async function confermaRiconciliazione(
       .single();
 
     if (rataCollegata) {
+      const importoEffettivo = Math.abs(importo_movimento);
+      const delta = importoEffettivo - (rataCollegata.importo_rata || 0);
       await supabase
         .from('rate_mutuo')
         .update({
           stato: 'pagato',
           data_pagamento: new Date().toISOString().split('T')[0],
           movimento_banca_id: movimento_id,
-          importo_effettivo: Math.abs(importo_movimento),
+          importo_effettivo: importoEffettivo,
+          importo_rata: importoEffettivo,
         })
         .eq('id', rataCollegata.id);
-      const delta = Math.abs(importo_movimento) - (rataCollegata.importo_rata || 0);
-      console.log(`🏦 Rata mutuo ${rataCollegata.id} pagata — preventivato: €${rataCollegata.importo_rata}, effettivo: €${Math.abs(importo_movimento)}, delta: €${delta.toFixed(2)}`);
+      console.log(`🏦 Rata mutuo ${rataCollegata.id} pagata — preventivato: €${rataCollegata.importo_rata}, effettivo: €${importoEffettivo}, delta: €${delta.toFixed(2)}`);
     }
 
     // ==========================================

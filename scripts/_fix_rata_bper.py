@@ -28,23 +28,27 @@ def main():
     for m in mutui:
         print(f"    {m['id'][:8]}... — {m.get('banca_erogante','')} — {m.get('scopo','')} — capitale: {m.get('capitale_erogato')}")
 
-    # 2. Trova rate da_pagare per ogni mutuo
-    rate_aperte = sb.table("rate_mutuo") \
-        .select("id, mutuo_id, numero_rata, importo_rata, data_scadenza, stato, scadenza_id, movimento_banca_id") \
-        .eq("stato", "da_pagare") \
-        .order("numero_rata", desc=False) \
-        .execute().data
+    # 2. Filtra SOLO mutui BPER
+    bper_ids = [m['id'] for m in mutui if 'BPER' in (m.get('banca_erogante') or '').upper()]
+    print(f"\n  Mutui BPER: {len(bper_ids)}")
+    if not bper_ids:
+        print("  Nessun mutuo BPER trovato!")
+        return
 
-    print(f"\n  Rate da_pagare totali: {len(rate_aperte)}")
+    # 3. Trova rate da_pagare SOLO per mutui BPER
+    rate_aperte = []
+    for mid in bper_ids:
+        r = sb.table("rate_mutuo") \
+            .select("id, mutuo_id, numero_rata, importo_rata, data_scadenza, stato, scadenza_id, movimento_banca_id") \
+            .eq("mutuo_id", mid) \
+            .eq("stato", "da_pagare") \
+            .order("numero_rata", desc=False) \
+            .execute().data
+        rate_aperte.extend(r)
 
-    # Mostra prime rate per mutuo per confronto importi
-    mutuo_ids = {m['id'] for m in mutui}
-    for mid in mutuo_ids:
-        banca = next((m.get('banca_erogante','?') for m in mutui if m['id'] == mid), '?')
-        rate_di_questo = [r for r in rate_aperte if r['mutuo_id'] == mid][:3]
-        if rate_di_questo:
-            print(f"    {banca}: prime rate da_pagare →",
-                  ", ".join(f"#{r['numero_rata']} €{r['importo_rata']} ({r['data_scadenza'][:10]})" for r in rate_di_questo))
+    print(f"  Rate BPER da_pagare: {len(rate_aperte)}")
+    for r in rate_aperte[:5]:
+        print(f"    #{r['numero_rata']} EUR {r['importo_rata']} ({r['data_scadenza'][:10]})")
 
     # 3. Cerca movimenti bancari riconciliati con "RATA FINANZIAMENTO" o "RATA MUTUO"
     movimenti = sb.table("movimenti_banca") \
@@ -87,7 +91,7 @@ def main():
         if not best:
             # Mostra le rate più vicine per importo per debug
             vicine = sorted(rate_aperte, key=lambda r: abs(r['importo_rata'] - importo_abs))[:3]
-            print(f"    ❌ Nessun match. Rate più vicine per importo:")
+            print(f"    XX Nessun match. Rate più vicine per importo:")
             for r in vicine:
                 delta = abs(r['importo_rata'] - importo_abs)
                 print(f"       #{r['numero_rata']} €{r['importo_rata']} ({r['data_scadenza'][:10]}) — delta: €{delta:.2f}")
@@ -106,8 +110,9 @@ def main():
                 "data_pagamento": data_mov[:10],
                 "movimento_banca_id": mv['id'],
                 "importo_effettivo": importo_abs,
+                "importo_rata": importo_abs,
             }).eq("id", rata['id']).execute()
-            print(f"    ✅ Rata #{rata['numero_rata']} → pagato (effettivo: €{importo_abs}, preventivo: €{rata['importo_rata']}, delta: €{delta:.2f})")
+            print(f"    OK: Rata #{rata['numero_rata']} -> pagato (effettivo: €{importo_abs}, preventivo: €{rata['importo_rata']}, delta: €{delta:.2f})")
 
             if rata.get('scadenza_id'):
                 sb.table("scadenze_pagamento").update({
@@ -115,7 +120,7 @@ def main():
                     "importo_pagato": rata['importo_rata'],
                     "data_pagamento": data_mov[:10],
                 }).eq("id", rata['scadenza_id']).execute()
-                print(f"    ✅ Scadenza → pagato")
+                print(f"    OK: Scadenza -> pagato")
 
             if mv.get('stato_riconciliazione') != 'riconciliato':
                 sb.table("movimenti_banca").update({
@@ -123,7 +128,7 @@ def main():
                     "scadenza_id": rata.get('scadenza_id'),
                     "categoria_dedotta": "rata_mutuo",
                 }).eq("id", mv['id']).execute()
-                print(f"    ✅ Movimento → riconciliato")
+                print(f"    OK: Movimento -> riconciliato")
 
             fix_count += 1
         else:
