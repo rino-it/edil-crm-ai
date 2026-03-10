@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/utils/supabase/server'
 import { createClient as createAdminClient } from "@supabase/supabase-js"
-import { parseCSVBanca, parseXMLBanca, importMovimentiBanca, confermaRiconciliazione, creaLogRiconciliazione, inserisciMutuoConRate, inserisciTitolo } from '@/utils/data-fetcher'
+import { parseCSVBanca, parseXMLBanca, parseXLSBanca, importMovimentiBanca, confermaRiconciliazione, creaLogRiconciliazione, inserisciMutuoConRate, inserisciTitolo } from '@/utils/data-fetcher'
 
 // ==========================================
 // AZIONI PER DOCUMENTI GENERICI (NUVOLA)
@@ -271,16 +271,20 @@ export async function importaEstrattoConto(formData: FormData) {
     }
 
     // ----------------------------------------------------
-    // 2. GESTIONE XML / CSV (Logica Preesistente)
+    // 2. GESTIONE XML / CSV / XLS / XLSX
     // ----------------------------------------------------
-    const text = await file.text();
     let movimenti: any[] = [];
     if (fileName.endsWith('.xml')) {
+      const text = await file.text();
       movimenti = parseXMLBanca(text);
     } else if (fileName.endsWith('.csv')) {
+      const text = await file.text();
       movimenti = parseCSVBanca(text);
+    } else if (fileName.endsWith('.xls') || fileName.endsWith('.xlsx')) {
+      const buffer = await file.arrayBuffer();
+      movimenti = parseXLSBanca(buffer);
     } else {
-      throw new Error("Formato non supportato. Usa file .pdf, .csv o .xml");
+      throw new Error("Formato non supportato. Usa file .pdf, .csv, .xml, .xls o .xlsx");
     }
     
     if (movimenti.length === 0) {
@@ -307,7 +311,7 @@ export async function importaEstrattoConto(formData: FormData) {
         anno: Number(anno),
         mese: Number(mese),
         nome_file: file.name,
-        tipo: fileName.endsWith('.xml') ? 'xml' : 'csv'
+        tipo: fileName.endsWith('.xml') ? 'xml' : (fileName.endsWith('.xls') || fileName.endsWith('.xlsx')) ? 'xls' : 'csv'
       });
     
     revalidatePath('/finanza/riconciliazione');

@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-03-10T10:51:56.831286",
+  "orphans_found": 1,
+  "scadenze_created": 1,
+  "errors": 0,
+  "importo_totale": 723.22,
+  "da_pagare": 0,
+  "pagate": 1,
+  "csv_match": 0,
+  "csv_no_match": 1,
+  "importo_da_pagare": 0,
+  "importo_pagate": 723.22
+}

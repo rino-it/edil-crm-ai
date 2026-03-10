@@ -331,7 +331,7 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
           <CardHeader className="pb-3"><CardTitle className="text-sm">1. Importa Estratto Conto</CardTitle></CardHeader>
           <CardContent>
             <form onSubmit={handleUpload} className="flex gap-3">
-              <Input type="file" name="file" accept=".csv,.xml" required className="cursor-pointer" />
+              <Input type="file" name="file" accept=".csv,.xml,.xls,.xlsx" required className="cursor-pointer" />
               <Button type="submit" disabled={isUploading || !contoId} className="bg-blue-600 hover:bg-blue-700">
                 {isUploading ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
                 {isUploading ? "Importazione..." : "Importa File"}

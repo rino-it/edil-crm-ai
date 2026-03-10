@@ -17,6 +17,7 @@ Logica:
 import argparse
 import os
 import re
+import sys
 from datetime import date, datetime
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -409,6 +410,7 @@ def costruisci_riga(
     payload: dict[str, Any] = {
         "id": uuid_id,
         "tipo": "uscita",
+        "fonte": "excel",
         "soggetto_id": soggetto_id,
         "fattura_riferimento": r["fattura_raw"],
         "importo_totale": importo_totale,
@@ -574,10 +576,67 @@ def run_sync(dry_run: bool = False) -> None:
         for row in res_check.data:
             esistenti.add(row["id"])
 
-    nuovi = [r for r in righe_db if r["id"] not in esistenti]
+    nuovi_raw = [r for r in righe_db if r["id"] not in esistenti]
     da_aggiornare = [r for r in righe_db if r["id"] in esistenti]
-    print(f"  Nuovi da inserire      : {len(nuovi)}")
-    print(f"  Esistenti da aggiornare: {len(da_aggiornare)}")
+    print(f"  Nuovi (UUID non trovato): {len(nuovi_raw)}")
+    print(f"  Esistenti da aggiornare : {len(da_aggiornare)}")
+
+    # ── SECONDARY DEDUP ──────────────────────────────────────────────────────
+    # UUID5 usa soggetto_id: se il fuzzy matching cambia soggetto_id tra run,
+    # lo stesso UUID5 cambia → lo script creerebbe un duplicato (INSERT).
+    # Qui cerchiamo record con stessa (soggetto_id, fattura_riferimento, data_emissione,
+    # importo_totale, fonte='excel') già presenti sotto un UUID diverso.
+    # Se trovati → UPDATE il record esistente, non INSERT.
+    nuovi: list[dict] = []
+    redirect_update: list[dict] = []  # nuovi che in realtà esistono sotto altro UUID
+
+    if nuovi_raw:
+        # Fetch tutti gli ID excel esistenti con i campi di matching
+        excel_esistenti: list[dict] = []
+        offset2 = 0
+        while True:
+            res_ex = supabase.table("scadenze_pagamento") \
+                .select("id, soggetto_id, fattura_riferimento, data_emissione, importo_totale") \
+                .eq("tipo", "uscita") \
+                .eq("fonte", "excel") \
+                .range(offset2, offset2 + 999) \
+                .execute()
+            excel_esistenti.extend(res_ex.data)
+            if len(res_ex.data) < 1000:
+                break
+            offset2 += 1000
+
+        # Indice: (soggetto_id, fattura_rif, data_emissione, importo) → id_esistente
+        idx_excel = {}
+        for ex in excel_esistenti:
+            k = (
+                ex.get("soggetto_id"),
+                ex.get("fattura_riferimento"),
+                ex.get("data_emissione"),
+                round(float(ex.get("importo_totale") or 0), 2),
+            )
+            idx_excel[k] = ex["id"]
+
+        for r in nuovi_raw:
+            k = (
+                r.get("soggetto_id"),
+                r.get("fattura_riferimento"),
+                r.get("data_emissione"),
+                round(float(r.get("importo_totale") or 0), 2),
+            )
+            if k in idx_excel:
+                # Record esiste sotto UUID diverso → reindirizza ad UPDATE
+                r_update = {**r, "id": idx_excel[k]}
+                redirect_update.append(r_update)
+            else:
+                nuovi.append(r)
+
+        if redirect_update:
+            print(f"  UUID instabili corretti  : {len(redirect_update)} (UPDATE su UUID esistente)")
+        da_aggiornare.extend(redirect_update)
+
+    print(f"  Effettivamente nuovi     : {len(nuovi)}")
+    # ─────────────────────────────────────────────────────────────────────────
 
     if nuovi:
         for i in range(0, len(nuovi), CHUNK_SIZE):
@@ -602,13 +661,13 @@ def run_sync(dry_run: bool = False) -> None:
     print(f"  - {len(nuovi)} nuove scadenze create")
     print(f"  - {len(da_aggiornare)} scadenze aggiornate (saldi)")
 
-    # RICONCILIAZIONE: elimina scadenze uscita obsolete (non più presenti in MAIN)
-    # Le scadenze tipo='entrata' (fatture vendita) NON vengono toccate.
+    # ─────────────────────────────────────────────────────────
+    # RICONCILIAZIONE SAFE: solo report, nessuna cancellazione
+    # automatica. Usa --purge per cancellare manualmente.
+    # ─────────────────────────────────────────────────────────
     ids_attesi = set(r["id"] for r in righe_db)
-    print(f"\nRiconciliazione uscite...")
+    print(f"\nRiconciliazione uscite (modalità safe)...")
 
-    # Bug1 fix: Supabase restituisce max 1000 righe senza paginazione.
-    # Paginare con range() per recuperare TUTTI gli ID uscita.
     ids_db: set[str] = set()
     PAGE_SIZE = 1000
     offset = 0
@@ -627,56 +686,67 @@ def run_sync(dry_run: bool = False) -> None:
         offset += PAGE_SIZE
     print(f"  Uscite totali nel DB: {len(ids_db)}")
 
-    ids_da_eliminare = ids_db - ids_attesi
-    if ids_da_eliminare:
-        # FK guard 1: escludere ID ancora referenziati in fatture_vendita.scadenza_id
-        fv_res = (
-            supabase.table("fatture_vendita")
-            .select("scadenza_id")
-            .not_.is_("scadenza_id", "null")
-            .execute()
-        )
-        ids_fk_protetti = set(r["scadenza_id"] for r in fv_res.data if r.get("scadenza_id"))
-        ids_da_eliminare -= ids_fk_protetti
-        if ids_fk_protetti:
-            print(f"  Protetti da FK (fatture_vendita): {len(ids_fk_protetti)}")
+    ids_orfane = ids_db - ids_attesi
+    if ids_orfane:
+        print(f"\n⚠️  {len(ids_orfane)} scadenze uscita nel DB non presenti in Excel (NON eliminate)")
+        print(f"     Per eliminarle manualmente, usa --purge")
 
-        # FK guard 2: escludere ID ancora referenziati in titoli.scadenza_id
-        titoli_res = (
-            supabase.table("titoli")
-            .select("scadenza_id")
-            .not_.is_("scadenza_id", "null")
-            .execute()
-        )
-        ids_titoli_protetti = set(r["scadenza_id"] for r in titoli_res.data if r.get("scadenza_id"))
-        ids_da_eliminare -= ids_titoli_protetti
-        if ids_titoli_protetti:
-            print(f"  Protetti da FK (titoli): {len(ids_titoli_protetti)}")
+        if "--purge" in sys.argv:
+            # Soglia di sicurezza: se > 20% verrebbe cancellato, abortire
+            if len(ids_orfane) > len(ids_db) * 0.2:
+                print(f"❌ ABORT: cancellazione di {len(ids_orfane)}/{len(ids_db)} scadenze (>{20}%). Possibile errore nei dati Excel.")
+                return
 
-        # Escludere scadenze da fonti non-Excel (fattura, xml_import, manuale)
-        # quelle vengono gestite da altri script e non devono essere toccate
-        non_excel_res = (
-            supabase.table("scadenze_pagamento")
-            .select("id")
-            .in_("fonte", ["fattura", "manuale", "titolo"])
-            .in_("id", list(ids_da_eliminare)[:1000] if ids_da_eliminare else ["x"])
-            .execute()
-        )
-        ids_non_excel = set(r["id"] for r in non_excel_res.data)
-        ids_da_eliminare -= ids_non_excel
-        if ids_non_excel:
-            print(f"  Protetti (fonte non-Excel): {len(ids_non_excel)}")
+            ids_da_eliminare = set(ids_orfane)
 
-        print(f"  Scadenze obsolete da eliminare: {len(ids_da_eliminare)}")
-        lista_da_eliminare = list(ids_da_eliminare)
-        # Bug2 fix: CHECK_CHUNK=50 per DELETE (stesso limite URL di PostgREST)
-        DEL_CHUNK = 50
-        for i in range(0, len(lista_da_eliminare), DEL_CHUNK):
-            chunk = lista_da_eliminare[i : i + DEL_CHUNK]
-            supabase.table("scadenze_pagamento").delete().in_("id", chunk).execute()
-        print(f"  Eliminate {len(ids_da_eliminare)} scadenze obsolete")
+            # FK guard 1: escludere ID referenziati in fatture_vendita.scadenza_id
+            fv_res = (
+                supabase.table("fatture_vendita")
+                .select("scadenza_id")
+                .not_.is_("scadenza_id", "null")
+                .execute()
+            )
+            ids_fk_protetti = set(r["scadenza_id"] for r in fv_res.data if r.get("scadenza_id"))
+            ids_da_eliminare -= ids_fk_protetti
+            if ids_fk_protetti:
+                print(f"  Protetti da FK (fatture_vendita): {len(ids_fk_protetti)}")
+
+            # FK guard 2: escludere ID referenziati in titoli.scadenza_id
+            titoli_res = (
+                supabase.table("titoli")
+                .select("scadenza_id")
+                .not_.is_("scadenza_id", "null")
+                .execute()
+            )
+            ids_titoli_protetti = set(r["scadenza_id"] for r in titoli_res.data if r.get("scadenza_id"))
+            ids_da_eliminare -= ids_titoli_protetti
+            if ids_titoli_protetti:
+                print(f"  Protetti da FK (titoli): {len(ids_titoli_protetti)}")
+
+            # Proteggere scadenze da fonti non-Excel
+            non_excel_res = (
+                supabase.table("scadenze_pagamento")
+                .select("id")
+                .in_("fonte", ["fattura", "manuale", "titolo", "verificato", "mutuo"])
+                .in_("id", list(ids_da_eliminare)[:1000] if ids_da_eliminare else ["x"])
+                .execute()
+            )
+            ids_non_excel = set(r["id"] for r in non_excel_res.data)
+            ids_da_eliminare -= ids_non_excel
+            if ids_non_excel:
+                print(f"  Protetti (fonte non-Excel): {len(ids_non_excel)}")
+
+            print(f"  Scadenze da eliminare (con --purge): {len(ids_da_eliminare)}")
+            lista_da_eliminare = list(ids_da_eliminare)
+            DEL_CHUNK = 50
+            for i in range(0, len(lista_da_eliminare), DEL_CHUNK):
+                chunk = lista_da_eliminare[i : i + DEL_CHUNK]
+                supabase.table("scadenze_pagamento").delete().in_("id", chunk).execute()
+            print(f"  ✅ Eliminate {len(ids_da_eliminare)} scadenze obsolete")
+        else:
+            print(f"     Nessuna cancellazione eseguita (modalità safe)")
     else:
-        print(f"  Nessuna scadenza obsoleta da eliminare")
+        print(f"  ✅ Nessuna scadenza orfana trovata")
 
 
 # ==========================================

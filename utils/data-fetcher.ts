@@ -1564,8 +1564,109 @@ export async function getCashflowPrevisionale(giorni: number = 90): Promise<any[
 }
 
 // ============================================================
-// STEP 5: RICONCILIAZIONE BANCARIA (PARSER CSV/XML E DB) 
+// STEP 5: RICONCILIAZIONE BANCARIA (PARSER CSV/XML/XLS E DB)
 // ============================================================
+
+/**
+ * Parses an XLS/XLSX bank statement (BPER and other Italian banks).
+ * Handles both single "Importo" column and separate "Dare"/"Avere" columns.
+ * Auto-detects the header row and column mapping.
+ */
+export function parseXLSBanca(buffer: ArrayBuffer): Array<{ data_operazione: string; descrizione: string; importo: number; stato: string }> {
+  // Dynamic import to avoid bundling xlsx on client
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const XLSX = require('xlsx') as typeof import('xlsx')
+
+  const workbook = XLSX.read(buffer, { type: 'array', cellDates: true })
+  const sheetName = workbook.SheetNames[0]
+  const sheet = workbook.Sheets[sheetName]
+
+  // Convert to array-of-arrays for flexible header detection
+  const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' })
+
+  const movimenti: Array<{ data_operazione: string; descrizione: string; importo: number; stato: string }> = []
+
+  if (rows.length < 2) return movimenti
+
+  // ── Header detection ──────────────────────────────────────
+  // Find the row that contains recognizable column names
+  const KEYWORDS_DATE   = ['data', 'date', 'data operazione', 'data op', 'data val']
+  const KEYWORDS_DESC   = ['descrizione', 'causale', 'descrizione operazione', 'dettaglio', 'note', 'causale/descrizione']
+  const KEYWORDS_AMOUNT = ['importo', 'amount', 'dare/avere']
+  const KEYWORDS_DARE   = ['dare', 'addebit', 'uscite', 'pagamenti']
+  const KEYWORDS_AVERE  = ['avere', 'accredit', 'entrate', 'versamenti']
+
+  let headerRowIdx = -1
+  let colData = -1, colDesc = -1, colImporto = -1, colDare = -1, colAvere = -1
+
+  for (let ri = 0; ri < Math.min(15, rows.length); ri++) {
+    const row = rows[ri].map(c => String(c || '').toLowerCase().trim())
+    let matchCount = 0
+
+    row.forEach((cell, ci) => {
+      if (KEYWORDS_DATE.some(k => cell === k || cell.startsWith(k))) { colData = ci; matchCount++ }
+      if (KEYWORDS_DESC.some(k => cell === k || cell.includes(k))) { colDesc = ci; matchCount++ }
+      if (KEYWORDS_AMOUNT.some(k => cell === k)) { colImporto = ci; matchCount++ }
+      if (KEYWORDS_DARE.some(k => cell === k || cell.startsWith(k))) { colDare = ci; matchCount++ }
+      if (KEYWORDS_AVERE.some(k => cell === k || cell.startsWith(k))) { colAvere = ci; matchCount++ }
+    })
+
+    if (matchCount >= 2 && colData >= 0) {
+      headerRowIdx = ri
+      break
+    }
+  }
+
+  // Fallback: assume first row is header, columns 0=data, 1=valuta, 2=desc, 3=importo (common BPER layout)
+  if (headerRowIdx < 0) {
+    console.warn('XLS: header non rilevato, uso layout posizionale BPER (col 0=data, 2=desc, 3=importo)')
+    headerRowIdx = 0
+    colData = 0; colDesc = 2; colImporto = 3
+  }
+
+  // ── Row parsing ────────────────────────────────────────────
+  for (let ri = headerRowIdx + 1; ri < rows.length; ri++) {
+    const row = rows[ri]
+    if (!row || row.every(c => c === '' || c === null || c === undefined)) continue
+
+    // Data
+    const rawDate = row[colData]
+    let data_operazione = ''
+    if (rawDate instanceof Date) {
+      data_operazione = rawDate.toISOString().substring(0, 10)
+    } else if (rawDate) {
+      const s = String(rawDate).trim()
+      const sep = s.includes('/') ? '/' : s.includes('.') ? '.' : '-'
+      const parts = s.split(sep)
+      if (parts.length === 3 && parts[0].length <= 2) {
+        data_operazione = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`
+      } else {
+        data_operazione = s.substring(0, 10)
+      }
+    }
+    if (!data_operazione || data_operazione.length < 8) continue
+
+    // Importo — single column or Dare/Avere
+    let importo = 0
+    if (colImporto >= 0 && row[colImporto] !== '') {
+      const raw = String(row[colImporto] || '').replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.')
+      importo = parseFloat(raw) || 0
+    } else if (colDare >= 0 || colAvere >= 0) {
+      const dare  = colDare  >= 0 ? parseFloat(String(row[colDare]  || '0').replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.')) || 0 : 0
+      const avere = colAvere >= 0 ? parseFloat(String(row[colAvere] || '0').replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.')) || 0 : 0
+      importo = avere - dare  // entrata positiva, uscita negativa
+    }
+    if (importo === 0) continue
+
+    // Descrizione
+    const descrizione = colDesc >= 0 ? String(row[colDesc] || '').trim() : 'Movimento senza descrizione'
+
+    movimenti.push({ data_operazione, descrizione, importo, stato: 'non_riconciliato' })
+  }
+
+  console.log(`✅ XLS: ${movimenti.length} movimenti validi trovati.`)
+  return movimenti
+}
 
 export function parseCSVBanca(csvText: string) {
   const lines = csvText.split('\n').map(l => l.trim()).filter(l => l !== '');
