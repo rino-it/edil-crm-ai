@@ -166,12 +166,23 @@ export function ScadenzeTable({
 
   return (
     <div className="bg-white border border-zinc-200 shadow-sm rounded-xl overflow-hidden flex flex-col">
-      
+
+      {/* PAGINAZIONE (HEADER) */}
+      <div className="border-b border-zinc-200 bg-zinc-50/50">
+        <PaginationControls
+          totalCount={pagination.totalCount}
+          currentPage={pagination.page}
+          pageSize={pagination.pageSize}
+          totalPages={pagination.totalPages}
+        />
+      </div>
+
       {/* VISTA DESKTOP: Tabella classica */}
       <div className="hidden md:block overflow-x-auto">
         <Table>
           <TableHeader className="bg-zinc-50/80">
             <TableRow>
+              <TableHead className="text-center font-semibold w-[36px]" title="Allegato PDF">FT</TableHead>
               <TableHead className="font-semibold">Soggetto</TableHead>
               <TableHead className="font-semibold w-[120px]">Fattura / Rif.</TableHead>
               {showCantiereColumn && <TableHead className="font-semibold w-[150px]">Cantiere</TableHead>}
@@ -179,7 +190,6 @@ export function ScadenzeTable({
               <TableHead className="text-right font-semibold w-[95px]">Residuo</TableHead>
               <TableHead className="font-semibold w-[85px]">Scadenza</TableHead>
               <TableHead className="font-semibold w-[80px]">Stato</TableHead>
-              <TableHead className="text-center font-semibold w-[36px]" title="Allegato PDF">FT</TableHead>
               <TableHead className="text-center font-semibold w-[36px]"></TableHead>
             </TableRow>
           </TableHeader>
@@ -196,6 +206,23 @@ export function ScadenzeTable({
 
               return (
                 <TableRow key={s.id} className="group hover:bg-zinc-50/50 transition-colors">
+                  {/* Colonna FT - allegato PDF (prima colonna) */}
+                  <TableCell className="text-center px-1">
+                    {attachmentUrl ? (
+                      <a
+                        href={attachmentUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={attachmentTitle}
+                        className="inline-flex items-center justify-center size-7 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 transition-colors"
+                      >
+                        <FileText size={13} />
+                      </a>
+                    ) : (
+                      <span className="text-zinc-200 text-[10px]">—</span>
+                    )}
+                  </TableCell>
+
                   <TableCell className="font-bold text-zinc-900">
                     <div className="space-y-1">
                       <div className="truncate max-w-[200px]">{s.anagrafica_soggetti?.ragione_sociale || s.descrizione || 'N/D'}</div>
@@ -250,23 +277,6 @@ export function ScadenzeTable({
                     `}>
                       {isScaduta && s.stato !== 'pagato' ? 'SCADUTA' : s.stato.toUpperCase().replace('_', ' ')}
                     </Badge>
-                  </TableCell>
-
-                  {/* Colonna FT - allegato PDF */}
-                  <TableCell className="text-center px-1">
-                    {attachmentUrl ? (
-                      <a
-                        href={attachmentUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title={attachmentTitle}
-                        className="inline-flex items-center justify-center size-7 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 transition-colors"
-                      >
-                        <FileText size={13} />
-                      </a>
-                    ) : (
-                      <span className="text-zinc-200 text-[10px]">—</span>
-                    )}
                   </TableCell>
 
                   {/* Colonna Azione: solo calendario */}
@@ -406,15 +416,6 @@ export function ScadenzeTable({
         })}
       </div>
 
-      {/* PAGINAZIONE CONDIVISA (FOOTER) */}
-      <div className="border-t border-zinc-200 bg-zinc-50/50">
-        <PaginationControls 
-          totalCount={pagination.totalCount}
-          currentPage={pagination.page}
-          pageSize={pagination.pageSize}
-          totalPages={pagination.totalPages}
-        />
-      </div>
 
     </div>
   )
