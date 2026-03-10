@@ -1573,142 +1573,157 @@ export async function getCashflowPrevisionale(giorni: number = 90): Promise<any[
  * Auto-detects the header row and column mapping.
  */
 export function parseXLSBanca(buffer: ArrayBuffer): Array<{ data_operazione: string; descrizione: string; importo: number; stato: string }> {
-  // Dynamic import to avoid bundling xlsx on client
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const XLSX = require('xlsx') as typeof import('xlsx')
 
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: true })
   const sheetName = workbook.SheetNames[0]
   const sheet = workbook.Sheets[sheetName]
-
-  // Convert to array-of-arrays for flexible header detection
   const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' })
 
   const movimenti: Array<{ data_operazione: string; descrizione: string; importo: number; stato: string }> = []
-
   if (rows.length < 2) return movimenti
 
-  // ── Header detection ──────────────────────────────────────
-  // Find the row that contains recognizable column names
-  const KEYWORDS_DATE   = ['data', 'date', 'data operazione', 'data op', 'data val']
-  const KEYWORDS_DESC   = ['descrizione', 'causale', 'descrizione operazione', 'dettaglio', 'note', 'causale/descrizione']
-  const KEYWORDS_AMOUNT = ['importo', 'amount', 'dare/avere']
-  const KEYWORDS_DARE   = ['dare', 'addebit', 'uscite', 'pagamenti']
-  const KEYWORDS_AVERE  = ['avere', 'accredit', 'entrate', 'versamenti']
+  // ── Log struttura raw per debug ────────────────────────────
+  console.log('XLS: struttura prime 8 righe:')
+  rows.slice(0, 8).forEach((row, i) => {
+    console.log(`  [${i}]: ${(row as unknown[]).map((c, ci) => `col${ci}=${JSON.stringify(c)}`).join(' | ')}`)
+  })
+
+  // ── Helpers ────────────────────────────────────────────────
+  function parseDate(cell: unknown): string {
+    if (cell instanceof Date) return cell.toISOString().substring(0, 10)
+    const s = String(cell || '').trim()
+    // dd/mm/yyyy or dd.mm.yyyy or dd-mm-yyyy
+    const m = s.match(/^(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{2,4})$/)
+    if (m) {
+      const y = m[3].length === 2 ? '20' + m[3] : m[3]
+      return `${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`
+    }
+    // yyyy-mm-dd
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10)
+    return ''
+  }
+
+  function isDateLike(cell: unknown): boolean {
+    if (cell instanceof Date) return true
+    return parseDate(cell) !== ''
+  }
+
+  function parseAmount(cell: unknown): number {
+    if (cell === null || cell === undefined || cell === '') return NaN
+    if (typeof cell === 'number') return cell
+    // Italian format: 1.234,56 or -1.234,56
+    const s = String(cell).trim()
+    const cleaned = s.replace(/\s/g, '').replace(/\.(?=\d{3})/g, '').replace(',', '.')
+    const v = parseFloat(cleaned)
+    return isNaN(v) ? NaN : v
+  }
+
+  function isAmountLike(cell: unknown): boolean {
+    if (typeof cell === 'number' && cell !== 0) return true
+    if (typeof cell !== 'string') return false
+    return !isNaN(parseAmount(cell)) && parseAmount(cell) !== 0
+  }
+
+  // ── Phase 1: keyword header detection ──────────────────────
+  const KW_DATE  = ['data', 'data op', 'data val', 'data contabile', 'data valuta', 'data operazione', 'date']
+  const KW_DESC  = ['descrizione', 'causale', 'dettaglio', 'note', 'causale/descrizione', 'descrizione operazione']
+  const KW_IMP   = ['importo', 'amount', 'dare/avere', 'importo dare/avere']
+  const KW_DARE  = ['dare', 'addebiti', 'uscite', 'pagamenti', 'addebit']
+  const KW_AVERE = ['avere', 'accrediti', 'entrate', 'versamenti', 'accredit']
 
   let headerRowIdx = -1
   let colData = -1, colDesc = -1, colImporto = -1, colDare = -1, colAvere = -1
 
-  for (let ri = 0; ri < Math.min(15, rows.length); ri++) {
-    const row = rows[ri].map(c => String(c || '').toLowerCase().trim())
-    let matchCount = 0
-
-    row.forEach((cell, ci) => {
-      if (KEYWORDS_DATE.some(k => cell === k || cell.startsWith(k))) { colData = ci; matchCount++ }
-      if (KEYWORDS_DESC.some(k => cell === k || cell.includes(k))) { colDesc = ci; matchCount++ }
-      if (KEYWORDS_AMOUNT.some(k => cell === k)) { colImporto = ci; matchCount++ }
-      if (KEYWORDS_DARE.some(k => cell === k || cell.startsWith(k))) { colDare = ci; matchCount++ }
-      if (KEYWORDS_AVERE.some(k => cell === k || cell.startsWith(k))) { colAvere = ci; matchCount++ }
+  for (let ri = 0; ri < Math.min(20, rows.length); ri++) {
+    const cells = (rows[ri] as unknown[]).map(c => String(c || '').toLowerCase().trim())
+    let tmpData = -1, tmpDesc = -1, tmpImp = -1, tmpDare = -1, tmpAvere = -1
+    cells.forEach((cell, ci) => {
+      if (KW_DATE.some(k => cell === k || cell.startsWith(k)))  tmpData  = ci
+      if (KW_DESC.some(k => cell === k || cell.includes(k)))    tmpDesc  = ci
+      if (KW_IMP.some(k => cell === k))                         tmpImp   = ci
+      if (KW_DARE.some(k => cell === k || cell.startsWith(k)))  tmpDare  = ci
+      if (KW_AVERE.some(k => cell === k || cell.startsWith(k))) tmpAvere = ci
     })
-
-    if (matchCount >= 2 && colData >= 0) {
-      headerRowIdx = ri
+    const matches = [tmpData, tmpDesc, tmpImp, tmpDare, tmpAvere].filter(x => x >= 0).length
+    if (tmpData >= 0 && matches >= 2) {
+      headerRowIdx = ri; colData = tmpData; colDesc = tmpDesc
+      colImporto = tmpImp; colDare = tmpDare; colAvere = tmpAvere
+      console.log(`XLS: header trovato a riga ${ri} via keyword → data[${colData}] desc[${colDesc}] imp[${colImporto}] dare[${colDare}] avere[${colAvere}]`)
       break
     }
   }
 
-  // Fallback: log raw rows to understand the actual file structure, then try common layouts
+  // ── Phase 2: se header non trovato, scansione bruta ────────
+  // Cerca la prima riga con una data in col 0 (o qualsiasi col)
   if (headerRowIdx < 0) {
-    console.warn('XLS: header non rilevato. Struttura prime 10 righe:')
-    rows.slice(0, 10).forEach((row, i) => {
-      console.warn(`  riga[${i}]: ${row.map((c, ci) => `[${ci}]=${JSON.stringify(c)}`).join(' | ')}`)
-    })
+    console.warn('XLS: header keyword non trovato, avvio scansione bruta...')
+    for (let ri = 0; ri < rows.length; ri++) {
+      const row = rows[ri] as unknown[]
+      if (!row.some(c => c !== '')) continue
 
-    // Try to auto-detect by scanning for a row where col 0 looks like a date and col with number exists
-    for (let ri = 0; ri < Math.min(20, rows.length); ri++) {
-      const row = rows[ri]
-      const cell0 = String(row[0] || '').trim()
-      const looksLikeDate = /^\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}$/.test(cell0) ||
-                            /^\d{4}[\/\-\.]\d{2}[\/\-\.]\d{2}$/.test(cell0) ||
-                            row[0] instanceof Date
-      if (looksLikeDate) {
-        // First data row found — use it as hint for layout
-        // Find first numeric column
-        let numCol = -1
-        for (let ci = 1; ci < row.length; ci++) {
-          const val = String(row[ci] || '').replace(/[^\d,.-]/g, '').replace(',', '.')
-          if (val && !isNaN(parseFloat(val)) && parseFloat(val) !== 0) { numCol = ci; break }
-        }
-        // Find last string column before numCol as description
-        let descCol = -1
-        for (let ci = 1; ci < (numCol > 0 ? numCol : row.length); ci++) {
-          if (String(row[ci] || '').trim().length > 3 && isNaN(Number(String(row[ci]).replace(',','.')))) {
-            descCol = ci
-          }
-        }
-        console.warn(`XLS: data rilevata a riga ${ri}: col 0=data, col ${descCol}=desc, col ${numCol}=importo`)
-        headerRowIdx = ri - 1 // one row before so the loop starts from ri
-        if (headerRowIdx < 0) headerRowIdx = -1 // will be incremented to 0
-        colData = 0
-        colDesc = descCol >= 0 ? descCol : 2
-        colImporto = numCol >= 0 ? numCol : 3
-        // Adjust: headerRowIdx+1 is the first data row
-        // We set headerRowIdx so that ri = headerRowIdx+1 → headerRowIdx = ri-1
-        headerRowIdx = ri - 1
-        break
+      // Cerca cella con data in una delle prime 3 colonne
+      let dateCol = -1
+      for (let ci = 0; ci < Math.min(4, row.length); ci++) {
+        if (isDateLike(row[ci])) { dateCol = ci; break }
       }
-    }
+      if (dateCol < 0) continue
 
-    if (headerRowIdx < 0) {
-      console.warn('XLS: fallback finale → layout posizionale (col 0=data, 2=desc, 3=importo)')
-      headerRowIdx = 0
-      colData = 0; colDesc = 2; colImporto = 3
+      // Cerca celle con importo (singolo o dare+avere)
+      let impCol = -1, dareCol = -1, avereCol = -1
+      for (let ci = dateCol + 1; ci < row.length; ci++) {
+        if (isAmountLike(row[ci])) {
+          if (impCol < 0) impCol = ci
+          else if (dareCol < 0) { dareCol = impCol; avereCol = ci; impCol = -1 }
+        }
+      }
+
+      if (impCol < 0 && dareCol < 0) continue  // no amount found
+
+      // Cerca descrizione: la stringa più lunga tra dateCol+1 e prima colonna numerica
+      let descCol = -1
+      const firstNumCol = impCol >= 0 ? impCol : dareCol
+      for (let ci = dateCol + 1; ci < firstNumCol; ci++) {
+        const s = String(row[ci] || '').trim()
+        if (s.length > 3 && isNaN(parseAmount(row[ci]))) descCol = ci
+      }
+
+      colData    = dateCol
+      colDesc    = descCol >= 0 ? descCol : (dateCol + 1 < firstNumCol ? dateCol + 1 : -1)
+      colImporto = impCol
+      colDare    = dareCol
+      colAvere   = avereCol
+      headerRowIdx = ri - 1  // ri è la prima riga dati, headerRowIdx+1 = ri
+
+      console.log(`XLS: layout rilevato da riga dati ${ri} → data[${colData}] desc[${colDesc}] imp[${colImporto}] dare[${colDare}] avere[${colAvere}]`)
+      break
     }
   }
 
-  console.log(`XLS: colonne rilevate → data[${colData}] desc[${colDesc}] importo[${colImporto}] dare[${colDare}] avere[${colAvere}] (headerRow=${headerRowIdx})`)
+  if (headerRowIdx < 0 || colData < 0) {
+    console.error('XLS: impossibile determinare il layout del file. Struttura non riconosciuta.')
+    return movimenti
+  }
 
-  // ── Row parsing ────────────────────────────────────────────
-  let debugPrinted = 0
+  // ── Phase 3: parsing righe dati ────────────────────────────
   for (let ri = headerRowIdx + 1; ri < rows.length; ri++) {
-    const row = rows[ri]
+    const row = rows[ri] as unknown[]
     if (!row || row.every(c => c === '' || c === null || c === undefined)) continue
 
-    if (debugPrinted < 3) {
-      console.log(`XLS debug riga[${ri}]: data=${JSON.stringify(row[colData])} desc=${JSON.stringify(row[colDesc])} imp=${JSON.stringify(row[colImporto])}`)
-      debugPrinted++
-    }
+    const data_operazione = parseDate(row[colData])
+    if (!data_operazione) continue
 
-    // Data
-    const rawDate = row[colData]
-    let data_operazione = ''
-    if (rawDate instanceof Date) {
-      data_operazione = rawDate.toISOString().substring(0, 10)
-    } else if (rawDate) {
-      const s = String(rawDate).trim()
-      const sep = s.includes('/') ? '/' : s.includes('.') ? '.' : '-'
-      const parts = s.split(sep)
-      if (parts.length === 3 && parts[0].length <= 2) {
-        data_operazione = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`
-      } else {
-        data_operazione = s.substring(0, 10)
-      }
-    }
-    if (!data_operazione || data_operazione.length < 8) continue
-
-    // Importo — single column or Dare/Avere
-    let importo = 0
-    if (colImporto >= 0 && row[colImporto] !== '') {
-      const raw = String(row[colImporto] || '').replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.')
-      importo = parseFloat(raw) || 0
+    let importo = NaN
+    if (colImporto >= 0) {
+      importo = parseAmount(row[colImporto])
     } else if (colDare >= 0 || colAvere >= 0) {
-      const dare  = colDare  >= 0 ? parseFloat(String(row[colDare]  || '0').replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.')) || 0 : 0
-      const avere = colAvere >= 0 ? parseFloat(String(row[colAvere] || '0').replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.')) || 0 : 0
-      importo = avere - dare  // entrata positiva, uscita negativa
+      const dare  = colDare  >= 0 ? (parseAmount(row[colDare])  || 0) : 0
+      const avere = colAvere >= 0 ? (parseAmount(row[colAvere]) || 0) : 0
+      if (dare !== 0 || avere !== 0) importo = avere - dare
     }
-    if (importo === 0) continue
+    if (isNaN(importo) || importo === 0) continue
 
-    // Descrizione
     const descrizione = colDesc >= 0 ? String(row[colDesc] || '').trim() : 'Movimento senza descrizione'
 
     movimenti.push({ data_operazione, descrizione, importo, stato: 'non_riconciliato' })

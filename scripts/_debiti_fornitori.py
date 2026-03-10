@@ -1,17 +1,13 @@
 """
-_debiti_fornitori.py — Esporta CSV dei debiti aperti verso fornitori.
+_debiti_fornitori.py — CSV debiti aperti verso fornitori.
 
-ESCLUDE:
-  - fonte='mutuo'  (rate mutuo → non sono debiti fornitori)
-  - tipo != 'uscita'
-  - residuo <= 0
-
-INCLUDE:
-  - stato IN ('da_pagare', 'scaduto')
+Replica ESATTA della query della webapp (pagina /finanza/da-pagare):
   - tipo = 'uscita'
-  - qualsiasi fonte tranne 'mutuo'
+  - stato IN ('da_pagare', 'parziale', 'scaduto')
+  - nessun filtro sulla fonte
 
 Output: debiti_fornitori_YYYY-MM-DD.csv nella cartella scripts/
+        Separatore ; — apribile direttamente in Excel.
 
 Uso:
   python scripts/_debiti_fornitori.py
@@ -38,12 +34,10 @@ OGGI = date.today().isoformat()
 OUT_FILE = os.path.join(os.path.dirname(__file__), f"debiti_fornitori_{OGGI}.csv")
 
 
-def fetch_paged(query_fn, page_size=1000):
-    """Paginazione automatica su query Supabase."""
-    results = []
-    offset = 0
+def fetch_paged(build_query, page_size=1000):
+    results, offset = [], 0
     while True:
-        batch = query_fn(offset, offset + page_size - 1).execute().data or []
+        batch = build_query(offset, offset + page_size - 1).execute().data or []
         results.extend(batch)
         if len(batch) < page_size:
             break
@@ -54,9 +48,10 @@ def fetch_paged(query_fn, page_size=1000):
 def main():
     print("=" * 65)
     print(f"  DEBITI FORNITORI APERTI — {OGGI}")
+    print(f"  (replica query webapp: tipo=uscita, stato=da_pagare/parziale/scaduto)")
     print("=" * 65)
 
-    # Fetch scadenze aperte tipo=uscita, escludendo mutui
+    # Stessa query della webapp /finanza/da-pagare
     tutti = fetch_paged(
         lambda lo, hi: sb.table("scadenze_pagamento")
             .select(
@@ -65,13 +60,12 @@ def main():
                 "descrizione, anagrafica_soggetti(ragione_sociale, partita_iva)"
             )
             .eq("tipo", "uscita")
-            .in_("stato", ["da_pagare", "scaduto"])
-            .neq("fonte", "mutuo")
+            .in_("stato", ["da_pagare", "parziale", "scaduto"])
             .order("data_scadenza", desc=False)
             .range(lo, hi)
     )
 
-    print(f"\n  Scadenze recuperate (ante filtro residuo): {len(tutti)}")
+    print(f"\n  Scadenze recuperate: {len(tutti)}")
 
     righe = []
     for s in tutti:
@@ -83,72 +77,70 @@ def main():
 
         sog = s.get("anagrafica_soggetti") or {}
         fornitore = sog.get("ragione_sociale") or "— soggetto sconosciuto —"
-        piva = sog.get("partita_iva") or ""
+        piva      = sog.get("partita_iva") or ""
 
         righe.append({
-            "Fornitore": fornitore,
-            "P.IVA": piva,
-            "Fattura": s.get("fattura_riferimento") or "",
-            "Descrizione": s.get("descrizione") or "",
-            "Data Emissione": s.get("data_emissione") or "",
-            "Data Scadenza": s.get("data_scadenza") or "",
-            "Importo Totale": f"{importo_totale:.2f}",
-            "Importo Pagato": f"{importo_pagato:.2f}",
-            "Residuo": f"{residuo:.2f}",
-            "Stato": s.get("stato") or "",
-            "Fonte": s.get("fonte") or "NULL",
+            "Fornitore":       fornitore,
+            "P.IVA":           piva,
+            "Fattura":         s.get("fattura_riferimento") or "",
+            "Descrizione":     s.get("descrizione") or "",
+            "Data Emissione":  s.get("data_emissione") or "",
+            "Data Scadenza":   s.get("data_scadenza") or "",
+            "Importo Totale":  f"{importo_totale:.2f}",
+            "Importo Pagato":  f"{importo_pagato:.2f}",
+            "Residuo":         f"{residuo:.2f}",
+            "Stato":           s.get("stato") or "",
+            "Fonte":           s.get("fonte") or "NULL",
         })
 
-    # Scaduti prima, poi per data scadenza
+    # Scaduto prima, poi per data
     righe.sort(key=lambda r: (0 if r["Stato"] == "scaduto" else 1, r["Data Scadenza"]))
 
-    totale_residuo = sum(float(r["Residuo"]) for r in righe)
-    scaduti = [r for r in righe if r["Stato"] == "scaduto"]
-    totale_scaduto = sum(float(r["Residuo"]) for r in scaduti)
+    totale      = sum(float(r["Residuo"]) for r in righe)
+    tot_scaduto = sum(float(r["Residuo"]) for r in righe if r["Stato"] == "scaduto")
+    tot_parziale = sum(float(r["Residuo"]) for r in righe if r["Stato"] == "parziale")
 
     print(f"  Righe con residuo > 0:   {len(righe)}")
-    print(f"  di cui scadute:          {len(scaduti)}")
-    print(f"\n  Totale residuo:          €{totale_residuo:>12,.2f}")
-    print(f"  Totale scaduto:          €{totale_scaduto:>12,.2f}")
+    print(f"  Totale residuo:          €{totale:>12,.2f}")
+    print(f"    di cui scaduto:        €{tot_scaduto:>12,.2f}")
+    print(f"    di cui parziale:       €{tot_parziale:>12,.2f}")
 
     if not righe:
         print("\n  Nessun debito aperto trovato.")
         return
 
+    # ── CSV ────────────────────────────────────────────────────
     fieldnames = [
         "Fornitore", "P.IVA", "Fattura", "Descrizione",
         "Data Emissione", "Data Scadenza",
         "Importo Totale", "Importo Pagato", "Residuo",
         "Stato", "Fonte",
     ]
-
     with open(OUT_FILE, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=";")
-        writer.writeheader()
-        writer.writerows(righe)
-        writer.writerow({
-            "Fornitore": "TOTALE",
-            "P.IVA": "", "Fattura": "", "Descrizione": "",
-            "Data Emissione": "", "Data Scadenza": "",
-            "Importo Totale": "", "Importo Pagato": "",
-            "Residuo": f"{totale_residuo:.2f}",
-            "Stato": "", "Fonte": "",
-        })
+        w = csv.DictWriter(f, fieldnames=fieldnames, delimiter=";")
+        w.writeheader()
+        w.writerows(righe)
+        w.writerow({k: "" for k in fieldnames} | {"Fornitore": "TOTALE", "Residuo": f"{totale:.2f}"})
 
-    print(f"\n  CSV salvato in: {OUT_FILE}")
-    print(f"  (Apri con Excel — separatore punto e virgola)")
+    print(f"\n  CSV → {OUT_FILE}")
 
-    # Riepilogo per fornitore
+    # ── Riepilogo per fornitore ────────────────────────────────
     per_fornitore: dict[str, float] = {}
     for r in righe:
-        per_fornitore[r["Fornitore"]] = per_fornitore.get(r["Fornitore"], 0) + float(r["Residuo"])
+        per_fornitore[r["Fornitore"]] = per_fornitore.get(r["Fornitore"], 0.0) + float(r["Residuo"])
 
-    print(f"\n  {'Fornitore':<40}  {'Residuo':>12}")
-    print(f"  {'-'*40}  {'-'*12}")
+    print(f"\n  {'Fornitore':<45}  {'N':>4}  {'Residuo':>12}")
+    print(f"  {'-'*45}  {'-'*4}  {'-'*12}")
+    conteggi = {r["Fornitore"]: conteggi.get(r["Fornitore"], 0) + 1 for r in righe for conteggi in [{}]}
+    # rebuild counts properly
+    cnt: dict[str, int] = {}
+    for r in righe:
+        cnt[r["Fornitore"]] = cnt.get(r["Fornitore"], 0) + 1
+
     for nome, tot in sorted(per_fornitore.items(), key=lambda x: -x[1]):
-        print(f"  {nome:<40}  €{tot:>11,.2f}")
-    print(f"  {'='*40}  {'='*12}")
-    print(f"  {'TOTALE':<40}  €{totale_residuo:>11,.2f}")
+        print(f"  {nome:<45}  {cnt[nome]:>4}  €{tot:>11,.2f}")
+    print(f"  {'='*45}  {'='*4}  {'='*12}")
+    print(f"  {'TOTALE':<45}  {len(righe):>4}  €{totale:>11,.2f}")
 
 
 if __name__ == "__main__":
