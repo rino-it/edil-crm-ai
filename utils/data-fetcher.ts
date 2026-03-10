@@ -2584,7 +2584,7 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
     // ==========================================
     // 0.7. Pre-Filtro RATA MUTUO (con match rate_mutuo)
     // ==========================================
-    const regexMutuo = /\b(rata\s+mutuo|mutuo\s+n|est\.?\s*mutuo|rimborso\s+mutuo|addeb.*mutuo)\b/i;
+    const regexMutuo = /\b(rata\s+mutuo|rata\s+finanziament|mutuo\s+n|est\.?\s*mutuo|rimborso\s+mutuo|addeb.*mutuo|finanziamento\s+n|rata\s+prestito)\b/i;
     const isMutuo = regexMutuo.test(causale) || (m.xml_causale && regexMutuo.test(m.xml_causale));
 
     if (isMutuo) {
