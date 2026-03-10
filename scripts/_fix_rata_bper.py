@@ -71,7 +71,7 @@ def main():
         best_diff = 999999
         for rata in rate_aperte:
             diff_importo = abs(rata['importo_rata'] - importo_abs)
-            if diff_importo > 50.0:
+            if diff_importo > 100.0:
                 continue
             try:
                 d_mov = datetime.strptime(data_mov[:10], "%Y-%m-%d")

@@ -2603,9 +2603,14 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
         .order('data_scadenza', { ascending: true });
 
       let rataFound: any = null;
-      if (rataMatch) {
-        // Match per importo (tolleranza 1€ per spese incasso)
-        rataFound = rataMatch.find((r: any) => Math.abs(r.importo_rata - importoAbs) <= 1.0);
+      if (rataMatch && rataMatch.length > 0) {
+        // Match per importo — prendi la rata più vicina entro 100€ di tolleranza
+        // (spese incasso, assicurazione rata, variazione tasso variabile, ecc.)
+        const sorted = rataMatch
+          .map((r: any) => ({ ...r, _diff: Math.abs(r.importo_rata - importoAbs) }))
+          .filter((r: any) => r._diff <= 100)
+          .sort((a: any, b: any) => a._diff - b._diff);
+        rataFound = sorted[0] || null;
       }
 
       if (rataFound) {
