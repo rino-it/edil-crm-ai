@@ -1,74 +1,155 @@
-"""Tabella esposizione debiti aperti per fornitore (no banche)."""
+"""
+_debiti_fornitori.py — Esporta CSV dei debiti aperti verso fornitori.
+
+ESCLUDE:
+  - fonte='mutuo'  (rate mutuo → non sono debiti fornitori)
+  - tipo != 'uscita'
+  - residuo <= 0
+
+INCLUDE:
+  - stato IN ('da_pagare', 'scaduto')
+  - tipo = 'uscita'
+  - qualsiasi fonte tranne 'mutuo'
+
+Output: debiti_fornitori_YYYY-MM-DD.csv nella cartella scripts/
+
+Uso:
+  python scripts/_debiti_fornitori.py
+"""
+
 import os
+import csv
+import sys
+from datetime import date
 from dotenv import load_dotenv
+
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env.local'))
 from supabase import create_client
 
-sb = create_client(os.getenv('NEXT_PUBLIC_SUPABASE_URL'), os.getenv('SUPABASE_SERVICE_ROLE_KEY'))
+SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
-def fetch_all(table, select):
-    all_data, offset = [], 0
+if not SUPABASE_URL or not SUPABASE_KEY:
+    print("ERRORE: variabili Supabase mancanti in .env.local")
+    sys.exit(1)
+
+sb = create_client(SUPABASE_URL, SUPABASE_KEY)
+OGGI = date.today().isoformat()
+OUT_FILE = os.path.join(os.path.dirname(__file__), f"debiti_fornitori_{OGGI}.csv")
+
+
+def fetch_paged(query_fn, page_size=1000):
+    """Paginazione automatica su query Supabase."""
+    results = []
+    offset = 0
     while True:
-        r = sb.table(table).select(select).range(offset, offset + 999).execute()
-        all_data.extend(r.data)
-        if len(r.data) < 1000:
+        batch = query_fn(offset, offset + page_size - 1).execute().data or []
+        results.extend(batch)
+        if len(batch) < page_size:
             break
-        offset += 1000
-    return all_data
+        offset += page_size
+    return results
 
-anag = fetch_all('anagrafica_soggetti', 'id,ragione_sociale,tipo')
-BANCHE_IDS = {
-    a['id'] for a in anag
-    if (a.get('tipo') or '').lower() in ('banca', 'banche', 'bank', 'istituto di credito', 'istituto credito')
-}
-anag_map = {a['id']: a.get('ragione_sociale', '?') for a in anag}
 
-scadenze = fetch_all('scadenze_pagamento', 'id,soggetto_id,importo_totale,importo_pagato,stato,tipo,data_scadenza,fattura_riferimento,note')
-STATI_APERTI = {'da_pagare', 'scaduta', 'da_smistare', 'parziale'}
+def main():
+    print("=" * 65)
+    print(f"  DEBITI FORNITORI APERTI — {OGGI}")
+    print("=" * 65)
 
-# Raggruppa le scadenze per fornitore (dettaglio)
-dettaglio = {}
-for s in scadenze:
-    if s.get('tipo') != 'uscita':
-        continue
-    if s.get('stato') not in STATI_APERTI:
-        continue
-    sid = s.get('soggetto_id')
-    if sid in BANCHE_IDS:
-        continue
-    nome = anag_map.get(sid, '?') if sid else '?'
-    residuo = (s.get('importo_totale') or 0) - (s.get('importo_pagato') or 0)
-    if residuo <= 0:
-        continue
-    if nome not in dettaglio:
-        dettaglio[nome] = []
-    dettaglio[nome].append({
-        'data_scad': str(s.get('data_scadenza') or '')[:10],
-        'rif': str(s.get('fattura_riferimento') or s.get('note') or '')[:28],
-        'stato': str(s.get('stato') or ''),
-        'importo': residuo,
-    })
+    # Fetch scadenze aperte tipo=uscita, escludendo mutui
+    tutti = fetch_paged(
+        lambda lo, hi: sb.table("scadenze_pagamento")
+            .select(
+                "id, fattura_riferimento, importo_totale, importo_pagato, "
+                "data_scadenza, data_emissione, stato, fonte, soggetto_id, "
+                "descrizione, anagrafica_soggetti(ragione_sociale, partita_iva)"
+            )
+            .eq("tipo", "uscita")
+            .in_("stato", ["da_pagare", "scaduto"])
+            .neq("fonte", "mutuo")
+            .order("data_scadenza", desc=False)
+            .range(lo, hi)
+    )
 
-# Ordina fornitori per totale decrescente
-fornitori_ord = sorted(dettaglio.keys(), key=lambda n: -sum(r['importo'] for r in dettaglio[n]))
+    print(f"\n  Scadenze recuperate (ante filtro residuo): {len(tutti)}")
 
-SEP = '=' * 80
-sep = '-' * 80
-totale_globale = 0.0
-print()
-for nome in fornitori_ord:
-    righe = sorted(dettaglio[nome], key=lambda x: x['data_scad'])
-    tot_forn = sum(r['importo'] for r in righe)
-    totale_globale += tot_forn
-    print(SEP)
-    print("  FORNITORE: {}  (totale: {:,.2f} €)".format(nome, tot_forn))
-    print("  {:<10}  {:<28}  {:<14}  {:>12}".format('SCADENZA', 'RIFERIMENTO', 'STATO', 'RESIDUO €'))
-    print(sep)
+    righe = []
+    for s in tutti:
+        importo_totale = float(s.get("importo_totale") or 0)
+        importo_pagato = float(s.get("importo_pagato") or 0)
+        residuo = round(importo_totale - importo_pagato, 2)
+        if residuo <= 0:
+            continue
+
+        sog = s.get("anagrafica_soggetti") or {}
+        fornitore = sog.get("ragione_sociale") or "— soggetto sconosciuto —"
+        piva = sog.get("partita_iva") or ""
+
+        righe.append({
+            "Fornitore": fornitore,
+            "P.IVA": piva,
+            "Fattura": s.get("fattura_riferimento") or "",
+            "Descrizione": s.get("descrizione") or "",
+            "Data Emissione": s.get("data_emissione") or "",
+            "Data Scadenza": s.get("data_scadenza") or "",
+            "Importo Totale": f"{importo_totale:.2f}",
+            "Importo Pagato": f"{importo_pagato:.2f}",
+            "Residuo": f"{residuo:.2f}",
+            "Stato": s.get("stato") or "",
+            "Fonte": s.get("fonte") or "NULL",
+        })
+
+    # Scaduti prima, poi per data scadenza
+    righe.sort(key=lambda r: (0 if r["Stato"] == "scaduto" else 1, r["Data Scadenza"]))
+
+    totale_residuo = sum(float(r["Residuo"]) for r in righe)
+    scaduti = [r for r in righe if r["Stato"] == "scaduto"]
+    totale_scaduto = sum(float(r["Residuo"]) for r in scaduti)
+
+    print(f"  Righe con residuo > 0:   {len(righe)}")
+    print(f"  di cui scadute:          {len(scaduti)}")
+    print(f"\n  Totale residuo:          €{totale_residuo:>12,.2f}")
+    print(f"  Totale scaduto:          €{totale_scaduto:>12,.2f}")
+
+    if not righe:
+        print("\n  Nessun debito aperto trovato.")
+        return
+
+    fieldnames = [
+        "Fornitore", "P.IVA", "Fattura", "Descrizione",
+        "Data Emissione", "Data Scadenza",
+        "Importo Totale", "Importo Pagato", "Residuo",
+        "Stato", "Fonte",
+    ]
+
+    with open(OUT_FILE, "w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=";")
+        writer.writeheader()
+        writer.writerows(righe)
+        writer.writerow({
+            "Fornitore": "TOTALE",
+            "P.IVA": "", "Fattura": "", "Descrizione": "",
+            "Data Emissione": "", "Data Scadenza": "",
+            "Importo Totale": "", "Importo Pagato": "",
+            "Residuo": f"{totale_residuo:.2f}",
+            "Stato": "", "Fonte": "",
+        })
+
+    print(f"\n  CSV salvato in: {OUT_FILE}")
+    print(f"  (Apri con Excel — separatore punto e virgola)")
+
+    # Riepilogo per fornitore
+    per_fornitore: dict[str, float] = {}
     for r in righe:
-        print("  {:<10}  {:<28}  {:<14}  {:>12,.2f}".format(
-            r['data_scad'], r['rif'][:28], r['stato'][:14], r['importo']))
-print(SEP)
-print("  TOTALE GENERALE: {:,.2f} €  ({} scadenze aperte)".format(
-    totale_globale, sum(len(v) for v in dettaglio.values())))
-print(SEP)
-print()
+        per_fornitore[r["Fornitore"]] = per_fornitore.get(r["Fornitore"], 0) + float(r["Residuo"])
+
+    print(f"\n  {'Fornitore':<40}  {'Residuo':>12}")
+    print(f"  {'-'*40}  {'-'*12}")
+    for nome, tot in sorted(per_fornitore.items(), key=lambda x: -x[1]):
+        print(f"  {nome:<40}  €{tot:>11,.2f}")
+    print(f"  {'='*40}  {'='*12}")
+    print(f"  {'TOTALE':<40}  €{totale_residuo:>11,.2f}")
+
+
+if __name__ == "__main__":
+    main()

@@ -1617,17 +1617,67 @@ export function parseXLSBanca(buffer: ArrayBuffer): Array<{ data_operazione: str
     }
   }
 
-  // Fallback: assume first row is header, columns 0=data, 1=valuta, 2=desc, 3=importo (common BPER layout)
+  // Fallback: log raw rows to understand the actual file structure, then try common layouts
   if (headerRowIdx < 0) {
-    console.warn('XLS: header non rilevato, uso layout posizionale BPER (col 0=data, 2=desc, 3=importo)')
-    headerRowIdx = 0
-    colData = 0; colDesc = 2; colImporto = 3
+    console.warn('XLS: header non rilevato. Struttura prime 10 righe:')
+    rows.slice(0, 10).forEach((row, i) => {
+      console.warn(`  riga[${i}]: ${row.map((c, ci) => `[${ci}]=${JSON.stringify(c)}`).join(' | ')}`)
+    })
+
+    // Try to auto-detect by scanning for a row where col 0 looks like a date and col with number exists
+    for (let ri = 0; ri < Math.min(20, rows.length); ri++) {
+      const row = rows[ri]
+      const cell0 = String(row[0] || '').trim()
+      const looksLikeDate = /^\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}$/.test(cell0) ||
+                            /^\d{4}[\/\-\.]\d{2}[\/\-\.]\d{2}$/.test(cell0) ||
+                            row[0] instanceof Date
+      if (looksLikeDate) {
+        // First data row found — use it as hint for layout
+        // Find first numeric column
+        let numCol = -1
+        for (let ci = 1; ci < row.length; ci++) {
+          const val = String(row[ci] || '').replace(/[^\d,.-]/g, '').replace(',', '.')
+          if (val && !isNaN(parseFloat(val)) && parseFloat(val) !== 0) { numCol = ci; break }
+        }
+        // Find last string column before numCol as description
+        let descCol = -1
+        for (let ci = 1; ci < (numCol > 0 ? numCol : row.length); ci++) {
+          if (String(row[ci] || '').trim().length > 3 && isNaN(Number(String(row[ci]).replace(',','.')))) {
+            descCol = ci
+          }
+        }
+        console.warn(`XLS: data rilevata a riga ${ri}: col 0=data, col ${descCol}=desc, col ${numCol}=importo`)
+        headerRowIdx = ri - 1 // one row before so the loop starts from ri
+        if (headerRowIdx < 0) headerRowIdx = -1 // will be incremented to 0
+        colData = 0
+        colDesc = descCol >= 0 ? descCol : 2
+        colImporto = numCol >= 0 ? numCol : 3
+        // Adjust: headerRowIdx+1 is the first data row
+        // We set headerRowIdx so that ri = headerRowIdx+1 → headerRowIdx = ri-1
+        headerRowIdx = ri - 1
+        break
+      }
+    }
+
+    if (headerRowIdx < 0) {
+      console.warn('XLS: fallback finale → layout posizionale (col 0=data, 2=desc, 3=importo)')
+      headerRowIdx = 0
+      colData = 0; colDesc = 2; colImporto = 3
+    }
   }
 
+  console.log(`XLS: colonne rilevate → data[${colData}] desc[${colDesc}] importo[${colImporto}] dare[${colDare}] avere[${colAvere}] (headerRow=${headerRowIdx})`)
+
   // ── Row parsing ────────────────────────────────────────────
+  let debugPrinted = 0
   for (let ri = headerRowIdx + 1; ri < rows.length; ri++) {
     const row = rows[ri]
     if (!row || row.every(c => c === '' || c === null || c === undefined)) continue
+
+    if (debugPrinted < 3) {
+      console.log(`XLS debug riga[${ri}]: data=${JSON.stringify(row[colData])} desc=${JSON.stringify(row[colDesc])} imp=${JSON.stringify(row[colImporto])}`)
+      debugPrinted++
+    }
 
     // Data
     const rawDate = row[colData]
