@@ -1,17 +1,20 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { 
-  getKPIFinanziariGlob, 
-  getCashflowPrevisionale, 
-  getAgingAnalysisData, 
-  getFinanzaPerCantiere 
+import {
+  getKPIFinanziariGlob,
+  getCashflowPrevisionale,
+  getAgingAnalysisData,
+  getFinanzaPerCantiere,
+  getTopEsposizioniPerSoggetto
 } from '@/utils/data-fetcher'
-import CashflowChart from './CashflowChart'
 import AgingChart from './AgingChart'
 import SyncPipelineButton from './components/SyncPipelineButton'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { TrendingUp, TrendingDown, Wallet, Activity, LineChart, HardHat, ChevronRight, AlertCircle, ArrowRight } from 'lucide-react'
+import { Badge } from "@/components/ui/badge"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Button } from "@/components/ui/button"
+import { TrendingUp, TrendingDown, Wallet, Activity, LineChart, HardHat, ChevronRight, AlertCircle, ArrowRight, Download, Printer, Calendar } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,13 +24,19 @@ export default async function FinanzaPage() {
   if (!user) redirect('/login')
 
   // Fetching Parallelo (Nota: Ora facciamo due chiamate all'Aging)
-  const [kpis, cashflowData, agingCrediti, agingDebiti, cantieriData] = await Promise.all([
+  const [kpis, cashflowData, agingCrediti, agingDebiti, cantieriData, topEsposizioni] = await Promise.all([
     getKPIFinanziariGlob(),
     getCashflowPrevisionale(90),
-    getAgingAnalysisData('entrata'), // Clienti in ritardo
-    getAgingAnalysisData('uscita'),  // Fornitori che non abbiamo pagato (Dati da Excel!)
-    getFinanzaPerCantiere()
+    getAgingAnalysisData('entrata'),
+    getAgingAnalysisData('uscita'),
+    getFinanzaPerCantiere(),
+    getTopEsposizioniPerSoggetto(10)
   ])
+
+  // Proiezioni T+30, T+60, T+90
+  const proiezioneT30 = cashflowData[30]?.saldo ?? null
+  const proiezioneT60 = cashflowData[60]?.saldo ?? null
+  const proiezioneT90 = cashflowData[89]?.saldo ?? null
 
   const formatEuro = (val: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val)
 
@@ -155,60 +164,137 @@ export default async function FinanzaPage() {
           </Link>
         </div>
 
-        {/* SEZIONE 2 & 3: Grafici e Aging Analisi (Splittata e Cliccabile) */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Cashflow Previsionale (2 colonne) */}
-          <Card className="lg:col-span-2 shadow-[var(--shadow-sm)] border-border/60">
-            <CardHeader className="pb-4 border-b border-border/40">
-              <CardTitle className="text-lg flex justify-between items-center">
-                Proiezione Liquidità (90gg)
-                <Link href="/finanza/programmazione">
-                  <span className="text-xs text-blue-600 font-normal hover:underline cursor-pointer">Apri Dettaglio Completo</span>
-                </Link>
-              </CardTitle>
-              <CardDescription>
-                Mostra solo le scadenze <strong>esplicitamente programmate</strong>.
-                Le fatture senza data pianificata sono nel parcheggio di{' '}
-                <Link href="/finanza/programmazione" className="underline text-blue-600">Programmazione →</Link>
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-2">
-              <CashflowChart data={cashflowData} />
-            </CardContent>
-          </Card>
-
-          {/* Aging Analysis (1 colonna impilata, resa cliccabile) */}
-          <div className="flex flex-col gap-6">
-            <Link href="/finanza/scaduto?tab=crediti" className="group">
-              <Card className="shadow-[var(--shadow-sm)] border-border/60 card-hover">
-                <CardHeader className="pb-4 border-b border-border/40 flex flex-row justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-emerald-500" />
-                    <CardTitle className="text-sm">⚠️ Ritardi Clienti (Da Incassare)</CardTitle>
+        {/* SEZIONE 2: Cruscotto CFO — Proiezioni + Export */}
+        <Card className="shadow-[var(--shadow-sm)] border-border/60">
+          <CardHeader className="pb-4 border-b border-border/40">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-blue-600" />
+                  Cruscotto CFO — Proiezione Liquidita&apos;
+                </CardTitle>
+                <CardDescription>
+                  Proiezione basata su scadenze programmate.{' '}
+                  <Link href="/finanza/programmazione" className="underline text-blue-600">Apri Simulatore Cashflow →</Link>
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <a href="/api/report/cashflow?format=xlsx" download>
+                  <Button variant="outline" size="sm" className="text-xs">
+                    <Download className="h-3.5 w-3.5 mr-1.5" /> Scarica Excel
+                  </Button>
+                </a>
+                <a href="/api/report/cashflow?format=html" target="_blank" rel="noopener noreferrer">
+                  <Button variant="outline" size="sm" className="text-xs">
+                    <Printer className="h-3.5 w-3.5 mr-1.5" /> Versione Stampabile
+                  </Button>
+                </a>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-4 space-y-6">
+            {/* Proiezioni T+30 / T+60 / T+90 */}
+            <div className="grid grid-cols-3 gap-4">
+              {[
+                { label: 'T+30 giorni', valore: proiezioneT30 },
+                { label: 'T+60 giorni', valore: proiezioneT60 },
+                { label: 'T+90 giorni', valore: proiezioneT90 },
+              ].map(p => (
+                <div key={p.label} className={`rounded-lg border p-4 text-center ${p.valore !== null && p.valore < 0 ? 'bg-rose-50 border-rose-200' : 'bg-emerald-50 border-emerald-200'}`}>
+                  <div className="text-xs font-bold text-zinc-500 uppercase tracking-wide mb-1">{p.label}</div>
+                  <div className={`text-xl md:text-2xl font-black font-mono ${p.valore !== null && p.valore < 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
+                    {p.valore !== null ? formatEuro(p.valore) : '—'}
                   </div>
-                  <ArrowRight size={14} className="text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </CardHeader>
-                <CardContent className="pt-4">
-                  <AgingChart data={agingCrediti} />
-                </CardContent>
-              </Card>
-            </Link>
+                  {p.valore !== null && p.valore < 0 && (
+                    <div className="text-[10px] text-rose-500 font-medium mt-1 flex items-center justify-center gap-1">
+                      <AlertCircle size={10} /> Cassa negativa
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
 
-            <Link href="/finanza/scaduto?tab=debiti" className="group">
-              <Card className="shadow-[var(--shadow-sm)] border-border/60 card-hover">
-                <CardHeader className="pb-4 border-b border-border/40 flex flex-row justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-rose-500" />
-                    <CardTitle className="text-sm">⚠️ Ritardi Fornitori (Da Pagare)</CardTitle>
-                  </div>
-                  <ArrowRight size={14} className="text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </CardHeader>
-                <CardContent className="pt-4">
-                  <AgingChart data={agingDebiti} />
-                </CardContent>
-              </Card>
-            </Link>
-          </div>
+            {/* Top Esposizioni per Soggetto */}
+            {topEsposizioni.length > 0 && (
+              <div>
+                <h3 className="text-sm font-bold text-zinc-700 mb-3">Top Esposizioni per Soggetto</h3>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader className="bg-zinc-50/80">
+                      <TableRow>
+                        <TableHead className="font-semibold">Soggetto</TableHead>
+                        <TableHead className="font-semibold w-[70px]">Tipo</TableHead>
+                        <TableHead className="text-right font-semibold w-[120px]">Crediti</TableHead>
+                        <TableHead className="text-right font-semibold w-[120px]">Debiti</TableHead>
+                        <TableHead className="text-right font-semibold w-[120px]">Netto</TableHead>
+                        <TableHead className="text-right font-semibold w-[60px]">Fatt.</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {topEsposizioni.map((e, i) => (
+                        <TableRow key={e.soggetto_id} className={i < 3 ? 'bg-amber-50/30' : ''}>
+                          <TableCell className="font-medium text-zinc-900">
+                            <div className="flex items-center gap-2">
+                              {i < 3 && <span className="text-[10px] font-black text-amber-600 bg-amber-100 rounded-full w-5 h-5 flex items-center justify-center">{i + 1}</span>}
+                              <span className="truncate max-w-[200px]">{e.ragione_sociale}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={`text-[10px] ${e.tipo_soggetto === 'cliente' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : e.tipo_soggetto === 'fornitore' ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-zinc-50 text-zinc-600'}`}>
+                              {e.tipo_soggetto || 'N/D'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-emerald-700">
+                            {e.entrate_residuo > 0 ? formatEuro(e.entrate_residuo) : <span className="text-zinc-300">—</span>}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-rose-700">
+                            {e.uscite_residuo > 0 ? formatEuro(e.uscite_residuo) : <span className="text-zinc-300">—</span>}
+                          </TableCell>
+                          <TableCell className={`text-right font-mono font-bold ${e.netto >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                            {formatEuro(e.netto)}
+                          </TableCell>
+                          <TableCell className="text-right text-zinc-500 text-sm">{e.n_fatture}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* SEZIONE 3: Aging Analisi (Crediti + Debiti) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Link href="/finanza/scaduto?tab=crediti" className="group">
+            <Card className="shadow-[var(--shadow-sm)] border-border/60 card-hover h-full">
+              <CardHeader className="pb-4 border-b border-border/40 flex flex-row justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-emerald-500" />
+                  <CardTitle className="text-sm">Ritardi Clienti (Da Incassare)</CardTitle>
+                </div>
+                <ArrowRight size={14} className="text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </CardHeader>
+              <CardContent className="pt-4">
+                <AgingChart data={agingCrediti} />
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link href="/finanza/scaduto?tab=debiti" className="group">
+            <Card className="shadow-[var(--shadow-sm)] border-border/60 card-hover h-full">
+              <CardHeader className="pb-4 border-b border-border/40 flex flex-row justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-rose-500" />
+                  <CardTitle className="text-sm">Ritardi Fornitori (Da Pagare)</CardTitle>
+                </div>
+                <ArrowRight size={14} className="text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </CardHeader>
+              <CardContent className="pt-4">
+                <AgingChart data={agingDebiti} />
+              </CardContent>
+            </Card>
+          </Link>
         </div>
 
         {/* SEZIONE 4: Analisi di Commessa (Intatta) */}

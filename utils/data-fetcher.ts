@@ -1444,6 +1444,68 @@ export async function getFinanzaPerCantiere() {
   });
 }
 
+export interface EsposizioneSoggetto {
+  soggetto_id: string
+  ragione_sociale: string
+  tipo_soggetto: string | null
+  entrate_residuo: number
+  uscite_residuo: number
+  netto: number
+  n_fatture: number
+}
+
+export async function getTopEsposizioniPerSoggetto(limit = 10): Promise<EsposizioneSoggetto[]> {
+  const supabase = getSupabaseAdmin();
+
+  const { data } = await supabase
+    .from('scadenze_pagamento')
+    .select('soggetto_id, tipo, importo_totale, importo_pagato, anagrafica_soggetti(ragione_sociale, tipo)')
+    .neq('stato', 'pagato')
+    .not('soggetto_id', 'is', null);
+
+  if (!data) return [];
+
+  const mappa: Record<string, EsposizioneSoggetto> = {};
+
+  for (const s of data) {
+    const sid = s.soggetto_id;
+    if (!sid) continue;
+    const residuo = (Number(s.importo_totale) || 0) - (Number(s.importo_pagato) || 0);
+    if (residuo <= 0) continue;
+
+    if (!mappa[sid]) {
+      const sogg = s.anagrafica_soggetti as any;
+      mappa[sid] = {
+        soggetto_id: sid,
+        ragione_sociale: sogg?.ragione_sociale || 'N/D',
+        tipo_soggetto: sogg?.tipo || null,
+        entrate_residuo: 0,
+        uscite_residuo: 0,
+        netto: 0,
+        n_fatture: 0,
+      };
+    }
+
+    mappa[sid].n_fatture++;
+    if (s.tipo === 'entrata') {
+      mappa[sid].entrate_residuo += residuo;
+    } else {
+      mappa[sid].uscite_residuo += residuo;
+    }
+  }
+
+  const risultati = Object.values(mappa).map(e => ({
+    ...e,
+    entrate_residuo: Math.round(e.entrate_residuo * 100) / 100,
+    uscite_residuo: Math.round(e.uscite_residuo * 100) / 100,
+    netto: Math.round((e.entrate_residuo - e.uscite_residuo) * 100) / 100,
+  }));
+
+  risultati.sort((a, b) => Math.abs(b.entrate_residuo + b.uscite_residuo) - Math.abs(a.entrate_residuo + a.uscite_residuo));
+
+  return risultati.slice(0, limit);
+}
+
 export async function getCashflowProiezione() {
   const supabase = getSupabaseAdmin();
   const oggi = new Date();
