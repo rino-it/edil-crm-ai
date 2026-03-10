@@ -2,11 +2,15 @@
   "crons": [
     {
       "path": "/api/cron/scadenze",
-      "schedule": "0 8 * * *"
+      "schedule": "0 6 * * *"
     },
     {
       "path": "/api/cron/scadenze-finanziarie",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/pagamenti-domani",
+      "schedule": "0 14 * * *"
     }
   ]
 }

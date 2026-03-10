@@ -276,12 +276,19 @@ export async function registraIncassoFattura(scadenzaId: string, contoId: string
   return { success: true };
 }
 
-export async function riprogrammaScadenza(scadenzaId: string, nuovaData: string) {
+export async function riprogrammaScadenza(scadenzaId: string, nuovaData: string, importoPianificato?: number | null) {
   const supabase = await createClient();
+
+  const updateData: Record<string, any> = { data_pianificata: nuovaData };
+
+  // Se importoPianificato è specificato, salvalo (null = intero residuo)
+  if (importoPianificato !== undefined) {
+    updateData.importo_pianificato = importoPianificato;
+  }
 
   const { error } = await supabase
     .from('scadenze_pagamento')
-    .update({ data_pianificata: nuovaData })
+    .update(updateData)
     .eq('id', scadenzaId);
 
   if (error) {

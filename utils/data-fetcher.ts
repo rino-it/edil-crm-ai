@@ -3184,7 +3184,7 @@ export interface CashflowDetailRow {
   ragione_sociale: string;
   fattura_riferimento: string | null;
   data_effettiva: string;       // data usata per il posizionamento
-  importo_residuo: number;
+  importo_residuo: number;      // importo che questa riga rappresenta (può essere parziale)
   tipo: 'entrata' | 'uscita';
 }
 
@@ -3216,7 +3216,7 @@ export async function getCashflowProjection(days = 90): Promise<CashflowProjecti
   const { data: scadenze } = await supabase
     .from('scadenze_pagamento')
     .select(`
-      id, tipo, importo_totale, importo_pagato, data_scadenza, data_pianificata, stato,
+      id, tipo, importo_totale, importo_pagato, data_scadenza, data_pianificata, importo_pianificato, stato,
       fattura_riferimento, descrizione,
       anagrafica_soggetti:soggetto_id (ragione_sociale)
     `)
@@ -3244,53 +3244,63 @@ export async function getCashflowProjection(days = 90): Promise<CashflowProjecti
     }
   }
 
-  // Smistiamo le scadenze
+  // Smistiamo le scadenze (con supporto scheduling parziale)
   safeScadenze.forEach(s => {
     const residuo = Number(s.importo_totale) - Number(s.importo_pagato || 0);
     if (residuo <= 0) return;
 
     const dataPianificata = (s as any).data_pianificata as string | null | undefined;
+    const importoPianificato = (s as any).importo_pianificato as number | null | undefined;
+    const ragSoc = (s as any).anagrafica_soggetti?.ragione_sociale || (s as any).descrizione || 'N/D';
+    const tipo = s.tipo as 'entrata' | 'uscita';
 
-    // Regola del parcheggio: senza data_pianificata esplicita → "Da Pianificare", sempre
-    const detail: CashflowDetailRow = {
-      id: (s as any).id,
-      ragione_sociale: (s as any).anagrafica_soggetti?.ragione_sociale || (s as any).descrizione || 'N/D',
-      fattura_riferimento: s.fattura_riferimento ?? null,
-      data_effettiva: dataPianificata || s.data_scadenza,
-      importo_residuo: residuo,
-      tipo: s.tipo as 'entrata' | 'uscita',
+    // Helper: aggiungi dettaglio a un bucket
+    const addToBucket = (bucket: WeekBucket, importo: number, dataEff: string) => {
+      const detail: CashflowDetailRow = {
+        id: (s as any).id,
+        ragione_sociale: ragSoc,
+        fattura_riferimento: s.fattura_riferimento ?? null,
+        data_effettiva: dataEff,
+        importo_residuo: importo,
+        tipo,
+      };
+      if (tipo === 'entrata') bucket.entrate += importo;
+      else bucket.uscite += importo;
+      bucket.dettagli.push(detail);
     };
 
     if (!dataPianificata) {
       // Nessuna data pianificata → parcheggio
-      const past = weeksMap.get(pastLabel)!;
-      if (s.tipo === 'entrata') past.entrate += residuo;
-      else past.uscite += residuo;
-      past.dettagli.push(detail);
+      addToBucket(weeksMap.get(pastLabel)!, residuo, s.data_scadenza);
       return;
     }
 
-    const dScadenza = new Date(dataPianificata);
+    const dPianificata = new Date(dataPianificata);
 
     // data_pianificata nel passato (prima della settimana corrente) → parcheggio
-    if (isBefore(dScadenza, startOfWeek(today, { weekStartsOn: 1 }))) {
-      const past = weeksMap.get(pastLabel)!;
-      if (s.tipo === 'entrata') past.entrate += residuo;
-      else past.uscite += residuo;
-      past.dettagli.push(detail);
+    if (isBefore(dPianificata, startOfWeek(today, { weekStartsOn: 1 }))) {
+      addToBucket(weeksMap.get(pastLabel)!, residuo, dataPianificata);
       return;
     }
 
-    // data_pianificata futura → settimana corretta
-    const ws = startOfWeek(dScadenza, { weekStartsOn: 1 });
+    // Calcola importo effettivo da pianificare e eventuale resto
+    const importoSchedulato = (importoPianificato && importoPianificato > 0 && importoPianificato < residuo)
+      ? importoPianificato
+      : residuo;
+    const restoDaPianificare = residuo - importoSchedulato;
+
+    // Importo schedulato → settimana corretta
+    const ws = startOfWeek(dPianificata, { weekStartsOn: 1 });
     const we = endOfWeek(ws, { weekStartsOn: 1 });
     const label = `Dal ${format(ws, 'dd/MM')} al ${format(we, 'dd/MM')}`;
 
     if (weeksMap.has(label)) {
-      const current = weeksMap.get(label)!;
-      if (s.tipo === 'entrata') current.entrate += residuo;
-      else current.uscite += residuo;
-      current.dettagli.push(detail);
+      addToBucket(weeksMap.get(label)!, importoSchedulato, dataPianificata);
+    }
+
+    // Resto non pianificato → parcheggio
+    if (restoDaPianificare > 0) {
+      addToBucket(weeksMap.get(pastLabel)!, restoDaPianificare, s.data_scadenza);
     }
   });
 
@@ -3379,7 +3389,7 @@ export async function getCashflowProjectionPerConto(days = 90): Promise<Cashflow
   const { data: scadenze } = await supabase
     .from('scadenze_pagamento')
     .select(`
-      id, tipo, importo_totale, importo_pagato, data_scadenza, data_pianificata, stato,
+      id, tipo, importo_totale, importo_pagato, data_scadenza, data_pianificata, importo_pianificato, stato,
       fattura_riferimento, descrizione, categoria, fonte,
       anagrafica_soggetti:soggetto_id (ragione_sociale)
     `)

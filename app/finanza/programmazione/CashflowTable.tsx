@@ -2,7 +2,7 @@
 import { useState, useRef, Fragment, useTransition } from 'react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { ChevronRight, ChevronDown, PackageOpen, CalendarDays, Loader2 } from "lucide-react"
+import { ChevronRight, ChevronDown, PackageOpen, CalendarDays, Loader2, Pencil } from "lucide-react"
 import { CashflowWeek, CashflowDetailRow } from '@/utils/data-fetcher'
 import { riprogrammaScadenza } from '@/app/scadenze/actions'
 import { toast } from 'sonner'
@@ -12,15 +12,20 @@ interface CashflowTableProps {
   daPianificare: CashflowWeek | null
 }
 
-// ─── Riga dettaglio con click-to-edit date picker ───────────────────────────
+const formatEuro = (val: number) =>
+  new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val)
+
+// ─── Riga dettaglio con click-to-edit date + importo ───────────────────────────
 function DetailRow({ d, bgHover = 'hover:bg-white' }: { d: CashflowDetailRow; bgHover?: string }) {
   const [isPending, startTransition] = useTransition()
-  const [editing, setEditing] = useState(false)
+  const [editingDate, setEditingDate] = useState(false)
+  const [editingAmount, setEditingAmount] = useState(false)
   const [dateValue, setDateValue] = useState(d.data_effettiva.split('T')[0])
+  const [amountValue, setAmountValue] = useState(d.importo_residuo.toFixed(2))
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const commit = (newDate: string) => {
-    setEditing(false)
+  const commitDate = (newDate: string) => {
+    setEditingDate(false)
     if (!newDate || newDate === d.data_effettiva.split('T')[0]) return
     setDateValue(newDate)
     startTransition(async () => {
@@ -34,8 +39,33 @@ function DetailRow({ d, bgHover = 'hover:bg-white' }: { d: CashflowDetailRow; bg
     })
   }
 
-  const formatEuro = (val: number) =>
-    new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val)
+  const commitAmount = (rawVal: string) => {
+    setEditingAmount(false)
+    const parsed = parseFloat(rawVal.replace(',', '.'))
+    if (isNaN(parsed) || parsed <= 0) {
+      setAmountValue(d.importo_residuo.toFixed(2))
+      return
+    }
+    // Se l'importo inserito è uguale o superiore al residuo, usa null (intero residuo)
+    const importoParziale = parsed < d.importo_residuo ? parsed : null
+    const dateToUse = dateValue || d.data_effettiva.split('T')[0]
+
+    startTransition(async () => {
+      try {
+        await riprogrammaScadenza(d.id, dateToUse, importoParziale)
+        if (importoParziale) {
+          setAmountValue(importoParziale.toFixed(2))
+          toast.success(`${d.ragione_sociale} → pianificati ${formatEuro(importoParziale)}, resto in parcheggio`)
+        } else {
+          setAmountValue(d.importo_residuo.toFixed(2))
+          toast.success(`${d.ragione_sociale} → importo intero pianificato`)
+        }
+      } catch {
+        setAmountValue(d.importo_residuo.toFixed(2))
+        toast.error('Errore durante la riprogrammazione')
+      }
+    })
+  }
 
   return (
     <div className={`flex items-center justify-between py-1.5 px-3 rounded-lg ${bgHover} text-sm transition-opacity ${isPending ? 'opacity-40 pointer-events-none' : ''}`}>
@@ -48,24 +78,24 @@ function DetailRow({ d, bgHover = 'hover:bg-white' }: { d: CashflowDetailRow; bg
       </div>
       <div className="flex items-center gap-3">
         {/* Click-to-edit date */}
-        {editing ? (
+        {editingDate ? (
           <input
             ref={inputRef}
             type="date"
             value={dateValue}
             autoFocus
             onChange={e => setDateValue(e.target.value)}
-            onBlur={e => commit(e.target.value)}
+            onBlur={e => commitDate(e.target.value)}
             onKeyDown={e => {
-              if (e.key === 'Enter') commit(dateValue)
-              if (e.key === 'Escape') { setEditing(false); setDateValue(d.data_effettiva.split('T')[0]) }
+              if (e.key === 'Enter') commitDate(dateValue)
+              if (e.key === 'Escape') { setEditingDate(false); setDateValue(d.data_effettiva.split('T')[0]) }
             }}
             className="text-xs border border-blue-300 rounded px-1.5 py-0.5 bg-blue-50 text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-400"
           />
         ) : (
           <button
             type="button"
-            onClick={() => setEditing(true)}
+            onClick={() => setEditingDate(true)}
             title="Clicca per riprogrammare"
             className="flex items-center gap-1 group"
           >
@@ -78,9 +108,34 @@ function DetailRow({ d, bgHover = 'hover:bg-white' }: { d: CashflowDetailRow; bg
             </span>
           </button>
         )}
-        <span className={`font-mono font-bold ${d.tipo === 'entrata' ? 'text-emerald-600' : 'text-rose-600'}`}>
-          {formatEuro(d.importo_residuo)}
-        </span>
+
+        {/* Click-to-edit amount */}
+        {editingAmount ? (
+          <input
+            type="text"
+            value={amountValue}
+            autoFocus
+            onChange={e => setAmountValue(e.target.value)}
+            onBlur={e => commitAmount(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') commitAmount(amountValue)
+              if (e.key === 'Escape') { setEditingAmount(false); setAmountValue(d.importo_residuo.toFixed(2)) }
+            }}
+            className="w-28 text-right text-xs border border-blue-300 rounded px-1.5 py-0.5 bg-blue-50 text-blue-800 font-mono focus:outline-none focus:ring-2 focus:ring-blue-400"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditingAmount(true)}
+            title="Clicca per pianificare un importo parziale"
+            className="flex items-center gap-1 group"
+          >
+            <span className={`font-mono font-bold group-hover:underline ${d.tipo === 'entrata' ? 'text-emerald-600' : 'text-rose-600'}`}>
+              {formatEuro(d.importo_residuo)}
+            </span>
+            <Pencil size={11} className="text-zinc-300 group-hover:text-blue-500 transition-colors" />
+          </button>
+        )}
       </div>
     </div>
   )
@@ -90,9 +145,6 @@ function DetailRow({ d, bgHover = 'hover:bg-white' }: { d: CashflowDetailRow; bg
 export function CashflowTable({ weeks, daPianificare }: CashflowTableProps) {
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null)
   const [parkExpanded, setParkExpanded] = useState(false)
-
-  const formatEuro = (val: number) =>
-    new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val)
 
   return (
     <div className="space-y-4">

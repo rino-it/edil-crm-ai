@@ -115,10 +115,17 @@ export async function GET(request: Request) {
         }
 
         // 7gg
-        if (giorniMancanti <= 7 && giorniMancanti >= 0 && !scadenza.reminder_7gg_inviato) {
+        if (giorniMancanti <= 7 && giorniMancanti > 0 && !scadenza.reminder_7gg_inviato) {
           const msg = `🚨 *Cambiale URGENTE (7gg)*\n\nN. ${c.numero_titolo || "N/D"}\nEmittente: ${emittente}\nImporto: ${formatEuro(Number(c.importo))}\nScadenza: ${new Date(dataScad).toLocaleDateString("it-IT")}\n\n❗ Mancano solo ${giorniMancanti} giorni!`;
           await sendToSoci(msg);
           await supabase.from("scadenze_pagamento").update({ reminder_7gg_inviato: true }).eq("id", scadenza.id);
+          notificatiTotali++;
+        }
+
+        // SCADE OGGI
+        if (giorniMancanti === 0) {
+          const msg = `🔴 *Cambiale SCADE OGGI!*\n\nN. ${c.numero_titolo || "N/D"}\nEmittente: ${emittente}\nImporto: ${formatEuro(Number(c.importo))}\nScadenza: OGGI ${new Date(dataScad).toLocaleDateString("it-IT")}`;
+          await sendToSoci(msg);
           notificatiTotali++;
         }
       }
@@ -172,10 +179,17 @@ export async function GET(request: Request) {
         }
 
         // 7gg
-        if (giorniMancanti <= 7 && giorniMancanti >= 0 && !scadenza.reminder_7gg_inviato) {
+        if (giorniMancanti <= 7 && giorniMancanti > 0 && !scadenza.reminder_7gg_inviato) {
           const msg = `🚨 *Assegno URGENTE (7gg)*\n\nN. ${a.numero_titolo || "N/D"}\nEmittente: ${emittente}\nImporto: ${formatEuro(Number(a.importo))}\nScadenza: ${new Date(dataScad).toLocaleDateString("it-IT")}\n\n❗ Mancano solo ${giorniMancanti} giorni!`;
           await sendToSoci(msg);
           await supabase.from("scadenze_pagamento").update({ reminder_7gg_inviato: true }).eq("id", scadenza.id);
+          notificatiTotali++;
+        }
+
+        // SCADE OGGI
+        if (giorniMancanti === 0) {
+          const msg = `🔴 *Assegno SCADE OGGI!*\n\nN. ${a.numero_titolo || "N/D"}\nEmittente: ${emittente}\nImporto: ${formatEuro(Number(a.importo))}\nScadenza: OGGI ${new Date(dataScad).toLocaleDateString("it-IT")}`;
+          await sendToSoci(msg);
           notificatiTotali++;
         }
       }
@@ -223,10 +237,17 @@ export async function GET(request: Request) {
         }
 
         // 7gg
-        if (giorniMancanti <= 7 && giorniMancanti >= 0 && !scadenza.reminder_7gg_inviato) {
+        if (giorniMancanti <= 7 && giorniMancanti > 0 && !scadenza.reminder_7gg_inviato) {
           const msg = `🚨 *Rata Mutuo URGENTE (7gg)*\n\nRata ${r.numero_rata} — ${bancaLabel}${scopoLabel}\nImporto: ${formatEuro(Number(r.importo_rata))}\nScadenza: ${new Date(dataScad).toLocaleDateString("it-IT")}\n\n❗ Mancano solo ${giorniMancanti} giorni!`;
           await sendToSoci(msg);
           await supabase.from("scadenze_pagamento").update({ reminder_7gg_inviato: true }).eq("id", scadenza.id);
+          notificatiTotali++;
+        }
+
+        // SCADE OGGI
+        if (giorniMancanti === 0) {
+          const msg = `🔴 *Rata Mutuo SCADE OGGI!*\n\nRata ${r.numero_rata} — ${bancaLabel}${scopoLabel}\nImporto: ${formatEuro(Number(r.importo_rata))}\nScadenza: OGGI ${new Date(dataScad).toLocaleDateString("it-IT")}`;
+          await sendToSoci(msg);
           notificatiTotali++;
         }
       }
