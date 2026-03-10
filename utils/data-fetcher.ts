@@ -2163,7 +2163,7 @@ export async function confermaRiconciliazione(
     // ==========================================
     const { data: rataCollegata } = await supabase
       .from('rate_mutuo')
-      .select('id')
+      .select('id, importo_rata')
       .eq('scadenza_id', scadenza_id)
       .single();
 
@@ -2174,9 +2174,11 @@ export async function confermaRiconciliazione(
           stato: 'pagato',
           data_pagamento: new Date().toISOString().split('T')[0],
           movimento_banca_id: movimento_id,
+          importo_effettivo: Math.abs(importo_movimento),
         })
         .eq('id', rataCollegata.id);
-      console.log(`🏦 Rata mutuo ${rataCollegata.id} marcata come pagata`);
+      const delta = Math.abs(importo_movimento) - (rataCollegata.importo_rata || 0);
+      console.log(`🏦 Rata mutuo ${rataCollegata.id} pagata — preventivato: €${rataCollegata.importo_rata}, effettivo: €${Math.abs(importo_movimento)}, delta: €${delta.toFixed(2)}`);
     }
 
     // ==========================================
