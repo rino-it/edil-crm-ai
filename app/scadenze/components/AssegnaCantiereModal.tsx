@@ -6,33 +6,41 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
-import { Plus, Trash2, AlertCircle, SplitSquareVertical, MapPin } from "lucide-react"
-// La Server Action che creeremo nello Step 2.5
-import { salvaAssegnazioneCantiere } from '../actions' 
+import { Plus, Trash2, AlertCircle, SplitSquareVertical, MapPin, FileText, CalendarDays } from "lucide-react"
+import { salvaAssegnazioneCantiere } from '../actions'
 
 interface Cantiere {
   id: string;
-  codice: string;
-  titolo: string;
+  label: string;
 }
 
 interface AssegnaCantiereModalProps {
   scadenzaId: string;
   importoTotale: number;
+  importoResiduo: number;
   cantieri: Cantiere[];
   currentCantiereId?: string | null;
-  // Per il futuro supporto DDT
-  ddtSuggeriti?: { cantiere_id: string; ragione: string }[]; 
-  children?: React.ReactNode; // Permette di passare un bottone custom come trigger
+  // Dettagli fattura visibili nel modal
+  soggettoNome?: string;
+  fatturaRiferimento?: string | null;
+  dataScadenza?: string;
+  tipo?: 'entrata' | 'uscita';
+  fileUrl?: string | null;
+  children?: React.ReactNode;
 }
 
-export function AssegnaCantiereModal({ 
-  scadenzaId, 
-  importoTotale, 
-  cantieri, 
+export function AssegnaCantiereModal({
+  scadenzaId,
+  importoTotale,
+  importoResiduo,
+  cantieri,
   currentCantiereId,
-  ddtSuggeriti,
-  children 
+  soggettoNome,
+  fatturaRiferimento,
+  dataScadenza,
+  tipo,
+  fileUrl,
+  children
 }: AssegnaCantiereModalProps) {
   const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
@@ -45,16 +53,16 @@ export function AssegnaCantiereModal({
   const [singleCantiere, setSingleCantiere] = useState<string>(currentCantiereId || '')
   
   // Stato per la modalità Multiplo (array di oggetti)
+  const importoAllocabile = importoResiduo > 0 ? importoResiduo : importoTotale
   const [allocazioni, setAllocazioni] = useState<{ cantiere_id: string; importo: number }[]>([
-    { cantiere_id: '', importo: importoTotale } // Parte con una riga pari al totale
+    { cantiere_id: '', importo: importoAllocabile }
   ])
 
   const formatEuro = (val: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val)
 
   // Calcoli in tempo reale per la validazione
   const sommaAllocata = allocazioni.reduce((acc, curr) => acc + (Number(curr.importo) || 0), 0)
-  // Arrotondamento per evitare i classici bug dei float in Javascript (es. 0.1 + 0.2 = 0.300000004)
-  const residuo = Math.round((importoTotale - sommaAllocata) * 100) / 100
+  const residuo = Math.round((importoAllocabile - sommaAllocata) * 100) / 100
   
   const isMultiValid = allocazioni.every(a => a.cantiere_id !== '' && a.importo > 0) && residuo === 0
 
@@ -109,11 +117,46 @@ export function AssegnaCantiereModal({
         <DialogHeader>
           <DialogTitle className="text-xl">Assegnazione Cantiere</DialogTitle>
           <DialogDescription>
-            Associa questa scadenza da <strong className="text-zinc-900">{formatEuro(importoTotale)}</strong> a uno o più cantieri.
+            Associa questa fattura a uno o più cantieri.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="py-4 space-y-6">
+        {/* Riepilogo fattura */}
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-4 space-y-2">
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <div className="font-bold text-zinc-900 text-sm">{soggettoNome || 'Soggetto non specificato'}</div>
+              <div className="flex items-center gap-2 text-xs text-zinc-500">
+                {fatturaRiferimento && (
+                  <span className="font-mono bg-zinc-100 px-1.5 py-0.5 rounded border border-zinc-200">{fatturaRiferimento}</span>
+                )}
+                {dataScadenza && (
+                  <span className="flex items-center gap-1">
+                    <CalendarDays size={11} /> Scad. {new Date(dataScadenza).toLocaleDateString('it-IT')}
+                  </span>
+                )}
+                {tipo && (
+                  <Badge variant="outline" className={`text-[10px] ${tipo === 'entrata' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
+                    {tipo === 'entrata' ? 'ENTRATA' : 'USCITA'}
+                  </Badge>
+                )}
+              </div>
+            </div>
+            <div className="text-right space-y-0.5">
+              <div className="font-mono font-black text-zinc-900">{formatEuro(importoTotale)}</div>
+              {importoResiduo > 0 && importoResiduo < importoTotale && (
+                <div className="text-[10px] text-rose-600 font-mono">Residuo: {formatEuro(importoResiduo)}</div>
+              )}
+            </div>
+          </div>
+          {fileUrl && (
+            <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 hover:underline">
+              <FileText size={12} /> Apri fattura PDF
+            </a>
+          )}
+        </div>
+
+        <div className="py-2 space-y-6">
           {/* Selettore Modalità */}
           <div className="flex p-1 bg-zinc-100 rounded-lg">
             <button
@@ -141,7 +184,7 @@ export function AssegnaCantiereModal({
               >
                 <option value="">-- Nessun cantiere (Da Smistare) --</option>
                 {cantieri.map(c => (
-                  <option key={c.id} value={c.id}>{c.codice} - {c.titolo}</option>
+                  <option key={c.id} value={c.id}>{c.label}</option>
                 ))}
               </select>
             </div>
@@ -161,7 +204,7 @@ export function AssegnaCantiereModal({
                       >
                         <option value="">-- Seleziona Cantiere --</option>
                         {cantieri.map(c => (
-                          <option key={c.id} value={c.id}>{c.codice} - {c.titolo}</option>
+                          <option key={c.id} value={c.id}>{c.label}</option>
                         ))}
                       </select>
                     </div>
@@ -196,8 +239,8 @@ export function AssegnaCantiereModal({
               {/* Riquadro di validazione Totali */}
               <div className={`p-4 rounded-lg border ${residuo === 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}>
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm font-medium text-zinc-600">Totale Fattura:</span>
-                  <span className="font-mono font-bold">{formatEuro(importoTotale)}</span>
+                  <span className="text-sm font-medium text-zinc-600">Importo da allocare:</span>
+                  <span className="font-mono font-bold">{formatEuro(importoAllocabile)}</span>
                 </div>
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm font-medium text-zinc-600">Assegnato:</span>
@@ -218,16 +261,6 @@ export function AssegnaCantiereModal({
             </div>
           )}
 
-          {/* Alert DDT (Placeholder UI per future integrazioni) */}
-          {ddtSuggeriti && ddtSuggeriti.length > 0 && (
-            <div className="bg-amber-50 border border-amber-200 p-3 rounded-md text-xs text-amber-800 flex items-start gap-2">
-              <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
-              <div>
-                <strong>Suggerimento AI:</strong> Abbiamo rilevato DDT associati a questa fattura. 
-                Ti suggeriamo di assegnarla al cantiere {cantieri.find(c => c.id === ddtSuggeriti[0].cantiere_id)?.codice || 'selezionato'}.
-              </div>
-            </div>
-          )}
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">
