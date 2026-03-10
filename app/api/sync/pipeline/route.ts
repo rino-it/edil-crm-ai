@@ -61,12 +61,21 @@ function findPythonPath(projectRoot: string): string {
 }
 
 function findScriptsDir(projectRoot: string): string {
-  // Prima prova nella directory corrente
+  // 1. Env var esplicita (percorso assoluto configurato in .env.local)
+  if (process.env.SCRIPTS_DIR && fs.existsSync(process.env.SCRIPTS_DIR)) {
+    return process.env.SCRIPTS_DIR
+  }
+  // 2. scripts/ nella directory corrente
   const localScripts = path.join(projectRoot, 'scripts')
   if (fs.existsSync(localScripts)) {
     return localScripts
   }
-  return localScripts // fallback, lasciamo che l'errore venga gestito dopo
+  // 3. scripts/ nel repo principale (se siamo in un worktree)
+  const mainRepoScripts = path.resolve(projectRoot, '..', '..', 'scripts')
+  if (fs.existsSync(mainRepoScripts)) {
+    return mainRepoScripts
+  }
+  return localScripts // fallback, l'errore verrà mostrato sullo script specifico
 }
 
 export async function POST(request: Request) {
@@ -119,7 +128,7 @@ export async function POST(request: Request) {
           label: config.label,
           status: 'error',
           duration_ms: 0,
-          error: `Script non trovato: ${config.script}`,
+          error: `Script non trovato: ${config.script} (cercato in: ${scriptPath})`,
         })
         continue
       }

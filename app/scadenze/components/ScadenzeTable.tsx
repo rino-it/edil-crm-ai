@@ -204,7 +204,7 @@ export function ScadenzeTable({
                 <TableRow key={s.id} className="group hover:bg-zinc-50/50 transition-colors">
                   <TableCell className="font-bold text-zinc-900">
                     <div className="space-y-1">
-                      <div className="truncate max-w-[200px]">{s.anagrafica_soggetti?.ragione_sociale || 'N/D'}</div>
+                      <div className="truncate max-w-[200px]">{s.anagrafica_soggetti?.ragione_sociale || s.descrizione || 'N/D'}</div>
                       {(s.categoria || (s as any).auto_domiciliazione) && (
                         <div className="flex flex-wrap gap-1">
                           {s.categoria && (

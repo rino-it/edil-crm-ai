@@ -3004,7 +3004,7 @@ export async function getCashflowProjection(days = 90): Promise<CashflowProjecti
     .from('scadenze_pagamento')
     .select(`
       id, tipo, importo_totale, importo_pagato, data_scadenza, data_pianificata, stato,
-      fattura_riferimento,
+      fattura_riferimento, descrizione,
       anagrafica_soggetti:soggetto_id (ragione_sociale)
     `)
     .neq('stato', 'pagato')
@@ -3041,7 +3041,7 @@ export async function getCashflowProjection(days = 90): Promise<CashflowProjecti
     // Regola del parcheggio: senza data_pianificata esplicita → "Da Pianificare", sempre
     const detail: CashflowDetailRow = {
       id: (s as any).id,
-      ragione_sociale: (s as any).anagrafica_soggetti?.ragione_sociale || 'N/D',
+      ragione_sociale: (s as any).anagrafica_soggetti?.ragione_sociale || (s as any).descrizione || 'N/D',
       fattura_riferimento: s.fattura_riferimento ?? null,
       data_effettiva: dataPianificata || s.data_scadenza,
       importo_residuo: residuo,
@@ -3161,19 +3161,39 @@ export async function getCashflowProjectionPerConto(days = 90): Promise<Cashflow
 
   const contiAttivi = contiRaw || [];
 
-  // 2. Recupera scadenze aperte con conto_banca_id
+  // 2. Recupera scadenze aperte
   const endDate = addDays(new Date(), days).toISOString().split('T')[0];
   const { data: scadenze } = await supabase
     .from('scadenze_pagamento')
     .select(`
       id, tipo, importo_totale, importo_pagato, data_scadenza, data_pianificata, stato,
-      fattura_riferimento, conto_banca_id,
+      fattura_riferimento, descrizione, categoria, fonte,
       anagrafica_soggetti:soggetto_id (ragione_sociale)
     `)
     .neq('stato', 'pagato')
     .lte('data_scadenza', endDate);
 
   const safeScadenze = scadenze || [];
+
+  // 2b. Per le scadenze rata_mutuo, ricava il conto_banca_id dal mutuo collegato
+  const rataMutuoIds = safeScadenze
+    .filter((s: any) => s.categoria === 'rata_mutuo' && s.fonte === 'mutuo')
+    .map((s: any) => s.id);
+
+  const contoByScadenzaId = new Map<string, string>();
+
+  if (rataMutuoIds.length > 0) {
+    const { data: rateLinked } = await supabase
+      .from('rate_mutuo')
+      .select('scadenza_id, mutui!inner(conto_banca_id)')
+      .in('scadenza_id', rataMutuoIds);
+
+    (rateLinked || []).forEach((r: any) => {
+      if (r.scadenza_id && r.mutui?.conto_banca_id) {
+        contoByScadenzaId.set(r.scadenza_id, r.mutui.conto_banca_id);
+      }
+    });
+  }
 
   // 3. Helper: genera le settimane vuote
   const today = new Date();
@@ -3190,10 +3210,10 @@ export async function getCashflowProjectionPerConto(days = 90): Promise<Cashflow
     return map;
   };
 
-  // 4. Raggruppa le scadenze per conto_banca_id (null = non assegnate)
+  // 4. Raggruppa le scadenze per conto (rate_mutuo -> mutui -> conto_banca_id)
   const perContoMap = new Map<string | null, typeof safeScadenze>();
   safeScadenze.forEach(s => {
-    const contoId = (s as any).conto_banca_id as string | null;
+    const contoId = contoByScadenzaId.get((s as any).id) || null;
     if (!perContoMap.has(contoId)) perContoMap.set(contoId, []);
     perContoMap.get(contoId)!.push(s);
   });
@@ -3209,7 +3229,7 @@ export async function getCashflowProjectionPerConto(days = 90): Promise<Cashflow
       const dataEffettiva = dataPianificata || s.data_scadenza;
       const detail: CashflowDetailRow = {
         id: (s as any).id,
-        ragione_sociale: (s as any).anagrafica_soggetti?.ragione_sociale || 'N/D',
+        ragione_sociale: (s as any).anagrafica_soggetti?.ragione_sociale || (s as any).descrizione || 'N/D',
         fattura_riferimento: s.fattura_riferimento ?? null,
         data_effettiva: dataEffettiva,
         importo_residuo: residuo,
@@ -4105,7 +4125,6 @@ export async function sincronizzaScadenzeMutui(): Promise<number> {
       .eq('categoria', 'rata_mutuo')
       .eq('importo_totale', rata.importo_rata)
       .eq('data_scadenza', rata.data_scadenza)
-      .eq('conto_banca_id', mutuo.conto_banca_id)
       .neq('stato', 'pagato')
       .limit(1)
       .maybeSingle();
@@ -4135,7 +4154,6 @@ export async function sincronizzaScadenzeMutui(): Promise<number> {
         soggetto_id: mutuo.soggetto_id || null,
         fonte: 'mutuo',
         auto_domiciliazione: true,
-        conto_banca_id: mutuo.conto_banca_id,
       })
       .select('id')
       .single();
