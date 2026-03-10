@@ -1592,13 +1592,30 @@ export function parseXLSBanca(buffer: ArrayBuffer): Array<{ data_operazione: str
 
   // ── Helpers ────────────────────────────────────────────────
   function parseDate(cell: unknown): string {
-    if (cell instanceof Date) return cell.toISOString().substring(0, 10)
+    if (cell instanceof Date) {
+      // Usa getFullYear/Month/Date locale per evitare shift UTC
+      const y = cell.getFullYear()
+      const m = String(cell.getMonth() + 1).padStart(2, '0')
+      const d = String(cell.getDate()).padStart(2, '0')
+      if (y > 1990 && y < 2100) return `${y}-${m}-${d}`
+      return ''
+    }
+    if (typeof cell === 'number') {
+      // Excel serial date number — convert via xlsx if possible
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const XLSX = require('xlsx')
+        const dt = XLSX.SSF.parse_date_code(cell)
+        if (dt && dt.y > 1990) return `${dt.y}-${String(dt.m).padStart(2,'0')}-${String(dt.d).padStart(2,'0')}`
+      } catch { /* ignore */ }
+      return ''
+    }
     const s = String(cell || '').trim()
     // dd/mm/yyyy or dd.mm.yyyy or dd-mm-yyyy
-    const m = s.match(/^(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{2,4})$/)
-    if (m) {
-      const y = m[3].length === 2 ? '20' + m[3] : m[3]
-      return `${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`
+    const match = s.match(/^(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{2,4})$/)
+    if (match) {
+      const y = match[3].length === 2 ? '20' + match[3] : match[3]
+      return `${y}-${match[2].padStart(2,'0')}-${match[1].padStart(2,'0')}`
     }
     // yyyy-mm-dd
     if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10)
@@ -1707,6 +1724,15 @@ export function parseXLSBanca(buffer: ArrayBuffer): Array<{ data_operazione: str
   }
 
   // ── Phase 3: parsing righe dati ────────────────────────────
+  // Debug: log prime 5 righe dati con tipo e valore di ogni cella
+  console.log(`XLS: debug prime righe dati (da riga ${headerRowIdx + 1}):`)
+  for (let di = headerRowIdx + 1; di < Math.min(headerRowIdx + 6, rows.length); di++) {
+    const r = rows[di] as unknown[]
+    if (!r) continue
+    const cells = r.map((c, ci) => `col${ci}=[${typeof c}]${JSON.stringify(c)}`).join(' | ')
+    console.log(`  riga[${di}]: ${cells}`)
+  }
+
   for (let ri = headerRowIdx + 1; ri < rows.length; ri++) {
     const row = rows[ri] as unknown[]
     if (!row || row.every(c => c === '' || c === null || c === undefined)) continue
