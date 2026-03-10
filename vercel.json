@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/cron/pagamenti-domani",
-      "schedule": "0 14 * * *"
+      "schedule": "0 15 * * *"
     }
   ]
 }
