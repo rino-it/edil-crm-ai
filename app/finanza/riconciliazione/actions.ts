@@ -276,7 +276,13 @@ export async function importaEstrattoConto(formData: FormData) {
     let movimenti: any[] = [];
     if (fileName.endsWith('.xml')) {
       const text = await file.text();
-      movimenti = parseXMLBanca(text);
+      // SpreadsheetML XML (BPER esporta Excel con estensione .xml)
+      if (text.includes('schemas-microsoft-com:office:spreadsheet') || text.includes('progid="Excel.Sheet"')) {
+        const buffer = new TextEncoder().encode(text).buffer;
+        movimenti = parseXLSBanca(buffer);
+      } else {
+        movimenti = parseXMLBanca(text);
+      }
     } else if (fileName.endsWith('.csv')) {
       const text = await file.text();
       movimenti = parseCSVBanca(text);

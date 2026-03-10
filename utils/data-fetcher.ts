@@ -1611,6 +1611,13 @@ export function parseXLSBanca(buffer: ArrayBuffer): Array<{ data_operazione: str
       return ''
     }
     const s = String(cell || '').trim()
+    // Italian text date: "09 marzo 2026"
+    const MESI: Record<string, string> = {
+      gennaio:'01', febbraio:'02', marzo:'03', aprile:'04', maggio:'05', giugno:'06',
+      luglio:'07', agosto:'08', settembre:'09', ottobre:'10', novembre:'11', dicembre:'12'
+    }
+    const mIta = s.match(/^(\d{1,2})\s+(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\s+(\d{4})$/i)
+    if (mIta) return `${mIta[3]}-${MESI[mIta[2].toLowerCase()]}-${mIta[1].padStart(2,'0')}`
     // dd/mm/yyyy or dd.mm.yyyy or dd-mm-yyyy
     const match = s.match(/^(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{2,4})$/)
     if (match) {
@@ -1657,11 +1664,12 @@ export function parseXLSBanca(buffer: ArrayBuffer): Array<{ data_operazione: str
     const cells = (rows[ri] as unknown[]).map(c => String(c || '').toLowerCase().trim())
     let tmpData = -1, tmpDesc = -1, tmpImp = -1, tmpDare = -1, tmpAvere = -1
     cells.forEach((cell, ci) => {
-      if (KW_DATE.some(k => cell === k || cell.startsWith(k)))  tmpData  = ci
-      if (KW_DESC.some(k => cell === k || cell.includes(k)))    tmpDesc  = ci
-      if (KW_IMP.some(k => cell === k))                         tmpImp   = ci
-      if (KW_DARE.some(k => cell === k || cell.startsWith(k)))  tmpDare  = ci
-      if (KW_AVERE.some(k => cell === k || cell.startsWith(k))) tmpAvere = ci
+      // Prendi la PRIMA colonna che matcha (BPER ha "Data operazione" + "Data valuta", serve la prima)
+      if (tmpData  < 0 && KW_DATE.some(k => cell === k || cell.startsWith(k)))  tmpData  = ci
+      if (tmpDesc  < 0 && KW_DESC.some(k => cell === k || cell.includes(k)))    tmpDesc  = ci
+      if (tmpImp   < 0 && KW_IMP.some(k => cell === k))                         tmpImp   = ci
+      if (tmpDare  < 0 && KW_DARE.some(k => cell === k || cell.startsWith(k)))  tmpDare  = ci
+      if (tmpAvere < 0 && KW_AVERE.some(k => cell === k || cell.startsWith(k))) tmpAvere = ci
     })
     const matches = [tmpData, tmpDesc, tmpImp, tmpDare, tmpAvere].filter(x => x >= 0).length
     if (tmpData >= 0 && matches >= 2) {
@@ -1746,7 +1754,11 @@ export function parseXLSBanca(buffer: ArrayBuffer): Array<{ data_operazione: str
     } else if (colDare >= 0 || colAvere >= 0) {
       const dare  = colDare  >= 0 ? (parseAmount(row[colDare])  || 0) : 0
       const avere = colAvere >= 0 ? (parseAmount(row[colAvere]) || 0) : 0
-      if (dare !== 0 || avere !== 0) importo = avere - dare
+      if (dare !== 0 || avere !== 0) {
+        // BPER: Entrate/Uscite con segno già applicato (uscite negative) → somma diretta
+        // Standard: Dare/Avere entrambi positivi → avere - dare
+        importo = (dare < 0 || avere < 0) ? (avere + dare) : (avere - dare)
+      }
     }
     if (isNaN(importo) || importo === 0) continue
 
