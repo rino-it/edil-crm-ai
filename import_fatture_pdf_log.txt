@@ -2813,3 +2813,391 @@
 [2026-03-07 17:54:49]   - Fatt.Acq._N.PJ11119355_del_15-02-2026_z1hvlvl0q4.pdf → fatt='PJ11119355' del 2026-02-15
 [2026-03-07 17:54:49] ============================================================
 
+[2026-03-10 14:36:11] ============================================================
+[2026-03-10 14:36:11] 📄 IMPORT FATTURE PDF → Supabase Storage + Associazione Scadenze
+[2026-03-10 14:36:11] Sorgente PDF: \\192.168.1.231\scambio\AMMINISTRAZIONE\Clienti e Fornitori\2025\contabilità\Archivio_pdf
+[2026-03-10 14:36:11] Sorgente XML: \\192.168.1.231\scambio\AMMINISTRAZIONE\Clienti e Fornitori\2025\contabilità\Archivio_Fatto
+[2026-03-10 14:36:11] Bucket: fatture-pdf
+[2026-03-10 14:36:11] ============================================================
+[2026-03-10 14:36:11] 🔧 Costruzione indice XML...
+[2026-03-10 14:36:11]    683 XML indicizzati
+[2026-03-10 14:36:11] 📁 Trovati 62 file PDF
+[2026-03-10 14:36:11] 
+📄 237_del_02-02-2026_ovemzvg68d.pdf
+[2026-03-10 14:36:11]   🔍 XML → Numero: 'FR A26\\237', PIVA: 02046570426_e3FLg, data: 2026-02-02
+[2026-03-10 14:36:12]   ☁️ Caricato su Storage
+[2026-03-10 14:36:13]   ℹ️ Nessuna scadenza trovata per fatt='FR A26\\237' del 2026-02-02
+[2026-03-10 14:36:13] 
+📄 Fatt.Acq._N.0000000000566185_del_30-01-2026_mnyktvwqte.pdf
+[2026-03-10 14:36:13]   🔍 XML → Numero: '0000000000566185', PIVA: 0526289001426030_6GHUU, data: 2026-01-30
+[2026-03-10 14:36:13]   ☁️ Caricato su Storage
+[2026-03-10 14:36:13]   ℹ️ Nessuna scadenza trovata per fatt='0000000000566185' del 2026-01-30
+[2026-03-10 14:36:13] 
+📄 Fatt.Acq._N.0000000003118235_del_28-02-2026_fc2b6vbvn9.pdf
+[2026-03-10 14:36:13]   🔍 XML → Numero: '0000000003118235', PIVA: 0526289001426059_CKTDE, data: 2026-02-28
+[2026-03-10 14:36:14]   ☁️ Caricato su Storage
+[2026-03-10 14:36:14]   ℹ️ Nessuna scadenza trovata per fatt='0000000003118235' del 2026-02-28
+[2026-03-10 14:36:14] 
+📄 Fatt.Acq._N.000000000400571D_del_30-01-2026_ojl6nv0wtu.pdf
+[2026-03-10 14:36:14]   🔍 XML → Numero: '000000000400571D', PIVA: 0526289001426030_5UUP5, data: 2026-01-30
+[2026-03-10 14:36:14]   ☁️ Caricato su Storage
+[2026-03-10 14:36:14]   ℹ️ Nessuna scadenza trovata per fatt='000000000400571D' del 2026-01-30
+[2026-03-10 14:36:14] 
+📄 Fatt.Acq._N.000000001341919D_del_28-02-2026_x3ep1vqf38.pdf
+[2026-03-10 14:36:14]   🔍 XML → Numero: '000000001341919D', PIVA: 0526289001426059_C93ES, data: 2026-02-28
+[2026-03-10 14:36:15]   ☁️ Caricato su Storage
+[2026-03-10 14:36:15]   ℹ️ Nessuna scadenza trovata per fatt='000000001341919D' del 2026-02-28
+[2026-03-10 14:36:15] 
+📄 Fatt.Acq._N.000000050296377T_del_30-01-2026_xgy5qvnrsd.pdf
+[2026-03-10 14:36:15]   🔍 XML → Numero: '000000050296377T', PIVA: 0526289001426030_6LQGH, data: 2026-01-30
+[2026-03-10 14:36:15]   ☁️ Caricato su Storage
+[2026-03-10 14:36:15]   ℹ️ Nessuna scadenza trovata per fatt='000000050296377T' del 2026-01-30
+[2026-03-10 14:36:15] 
+📄 Fatt.Acq._N.000000052912921T_del_28-02-2026_pkr3rvdr1f.pdf
+[2026-03-10 14:36:16]   🔍 XML → Numero: '000000052912921T', PIVA: 0526289001426059_CIO14, data: 2026-02-28
+[2026-03-10 14:36:16]   ☁️ Caricato su Storage
+[2026-03-10 14:36:16]   ℹ️ Nessuna scadenza trovata per fatt='000000052912921T' del 2026-02-28
+[2026-03-10 14:36:16] 
+📄 Fatt.Acq._N.000000108002430P_del_30-01-2026_fupx4vf57v.pdf
+[2026-03-10 14:36:16]   🔍 XML → Numero: '000000108002430P', PIVA: 0526289001426030_6GHV5, data: 2026-01-30
+[2026-03-10 14:36:16]   ☁️ Caricato su Storage
+[2026-03-10 14:36:17]   ℹ️ Nessuna scadenza trovata per fatt='000000108002430P' del 2026-01-30
+[2026-03-10 14:36:17] 
+📄 Fatt.Acq._N.000000108005867P_del_28-02-2026_kxg1wviixe.pdf
+[2026-03-10 14:36:17]   🔍 XML → Numero: '000000108005867P', PIVA: 0526289001426059_CKTDF, data: 2026-02-28
+[2026-03-10 14:36:17]   ☁️ Caricato su Storage
+[2026-03-10 14:36:17]   ℹ️ Nessuna scadenza trovata per fatt='000000108005867P' del 2026-02-28
+[2026-03-10 14:36:17] 
+📄 Fatt.Acq._N.01S620262800004186_del_15-01-2026_r2qyrvnau8.pdf
+[2026-03-10 14:36:17]   🔍 XML → Numero: '01S620262800004186', PIVA: 03632460485_F2HU3, data: 2026-01-15
+[2026-03-10 14:36:17]   ☁️ Caricato su Storage
+[2026-03-10 14:36:18]   ℹ️ Nessuna scadenza trovata per fatt='01S620262800004186' del 2026-01-15
+[2026-03-10 14:36:18] 
+📄 Fatt.Acq._N.05387-4160115806-76_del_05-01-2026_t940nv5emk.pdf
+[2026-03-10 14:36:18]   🔍 XML → Numero: '05387-4160115806-76', PIVA: 03830780361_CEDI9, data: 2026-01-05
+[2026-03-10 14:36:18]   ☁️ Caricato su Storage
+[2026-03-10 14:36:18]   ℹ️ Nessuna scadenza trovata per fatt='05387-4160115806-76' del 2026-01-05
+[2026-03-10 14:36:18] 
+📄 Fatt.Acq._N.05387-4160271898-76_del_03-02-2026_bs9qtvas6m.pdf
+[2026-03-10 14:36:18]   🔍 XML → Numero: '05387-4160271898-76', PIVA: 03830780361_CJC73, data: 2026-02-03
+[2026-03-10 14:36:18]   ☁️ Caricato su Storage
+[2026-03-10 14:36:19]   ℹ️ Nessuna scadenza trovata per fatt='05387-4160271898-76' del 2026-02-03
+[2026-03-10 14:36:19] 
+📄 Fatt.Acq._N.084530266900038_del_30-01-2026_vlj2yvoye9.pdf
+[2026-03-10 14:36:19]   🔍 XML → Numero: '084530266900038', PIVA: 01132850155_05hYF, data: 2026-01-30
+[2026-03-10 14:36:19]   ☁️ Caricato su Storage
+[2026-03-10 14:36:19]   ℹ️ Nessuna scadenza trovata per fatt='084530266900038' del 2026-01-30
+[2026-03-10 14:36:19] 
+📄 Fatt.Acq._N.084530266900384_del_27-02-2026_urvahvfogr.pdf
+[2026-03-10 14:36:19]   🔍 XML → Numero: '084530266900384', PIVA: 01132850155_05isw, data: 2026-02-27
+[2026-03-10 14:36:19]   ☁️ Caricato su Storage
+[2026-03-10 14:36:20]   ℹ️ Nessuna scadenza trovata per fatt='084530266900384' del 2026-02-27
+[2026-03-10 14:36:20] 
+📄 Fatt.Acq._N.17_1036_del_21-01-2026_dnr1qvqegc.pdf
+[2026-03-10 14:36:20]   🔍 XML → Numero: '17/1036', PIVA: 00876120213_0IPSQ, data: 2026-01-21
+[2026-03-10 14:36:20]   ☁️ Caricato su Storage
+[2026-03-10 14:36:20]   ℹ️ Nessuna scadenza trovata per fatt='17/1036' del 2026-01-21
+[2026-03-10 14:36:20] 
+📄 Fatt.Acq._N.19_del_16-01-2026_hflfbv8azv.pdf
+[2026-03-10 14:36:20]   🔍 XML → Numero: '19', PIVA: None, data: 2026-01-16
+[2026-03-10 14:36:20]   ☁️ Caricato su Storage
+[2026-03-10 14:36:20]   ℹ️ Nessuna scadenza trovata per fatt='19' del 2026-01-16
+[2026-03-10 14:36:20] 
+📄 Fatt.Acq._N.1A_del_27-01-2026_uzw00vl46t.pdf
+[2026-03-10 14:36:20]   🔍 XML → Numero: '1A', PIVA: 00811260165_00B8E, data: 2026-01-27
+[2026-03-10 14:36:21]   ☁️ Caricato su Storage
+[2026-03-10 14:36:21]   ℹ️ Nessuna scadenza trovata per fatt='1A' del 2026-01-27
+[2026-03-10 14:36:21] 
+📄 Fatt.Acq._N.2001_260030378_del_28-02-2026_zknvjvqrsw.pdf
+[2026-03-10 14:36:21]   🔍 XML → Numero: '2001/260030378', PIVA: 01394200362_9BsAU, data: 2026-02-28
+[2026-03-10 14:36:21]   ☁️ Caricato su Storage
+[2026-03-10 14:36:21]   ℹ️ Nessuna scadenza trovata per fatt='2001/260030378' del 2026-02-28
+[2026-03-10 14:36:21] 
+📄 Fatt.Acq._N.2026_V9_2600497_del_12-01-2026_omm36vr95h.pdf
+[2026-03-10 14:36:21]   🔍 XML → Numero: '2026/V9/2600497', PIVA: 11036210158_I6D6M, data: 2026-01-12
+[2026-03-10 14:36:22]   ☁️ Caricato su Storage
+[2026-03-10 14:36:22]   ℹ️ Nessuna scadenza trovata per fatt='2026/V9/2600497' del 2026-01-12
+[2026-03-10 14:36:22] 
+📄 Fatt.Acq._N.2601C240477_del_01-01-2026_xp5fyvg2ky.pdf
+[2026-03-10 14:36:22]   🔍 XML → Numero: '2601C240477', PIVA: 12454611000, data: 2026-01-01
+[2026-03-10 14:36:22]   ☁️ Caricato su Storage
+[2026-03-10 14:36:22]   ✅ Match numero+data → scadenza 9749326b-5b57-45aa-85d1-c28b73674896 (fatt: 2601C240477)
+[2026-03-10 14:36:22] 
+📄 Fatt.Acq._N.2601C297540_del_01-01-2026_dcw62vgd1t.pdf
+[2026-03-10 14:36:22]   🔍 XML → Numero: '2601C297540', PIVA: 12454611000_ERGMK, data: 2026-01-01
+[2026-03-10 14:36:23]   ☁️ Caricato su Storage
+[2026-03-10 14:36:23]   ℹ️ Nessuna scadenza trovata per fatt='2601C297540' del 2026-01-01
+[2026-03-10 14:36:23] 
+📄 Fatt.Acq._N.2601C376531_del_01-01-2026_slt1dvp6ru.pdf
+[2026-03-10 14:36:23]   🔍 XML → Numero: '2601C376531', PIVA: 12454611000_ETXPR, data: 2026-01-01
+[2026-03-10 14:36:23]   ☁️ Caricato su Storage
+[2026-03-10 14:36:23]   ℹ️ Nessuna scadenza trovata per fatt='2601C376531' del 2026-01-01
+[2026-03-10 14:36:23] 
+📄 Fatt.Acq._N.2602C204472_del_01-02-2026_cosnfvnen6.pdf
+[2026-03-10 14:36:23]   🔍 XML → Numero: '2602C204472', PIVA: 12454611000_F1EUZ, data: 2026-02-01
+[2026-03-10 14:36:24]   ☁️ Caricato su Storage
+[2026-03-10 14:36:25]   ℹ️ Nessuna scadenza trovata per fatt='2602C204472' del 2026-02-01
+[2026-03-10 14:36:25] 
+📄 Fatt.Acq._N.2602C311691_del_01-02-2026_g7r8jvqps5.pdf
+[2026-03-10 14:36:25]   🔍 XML → Numero: '2602C311691', PIVA: 12454611000_F3FCL, data: 2026-02-01
+[2026-03-10 14:36:25]   ☁️ Caricato su Storage
+[2026-03-10 14:36:25]   ℹ️ Nessuna scadenza trovata per fatt='2602C311691' del 2026-02-01
+[2026-03-10 14:36:25] 
+📄 Fatt.Acq._N.2602C346768_del_01-02-2026_zrb6xv7osj.pdf
+[2026-03-10 14:36:25]   🔍 XML → Numero: '2602C346768', PIVA: 12454611000_F4E58, data: 2026-02-01
+[2026-03-10 14:36:26]   ☁️ Caricato su Storage
+[2026-03-10 14:36:26]   ℹ️ Nessuna scadenza trovata per fatt='2602C346768' del 2026-02-01
+[2026-03-10 14:36:26] 
+📄 Fatt.Acq._N.2603C0247564_del_01-03-2026_eq6yjv9o70.pdf
+[2026-03-10 14:36:26]   🔍 XML → Numero: '2603C0247564', PIVA: 12454611000_FEJT1, data: 2026-03-01
+[2026-03-10 14:36:26]   ☁️ Caricato su Storage
+[2026-03-10 14:36:27]   ℹ️ Nessuna scadenza trovata per fatt='2603C0247564' del 2026-03-01
+[2026-03-10 14:36:27] 
+📄 Fatt.Acq._N.2603C0302315_del_01-03-2026_fccocvdvbr.pdf
+[2026-03-10 14:36:27]   🔍 XML → Numero: '2603C0302315', PIVA: 12454611000_FD5VH, data: 2026-03-01
+[2026-03-10 14:36:27]   ☁️ Caricato su Storage
+[2026-03-10 14:36:27]   ℹ️ Nessuna scadenza trovata per fatt='2603C0302315' del 2026-03-01
+[2026-03-10 14:36:27] 
+📄 Fatt.Acq._N.2603C0325307_del_01-03-2026_zi7jpvwchm.pdf
+[2026-03-10 14:36:27]   🔍 XML → Numero: '2603C0325307', PIVA: 12454611000_FFS76, data: 2026-03-01
+[2026-03-10 14:36:27]   ☁️ Caricato su Storage
+[2026-03-10 14:36:28]   ℹ️ Nessuna scadenza trovata per fatt='2603C0325307' del 2026-03-01
+[2026-03-10 14:36:28] 
+📄 Fatt.Acq._N.26OT0076848_del_19-02-2026_hcw0pvjkxh.pdf
+[2026-03-10 14:36:28]   🔍 XML → Numero: '26OT0076848', PIVA: 12454611000_F7MWF, data: 2026-02-19
+[2026-03-10 14:36:28]   ☁️ Caricato su Storage
+[2026-03-10 14:36:28]   ℹ️ Nessuna scadenza trovata per fatt='26OT0076848' del 2026-02-19
+[2026-03-10 14:36:28] 
+📄 Fatt.Acq._N.26OT0086441_del_25-02-2026_nkrpdvvbda.pdf
+[2026-03-10 14:36:28]   🔍 XML → Numero: '26OT0086441', PIVA: 12454611000_FHHG9, data: 2026-02-25
+[2026-03-10 14:36:29]   ☁️ Caricato su Storage
+[2026-03-10 14:36:29]   ℹ️ Nessuna scadenza trovata per fatt='26OT0086441' del 2026-02-25
+[2026-03-10 14:36:29] 
+📄 Fatt.Acq._N.26VI000695_del_24-02-2026_hhjjkvj3sg.pdf
+[2026-03-10 14:36:29]   🔍 XML → Numero: '26VI000695', PIVA: 03301640482_ZO576, data: 2026-02-24
+[2026-03-10 14:36:29]   ☁️ Caricato su Storage
+[2026-03-10 14:36:29]   ✅ Match numero+data → scadenza dcf68535-0c1f-5e80-9a56-8f943401ca6f (fatt: 26VI000695)
+[2026-03-10 14:36:29] 
+📄 Fatt.Acq._N.283_del_26-02-2026_x6z6pvk2o2.pdf
+[2026-03-10 14:36:30]   🔍 XML → Numero: '283', PIVA: 03693190161_PP8B5, data: 2026-02-26
+[2026-03-10 14:36:30]   ☁️ Caricato su Storage
+[2026-03-10 14:36:30]   ✅ Match numero+data → scadenza 4dc810a0-7af6-5972-ab84-2647b1cd0783 (fatt: 283)
+[2026-03-10 14:36:30] 
+📄 Fatt.Acq._N.2_001_del_02-02-2026_fn305v09lx.pdf
+[2026-03-10 14:36:30]   🔍 XML → Numero: '2/001', PIVA: 04146670163_HV857, data: 2026-02-02
+[2026-03-10 14:36:30]   ☁️ Caricato su Storage
+[2026-03-10 14:36:30]   ℹ️ Nessuna scadenza trovata per fatt='2/001' del 2026-02-02
+[2026-03-10 14:36:30] 
+📄 Fatt.Acq._N.2_del_09-02-2026_m1gi2vme5c.pdf
+[2026-03-10 14:36:30]   🔍 XML → Numero: '2', PIVA: 01799920168_00B5E, data: 2026-02-09
+[2026-03-10 14:36:31]   ☁️ Caricato su Storage
+[2026-03-10 14:36:31]   ℹ️ Nessuna scadenza trovata per fatt='2' del 2026-02-09
+[2026-03-10 14:36:31] 
+📄 Fatt.Acq._N.323_del_02-02-2026_kezkfv28gm.pdf
+[2026-03-10 14:36:31]   🔍 XML → Numero: '323', PIVA: 01558670780_Q4XEI, data: 2026-02-02
+[2026-03-10 14:36:33]   ☁️ Caricato su Storage
+[2026-03-10 14:36:33]   ℹ️ Nessuna scadenza trovata per fatt='323' del 2026-02-02
+[2026-03-10 14:36:33] 
+📄 Fatt.Acq._N.327_00_del_12-02-2026_n1pilvx7ry.pdf
+[2026-03-10 14:36:33]   🔍 XML → Numero: '327/00', PIVA: 0200275048300000_VLHTE, data: 2026-02-12
+[2026-03-10 14:36:33]   ☁️ Caricato su Storage
+[2026-03-10 14:36:34]   ℹ️ Nessuna scadenza trovata per fatt='327/00' del 2026-02-12
+[2026-03-10 14:36:34] 
+📄 Fatt.Acq._N.37A_del_16-01-2026_j3hs0v1r59.pdf
+[2026-03-10 14:36:34]   🔍 XML → Numero: '37A', PIVA: 08435150969_03sVi, data: 2026-01-16
+[2026-03-10 14:36:34]   ☁️ Caricato su Storage
+[2026-03-10 14:36:34]   ℹ️ Nessuna scadenza trovata per fatt='37A' del 2026-01-16
+[2026-03-10 14:36:34] 
+📄 Fatt.Acq._N.3_26_del_23-02-2026_df3w9vt385.pdf
+[2026-03-10 14:36:34]   🔍 XML → Numero: '3/26', PIVA: 016417907022026z_01QPR, data: 2026-02-23
+[2026-03-10 14:36:34]   ☁️ Caricato su Storage
+[2026-03-10 14:36:35]   ✅ Match numero+data → scadenza f17e1277-caea-5d6c-bc58-da65e2722f88 (fatt: 3/26)
+[2026-03-10 14:36:35] 
+📄 Fatt.Acq._N.3_del_26-01-2026_fcylivz66j.pdf
+[2026-03-10 14:36:35]   🔍 XML → Numero: '3', PIVA: 10209790152_LnXcA, data: 2026-01-26
+[2026-03-10 14:36:35]   ☁️ Caricato su Storage
+[2026-03-10 14:36:35]   ℹ️ Nessuna scadenza trovata per fatt='3' del 2026-01-26
+[2026-03-10 14:36:35] 
+📄 Fatt.Acq._N.558616_del_02-03-2026_qm3qov9dqx.pdf
+[2026-03-10 14:36:35]   🔍 XML → Numero: '558616', PIVA: 06888411003_IUHM9, data: 2026-03-02
+[2026-03-10 14:36:35]   ☁️ Caricato su Storage
+[2026-03-10 14:36:36]   ℹ️ Nessuna scadenza trovata per fatt='558616' del 2026-03-02
+[2026-03-10 14:36:36] 
+📄 Fatt.Acq._N.558617_del_02-03-2026_ndj85vde0k.pdf
+[2026-03-10 14:36:36]   🔍 XML → Numero: '558617', PIVA: 06888411003_IUHKB, data: 2026-03-02
+[2026-03-10 14:36:36]   ☁️ Caricato su Storage
+[2026-03-10 14:36:36]   ℹ️ Nessuna scadenza trovata per fatt='558617' del 2026-03-02
+[2026-03-10 14:36:36] 
+📄 Fatt.Acq._N.5_2026_del_30-01-2026_gtklyvwaza.pdf
+[2026-03-10 14:36:36]   🔍 XML → Numero: '5/2026', PIVA: 016417907022026N_01lTh, data: 2026-01-30
+[2026-03-10 14:36:36]   ☁️ Caricato su Storage
+[2026-03-10 14:36:37]   ℹ️ Nessuna scadenza trovata per fatt='5/2026' del 2026-01-30
+[2026-03-10 14:36:37] 
+📄 Fatt.Acq._N.6_001_del_20-01-2026_evj6evnxh6.pdf
+[2026-03-10 14:36:37]   🔍 XML → Numero: '6/001', PIVA: 03823990167_HVABD, data: 2026-01-20
+[2026-03-10 14:36:37]   ☁️ Caricato su Storage
+[2026-03-10 14:36:37]   ✅ Match numero+data → scadenza 2cfff3a2-874f-4d5b-9a40-bc1ddeda4a5a (fatt: 6/001)
+[2026-03-10 14:36:37] 
+📄 Fatt.Acq._N.7X00223172_del_13-01-2026_o99pcvchp1.pdf
+[2026-03-10 14:36:37]   🔍 XML → Numero: '7X00223172', PIVA: 00488410010_qxKzb, data: 2026-01-13
+[2026-03-10 14:36:37]   ☁️ Caricato su Storage
+[2026-03-10 14:36:38]   ℹ️ Nessuna scadenza trovata per fatt='7X00223172' del 2026-01-13
+[2026-03-10 14:36:38] 
+📄 Fatt.Acq._N.7X00701923_del_11-02-2026_xdejrv1gvr.pdf
+[2026-03-10 14:36:38]   🔍 XML → Numero: '7X00701923', PIVA: 00488410010_rUXUS, data: 2026-02-11
+[2026-03-10 14:36:38]   ☁️ Caricato su Storage
+[2026-03-10 14:36:39]   ℹ️ Nessuna scadenza trovata per fatt='7X00701923' del 2026-02-11
+[2026-03-10 14:36:39] 
+📄 Fatt.Acq._N.8_del_02-02-2026_on3b3vra1a.pdf
+[2026-03-10 14:36:39]   🔍 XML → Numero: '8', PIVA: 016417907022026O_010Yu, data: 2026-02-02
+[2026-03-10 14:36:39]   ☁️ Caricato su Storage
+[2026-03-10 14:36:40]   ℹ️ Nessuna scadenza trovata per fatt='8' del 2026-02-02
+[2026-03-10 14:36:40] 
+📄 Fatt.Acq._N.8_del_26-02-2026_cwmufv7z8c.pdf
+[2026-03-10 14:36:40]   🔍 XML → Numero: '8', PIVA: 016417907022026n_01TPx, data: 2026-02-26
+[2026-03-10 14:36:40]   ☁️ Caricato su Storage
+[2026-03-10 14:36:40]   ✅ Match numero+data → scadenza e5ccef84-7023-52e5-9750-0bbf743314d6 (fatt: 8)
+[2026-03-10 14:36:40] 
+📄 Fatt.Acq._N.8B00011070_del_13-01-2026_ho9gkv8ccy.pdf
+[2026-03-10 14:36:40]   🔍 XML → Numero: '8B00011070', PIVA: 00488410010_r06cq, data: 2026-01-13
+[2026-03-10 14:36:41]   ☁️ Caricato su Storage
+[2026-03-10 14:36:41]   ℹ️ Nessuna scadenza trovata per fatt='8B00011070' del 2026-01-13
+[2026-03-10 14:36:41] 
+📄 Fatt.Acq._N.8B00119718_del_11-02-2026_jq5cjvox93.pdf
+[2026-03-10 14:36:41]   🔍 XML → Numero: '8B00119718', PIVA: 00488410010_rXfoJ, data: 2026-02-11
+[2026-03-10 14:36:43]   ☁️ Caricato su Storage
+[2026-03-10 14:36:43]   ℹ️ Nessuna scadenza trovata per fatt='8B00119718' del 2026-02-11
+[2026-03-10 14:36:43] 
+📄 Fatt.Acq._N.90_del_20-01-2026_iv8nov3six.pdf
+[2026-03-10 14:36:43]   🔍 XML → Numero: '90', PIVA: 02107890168BNXBB_00U2W, data: 2026-01-20
+[2026-03-10 14:36:44]   ☁️ Caricato su Storage
+[2026-03-10 14:36:44]   ℹ️ Nessuna scadenza trovata per fatt='90' del 2026-01-20
+[2026-03-10 14:36:44] 
+📄 Fatt.Acq._N.BBVFLX00008909_del_09-01-2026_u2fkov94ei.pdf
+[2026-03-10 14:36:44]   🔍 XML → Numero: 'BBVFLX00008909', PIVA: 07155170157_27hId, data: 2026-01-09
+[2026-03-10 14:36:44]   ☁️ Caricato su Storage
+[2026-03-10 14:36:45]   ℹ️ Nessuna scadenza trovata per fatt='BBVFLX00008909' del 2026-01-09
+[2026-03-10 14:36:45] 
+📄 Fatt.Acq._N.E6-0033147_del_12-01-2026_rjje1vqzcl.pdf
+[2026-03-10 14:36:45]   🔍 XML → Numero: 'E6-0033147', PIVA: 03589630239_4SNQ2, data: 2026-01-12
+[2026-03-10 14:36:45]   ☁️ Caricato su Storage
+[2026-03-10 14:36:46]   ℹ️ Nessuna scadenza trovata per fatt='E6-0033147' del 2026-01-12
+[2026-03-10 14:36:46] 
+📄 Fatt.Acq._N.E6-0033150_del_12-01-2026_wnyihvr9mp.pdf
+[2026-03-10 14:36:46]   🔍 XML → Numero: 'E6-0033150', PIVA: 03589630239_4SNQC, data: 2026-01-12
+[2026-03-10 14:36:46]   ☁️ Caricato su Storage
+[2026-03-10 14:36:46]   ℹ️ Nessuna scadenza trovata per fatt='E6-0033150' del 2026-01-12
+[2026-03-10 14:36:46] 
+📄 Fatt.Acq._N.E6-0117633_del_10-02-2026_o101pvem15.pdf
+[2026-03-10 14:36:47]   🔍 XML → Numero: 'E6-0117633', PIVA: 03589630239_4VJ7N, data: 2026-02-10
+[2026-03-10 14:36:47]   ☁️ Caricato su Storage
+[2026-03-10 14:36:47]   ℹ️ Nessuna scadenza trovata per fatt='E6-0117633' del 2026-02-10
+[2026-03-10 14:36:47] 
+📄 Fatt.Acq._N.E6-0117637_del_10-02-2026_teks9vrzq1.pdf
+[2026-03-10 14:36:47]   🔍 XML → Numero: 'E6-0117637', PIVA: 03589630239_4VJ88, data: 2026-02-10
+[2026-03-10 14:36:47]   ☁️ Caricato su Storage
+[2026-03-10 14:36:47]   ℹ️ Nessuna scadenza trovata per fatt='E6-0117637' del 2026-02-10
+[2026-03-10 14:36:47] 
+📄 Fatt.Acq._N.EC_2026_0047862_del_05-02-2026_zch74vmw48.pdf
+[2026-03-10 14:36:47]   🔍 XML → Numero: 'EC_2026_0047862', PIVA: 07945211006NUML9_LSIFC, data: 2026-02-05
+[2026-03-10 14:36:48]   ☁️ Caricato su Storage
+[2026-03-10 14:36:48]   ℹ️ Nessuna scadenza trovata per fatt='EC_2026_0047862' del 2026-02-05
+[2026-03-10 14:36:48] 
+📄 Fatt.Acq._N.IT61TSXABEI_del_08-01-2026_z0uc5v5kfi.pdf
+[2026-03-10 14:36:48]   🔍 XML → Numero: 'IT61TSXABEI', PIVA: 08973230967_EJ0x7, data: 2026-01-08
+[2026-03-10 14:36:48]   ☁️ Caricato su Storage
+[2026-03-10 14:36:49]   ✅ Match numero+data → scadenza fc5fdbf3-f738-42db-b795-9519dd1f73b4 (fatt: IT61TSXABEI)
+[2026-03-10 14:36:49]   ✅ Match numero+data → scadenza 758e1fdb-bc18-5ae4-8dc4-b08fe1ba9ccc (fatt: IT61TSXABEI)
+[2026-03-10 14:36:49] 
+📄 Fatt.Acq._N.IT65NT2ABEI_del_16-01-2026_lx3tdvihi8.pdf
+[2026-03-10 14:36:49]   🔍 XML → Numero: 'IT65NT2ABEI', PIVA: 08973230967_ENluy, data: 2026-01-16
+[2026-03-10 14:36:49]   ☁️ Caricato su Storage
+[2026-03-10 14:36:49]   ✅ Match numero+data → scadenza 6839150d-29e2-4426-8cb8-7c417b59f3aa (fatt: IT65NT2ABEI)
+[2026-03-10 14:36:49]   ✅ Match numero+data → scadenza bf26a25f-800e-5231-b952-f6cbeb8caf69 (fatt: IT65NT2ABEI)
+[2026-03-10 14:36:49] 
+📄 Fatt.Acq._N.PJ10987035_del_15-01-2026_thr12v1yfu.pdf
+[2026-03-10 14:36:49]   🔍 XML → Numero: 'PJ10987035', PIVA: 0526289001426016_4CQN2, data: 2026-01-15
+[2026-03-10 14:36:49]   ☁️ Caricato su Storage
+[2026-03-10 14:36:50]   ℹ️ Nessuna scadenza trovata per fatt='PJ10987035' del 2026-01-15
+[2026-03-10 14:36:50] 
+📄 Fatt.Acq._N.PJ11031386_del_31-01-2026_pguwevacfk.pdf
+[2026-03-10 14:36:50]   🔍 XML → Numero: 'PJ11031386', PIVA: 0526289001426034_85F74, data: 2026-01-31
+[2026-03-10 14:36:51]   ☁️ Caricato su Storage
+[2026-03-10 14:36:51]   ℹ️ Nessuna scadenza trovata per fatt='PJ11031386' del 2026-01-31
+[2026-03-10 14:36:51] 
+📄 Fatt.Acq._N.PJ11119355_del_15-02-2026_z1hvlvl0q4.pdf
+[2026-03-10 14:36:51]   🔍 XML → Numero: 'PJ11119355', PIVA: 0526289001426047_AIAWQ, data: 2026-02-15
+[2026-03-10 14:36:51]   ☁️ Caricato su Storage
+[2026-03-10 14:36:51]   ℹ️ Nessuna scadenza trovata per fatt='PJ11119355' del 2026-02-15
+[2026-03-10 14:36:51] 
+📄 Fatt.Acq._N.PJ11164463_del_28-02-2026_or24ivl4dc.pdf
+[2026-03-10 14:36:51]   🔍 XML → Numero: 'PJ11164463', PIVA: 0526289001426062_EB4AP, data: 2026-02-28
+[2026-03-10 14:36:52]   ☁️ Caricato su Storage
+[2026-03-10 14:36:52]   ℹ️ Nessuna scadenza trovata per fatt='PJ11164463' del 2026-02-28
+[2026-03-10 14:36:52] 
+============================================================
+[2026-03-10 14:36:52] 📊 RIEPILOGO
+[2026-03-10 14:36:52]   File PDF trovati:       62
+[2026-03-10 14:36:52]   Caricati su Storage:    62
+[2026-03-10 14:36:52]   Associati a scadenze:   8
+[2026-03-10 14:36:52]   Non associati:          54
+[2026-03-10 14:36:52]   Senza XML gemello:      0
+[2026-03-10 14:36:52]   Errori upload:          0
+[2026-03-10 14:36:52] 
+⚠️ PDF caricati ma NON associati (54):
+[2026-03-10 14:36:52]   - 237_del_02-02-2026_ovemzvg68d.pdf → fatt='FR A26\\237' del 2026-02-02
+[2026-03-10 14:36:52]   - Fatt.Acq._N.0000000000566185_del_30-01-2026_mnyktvwqte.pdf → fatt='0000000000566185' del 2026-01-30
+[2026-03-10 14:36:52]   - Fatt.Acq._N.0000000003118235_del_28-02-2026_fc2b6vbvn9.pdf → fatt='0000000003118235' del 2026-02-28
+[2026-03-10 14:36:52]   - Fatt.Acq._N.000000000400571D_del_30-01-2026_ojl6nv0wtu.pdf → fatt='000000000400571D' del 2026-01-30
+[2026-03-10 14:36:52]   - Fatt.Acq._N.000000001341919D_del_28-02-2026_x3ep1vqf38.pdf → fatt='000000001341919D' del 2026-02-28
+[2026-03-10 14:36:52]   - Fatt.Acq._N.000000050296377T_del_30-01-2026_xgy5qvnrsd.pdf → fatt='000000050296377T' del 2026-01-30
+[2026-03-10 14:36:52]   - Fatt.Acq._N.000000052912921T_del_28-02-2026_pkr3rvdr1f.pdf → fatt='000000052912921T' del 2026-02-28
+[2026-03-10 14:36:52]   - Fatt.Acq._N.000000108002430P_del_30-01-2026_fupx4vf57v.pdf → fatt='000000108002430P' del 2026-01-30
+[2026-03-10 14:36:52]   - Fatt.Acq._N.000000108005867P_del_28-02-2026_kxg1wviixe.pdf → fatt='000000108005867P' del 2026-02-28
+[2026-03-10 14:36:52]   - Fatt.Acq._N.01S620262800004186_del_15-01-2026_r2qyrvnau8.pdf → fatt='01S620262800004186' del 2026-01-15
+[2026-03-10 14:36:52]   - Fatt.Acq._N.05387-4160115806-76_del_05-01-2026_t940nv5emk.pdf → fatt='05387-4160115806-76' del 2026-01-05
+[2026-03-10 14:36:52]   - Fatt.Acq._N.05387-4160271898-76_del_03-02-2026_bs9qtvas6m.pdf → fatt='05387-4160271898-76' del 2026-02-03
+[2026-03-10 14:36:52]   - Fatt.Acq._N.084530266900038_del_30-01-2026_vlj2yvoye9.pdf → fatt='084530266900038' del 2026-01-30
+[2026-03-10 14:36:52]   - Fatt.Acq._N.084530266900384_del_27-02-2026_urvahvfogr.pdf → fatt='084530266900384' del 2026-02-27
+[2026-03-10 14:36:52]   - Fatt.Acq._N.17_1036_del_21-01-2026_dnr1qvqegc.pdf → fatt='17/1036' del 2026-01-21
+[2026-03-10 14:36:52]   - Fatt.Acq._N.19_del_16-01-2026_hflfbv8azv.pdf → fatt='19' del 2026-01-16
+[2026-03-10 14:36:52]   - Fatt.Acq._N.1A_del_27-01-2026_uzw00vl46t.pdf → fatt='1A' del 2026-01-27
+[2026-03-10 14:36:52]   - Fatt.Acq._N.2001_260030378_del_28-02-2026_zknvjvqrsw.pdf → fatt='2001/260030378' del 2026-02-28
+[2026-03-10 14:36:52]   - Fatt.Acq._N.2026_V9_2600497_del_12-01-2026_omm36vr95h.pdf → fatt='2026/V9/2600497' del 2026-01-12
+[2026-03-10 14:36:52]   - Fatt.Acq._N.2601C297540_del_01-01-2026_dcw62vgd1t.pdf → fatt='2601C297540' del 2026-01-01
+[2026-03-10 14:36:52]   - Fatt.Acq._N.2601C376531_del_01-01-2026_slt1dvp6ru.pdf → fatt='2601C376531' del 2026-01-01
+[2026-03-10 14:36:52]   - Fatt.Acq._N.2602C204472_del_01-02-2026_cosnfvnen6.pdf → fatt='2602C204472' del 2026-02-01
+[2026-03-10 14:36:52]   - Fatt.Acq._N.2602C311691_del_01-02-2026_g7r8jvqps5.pdf → fatt='2602C311691' del 2026-02-01
+[2026-03-10 14:36:52]   - Fatt.Acq._N.2602C346768_del_01-02-2026_zrb6xv7osj.pdf → fatt='2602C346768' del 2026-02-01
+[2026-03-10 14:36:52]   - Fatt.Acq._N.2603C0247564_del_01-03-2026_eq6yjv9o70.pdf → fatt='2603C0247564' del 2026-03-01
+[2026-03-10 14:36:52]   - Fatt.Acq._N.2603C0302315_del_01-03-2026_fccocvdvbr.pdf → fatt='2603C0302315' del 2026-03-01
+[2026-03-10 14:36:52]   - Fatt.Acq._N.2603C0325307_del_01-03-2026_zi7jpvwchm.pdf → fatt='2603C0325307' del 2026-03-01
+[2026-03-10 14:36:52]   - Fatt.Acq._N.26OT0076848_del_19-02-2026_hcw0pvjkxh.pdf → fatt='26OT0076848' del 2026-02-19
+[2026-03-10 14:36:52]   - Fatt.Acq._N.26OT0086441_del_25-02-2026_nkrpdvvbda.pdf → fatt='26OT0086441' del 2026-02-25
+[2026-03-10 14:36:52]   - Fatt.Acq._N.2_001_del_02-02-2026_fn305v09lx.pdf → fatt='2/001' del 2026-02-02
+[2026-03-10 14:36:52]   - Fatt.Acq._N.2_del_09-02-2026_m1gi2vme5c.pdf → fatt='2' del 2026-02-09
+[2026-03-10 14:36:52]   - Fatt.Acq._N.323_del_02-02-2026_kezkfv28gm.pdf → fatt='323' del 2026-02-02
+[2026-03-10 14:36:52]   - Fatt.Acq._N.327_00_del_12-02-2026_n1pilvx7ry.pdf → fatt='327/00' del 2026-02-12
+[2026-03-10 14:36:52]   - Fatt.Acq._N.37A_del_16-01-2026_j3hs0v1r59.pdf → fatt='37A' del 2026-01-16
+[2026-03-10 14:36:52]   - Fatt.Acq._N.3_del_26-01-2026_fcylivz66j.pdf → fatt='3' del 2026-01-26
+[2026-03-10 14:36:52]   - Fatt.Acq._N.558616_del_02-03-2026_qm3qov9dqx.pdf → fatt='558616' del 2026-03-02
+[2026-03-10 14:36:52]   - Fatt.Acq._N.558617_del_02-03-2026_ndj85vde0k.pdf → fatt='558617' del 2026-03-02
+[2026-03-10 14:36:52]   - Fatt.Acq._N.5_2026_del_30-01-2026_gtklyvwaza.pdf → fatt='5/2026' del 2026-01-30
+[2026-03-10 14:36:52]   - Fatt.Acq._N.7X00223172_del_13-01-2026_o99pcvchp1.pdf → fatt='7X00223172' del 2026-01-13
+[2026-03-10 14:36:52]   - Fatt.Acq._N.7X00701923_del_11-02-2026_xdejrv1gvr.pdf → fatt='7X00701923' del 2026-02-11
+[2026-03-10 14:36:52]   - Fatt.Acq._N.8_del_02-02-2026_on3b3vra1a.pdf → fatt='8' del 2026-02-02
+[2026-03-10 14:36:52]   - Fatt.Acq._N.8B00011070_del_13-01-2026_ho9gkv8ccy.pdf → fatt='8B00011070' del 2026-01-13
+[2026-03-10 14:36:52]   - Fatt.Acq._N.8B00119718_del_11-02-2026_jq5cjvox93.pdf → fatt='8B00119718' del 2026-02-11
+[2026-03-10 14:36:52]   - Fatt.Acq._N.90_del_20-01-2026_iv8nov3six.pdf → fatt='90' del 2026-01-20
+[2026-03-10 14:36:52]   - Fatt.Acq._N.BBVFLX00008909_del_09-01-2026_u2fkov94ei.pdf → fatt='BBVFLX00008909' del 2026-01-09
+[2026-03-10 14:36:52]   - Fatt.Acq._N.E6-0033147_del_12-01-2026_rjje1vqzcl.pdf → fatt='E6-0033147' del 2026-01-12
+[2026-03-10 14:36:52]   - Fatt.Acq._N.E6-0033150_del_12-01-2026_wnyihvr9mp.pdf → fatt='E6-0033150' del 2026-01-12
+[2026-03-10 14:36:52]   - Fatt.Acq._N.E6-0117633_del_10-02-2026_o101pvem15.pdf → fatt='E6-0117633' del 2026-02-10
+[2026-03-10 14:36:52]   - Fatt.Acq._N.E6-0117637_del_10-02-2026_teks9vrzq1.pdf → fatt='E6-0117637' del 2026-02-10
+[2026-03-10 14:36:52]   - Fatt.Acq._N.EC_2026_0047862_del_05-02-2026_zch74vmw48.pdf → fatt='EC_2026_0047862' del 2026-02-05
+[2026-03-10 14:36:52]   - Fatt.Acq._N.PJ10987035_del_15-01-2026_thr12v1yfu.pdf → fatt='PJ10987035' del 2026-01-15
+[2026-03-10 14:36:52]   - Fatt.Acq._N.PJ11031386_del_31-01-2026_pguwevacfk.pdf → fatt='PJ11031386' del 2026-01-31
+[2026-03-10 14:36:52]   - Fatt.Acq._N.PJ11119355_del_15-02-2026_z1hvlvl0q4.pdf → fatt='PJ11119355' del 2026-02-15
+[2026-03-10 14:36:52]   - Fatt.Acq._N.PJ11164463_del_28-02-2026_or24ivl4dc.pdf → fatt='PJ11164463' del 2026-02-28
+[2026-03-10 14:36:52] ============================================================
+
