@@ -21,6 +21,7 @@ export interface ScadenzaPagamento {
   file_url?: string | null;
   auto_domiciliazione?: boolean;
   fonte?: 'mutuo' | 'titolo' | 'fattura' | 'manuale' | null;
+  aliquota_iva?: number | null;
 }
 
 export interface ScadenzaWithSoggetto extends ScadenzaPagamento {

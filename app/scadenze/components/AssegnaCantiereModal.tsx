@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
-import { Plus, Trash2, AlertCircle, SplitSquareVertical, MapPin, FileText, CalendarDays } from "lucide-react"
-import { salvaAssegnazioneCantiere } from '../actions'
+import { Plus, Trash2, AlertCircle, SplitSquareVertical, MapPin, FileText, CalendarDays, FileQuestion } from "lucide-react"
+import { salvaAssegnazioneCantiere, aggiornaAliquotaIva } from '../actions'
 
 interface Cantiere {
   id: string;
@@ -27,6 +27,7 @@ interface AssegnaCantiereModalProps {
   dataScadenza?: string;
   tipo?: 'entrata' | 'uscita';
   fileUrl?: string | null;
+  currentAliquotaIva?: number | null;
   children?: React.ReactNode;
 }
 
@@ -42,6 +43,7 @@ export function AssegnaCantiereModal({
   dataScadenza,
   tipo,
   fileUrl,
+  currentAliquotaIva,
   children
 }: AssegnaCantiereModalProps) {
   const router = useRouter()
@@ -60,8 +62,8 @@ export function AssegnaCantiereModal({
     { cantiere_id: '', importo: importoAllocabile }
   ])
 
-  // IVA: aliquota editabile per scorporo
-  const [aliquotaIva, setAliquotaIva] = useState(22)
+  // IVA: aliquota editabile per scorporo (usa valore salvato se presente)
+  const [aliquotaIva, setAliquotaIva] = useState(currentAliquotaIva ?? 22)
   const ivaGenerata = Math.round((importoAllocabile / (100 + aliquotaIva)) * aliquotaIva * 100) / 100
   const imponibile = Math.round((importoAllocabile - ivaGenerata) * 100) / 100
 
@@ -98,7 +100,10 @@ export function AssegnaCantiereModal({
         ? { mode: 'singolo' as const, cantiere_id: singleCantiere }
         : { mode: 'multiplo' as const, allocazioni }
 
-      await salvaAssegnazioneCantiere(scadenzaId, data)
+      await Promise.all([
+        salvaAssegnazioneCantiere(scadenzaId, data),
+        aggiornaAliquotaIva(scadenzaId, aliquotaIva),
+      ])
       setIsOpen(false)
       router.refresh()
     } catch (error) {
@@ -159,10 +164,14 @@ export function AssegnaCantiereModal({
               )}
             </div>
           </div>
-          {fileUrl && (
+          {fileUrl ? (
             <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 transition-colors font-medium">
               <FileText size={13} /> Visualizza Fattura PDF
             </a>
+          ) : (
+            <div className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md bg-zinc-100 text-zinc-400 border border-zinc-200">
+              <FileQuestion size={13} /> PDF non disponibile
+            </div>
           )}
         </div>
 
@@ -181,6 +190,7 @@ export function AssegnaCantiereModal({
                   onChange={(e) => setAliquotaIva(Number(e.target.value))}
                   className="text-xs font-mono font-bold text-purple-800 bg-white border border-purple-200 rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-purple-400"
                 >
+                  <option value={0}>0% (Esente)</option>
                   <option value={4}>4%</option>
                   <option value={10}>10%</option>
                   <option value={22}>22%</option>

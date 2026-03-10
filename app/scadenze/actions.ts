@@ -324,3 +324,26 @@ export async function aggiornaFatturaRiferimento(scadenzaId: string, valore: str
 
   return { success: true };
 }
+
+/**
+ * 10. Aggiorna l'aliquota IVA di una scadenza (per scorporo IVA nei costi cantiere)
+ */
+export async function aggiornaAliquotaIva(scadenzaId: string, aliquotaIva: number) {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from('scadenze_pagamento')
+    .update({ aliquota_iva: aliquotaIva })
+    .eq('id', scadenzaId);
+
+  if (error) {
+    console.error('Errore aggiornaAliquotaIva:', error);
+    throw new Error('Errore aggiornamento aliquota IVA');
+  }
+
+  revalidatePath('/scadenze');
+  revalidatePath('/finanza');
+  revalidatePath('/cantieri');
+
+  return { success: true };
+}

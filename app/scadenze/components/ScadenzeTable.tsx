@@ -107,6 +107,7 @@ function CantiereButton({ scadenza, cantieri }: { scadenza: ScadenzaWithSoggetto
       dataScadenza={scadenza.data_scadenza}
       tipo={scadenza.tipo}
       fileUrl={scadenza.file_url ?? scadenza.titolo?.file_url ?? null}
+      currentAliquotaIva={scadenza.aliquota_iva ?? null}
     >
       <button
         type="button"
