@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ArrowLeft, Wallet, TrendingDown, Hammer, FileText, Clock, ShoppingCart, ListChecks, User, HardHat, AlertTriangle, CheckCircle2, Info } from "lucide-react"
+import { ArrowLeft, Wallet, TrendingDown, Hammer, FileText, Clock, ShoppingCart, ListChecks, User, HardHat, AlertTriangle, CheckCircle2, Info, Receipt } from "lucide-react"
 
 export default async function CantierePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -37,13 +37,35 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
     .eq('cantiere_id', id)
     .order('data', { ascending: false })
 
-  // 4. CALCOLI UNIFICATI
+  // 4. Fetch Scadenze assegnate a questo cantiere (Fatture con IVA)
+  const { data: scadenzeCantiere } = await supabase
+    .from('scadenze_pagamento')
+    .select('id, fattura_riferimento, importo_totale, aliquota_iva, data_scadenza, data_emissione, stato, descrizione, tipo, anagrafica_soggetti(ragione_sociale)')
+    .eq('cantiere_id', id)
+    .order('data_scadenza', { ascending: false })
+
+  // Calcoli IVA per scadenze di questo cantiere
+  let totaleImponibileFatture = 0
+  let totaleIvaCantiere = 0
+  const scadenzeConScorporo = (scadenzeCantiere || []).map((s: any) => {
+    const importo = Number(s.importo_totale) || 0
+    const aliquota = s.aliquota_iva ?? 22
+    const iva = aliquota > 0 ? Math.round((importo / (100 + aliquota)) * aliquota * 100) / 100 : 0
+    const imponibile = Math.round((importo - iva) * 100) / 100
+    totaleImponibileFatture += imponibile
+    totaleIvaCantiere += iva
+    return { ...s, imponibile, iva, aliquota }
+  })
+  totaleImponibileFatture = Math.round(totaleImponibileFatture * 100) / 100
+  totaleIvaCantiere = Math.round(totaleIvaCantiere * 100) / 100
+
+  // 5. CALCOLI UNIFICATI
   const totaleMateriali = movimenti?.reduce((acc, mov) => acc + (mov.importo || 0), 0) || 0
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const totaleManodopera = presenze?.reduce((acc, p: any) => acc + (p.costo_calcolato || 0), 0) || 0
 
-  const totaleSpeso = totaleMateriali + totaleManodopera
+  const totaleSpeso = totaleMateriali + totaleManodopera + totaleImponibileFatture
 
   const budgetCosti = cantiere.budget || 0
   const valoreVendita = cantiere.valore_vendita || 0
@@ -106,7 +128,7 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
         </div>
 
         {/* KPIs Finanziari */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Budget Costi</CardTitle>
@@ -146,6 +168,21 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
             </CardContent>
           </Card>
 
+          {totaleImponibileFatture > 0 && (
+            <Card className="border-blue-200">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Costi Fatture</CardTitle>
+                <Receipt className="h-4 w-4 text-blue-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-blue-700">€ {totaleImponibileFatture.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Imponibile netto (IVA: € {totaleIvaCantiere.toLocaleString('it-IT', { minimumFractionDigits: 2 })})
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           {valoreVendita > 0 && (
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -176,6 +213,104 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
             </CardContent>
           </Card>
         </div>
+
+        {/* Costi da Fatture (Scadenze assegnate) */}
+        {scadenzeConScorporo.length > 0 && (
+          <Card className="border-blue-200/60">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                <Receipt className="h-5 w-5 text-blue-500" />
+                Costi da Fatture
+              </CardTitle>
+              <div className="flex items-center gap-4 text-sm">
+                <span className="text-zinc-500">Imponibile: <span className="font-bold text-blue-700">€ {totaleImponibileFatture.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span></span>
+                <span className="text-purple-500">IVA: <span className="font-bold text-purple-700">€ {totaleIvaCantiere.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span></span>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Data</TableHead>
+                      <TableHead>Fornitore</TableHead>
+                      <TableHead>Fattura</TableHead>
+                      <TableHead>Descrizione</TableHead>
+                      <TableHead className="text-right">Lordo</TableHead>
+                      <TableHead className="text-right">Imponibile</TableHead>
+                      <TableHead className="text-right">IVA</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {scadenzeConScorporo.map((s: any) => (
+                      <TableRow key={s.id}>
+                        <TableCell className="font-medium whitespace-nowrap">
+                          {s.data_emissione ? new Date(s.data_emissione).toLocaleDateString('it-IT') : new Date(s.data_scadenza).toLocaleDateString('it-IT')}
+                        </TableCell>
+                        <TableCell className="font-medium text-zinc-700">
+                          {s.anagrafica_soggetti?.ragione_sociale || 'N/D'}
+                        </TableCell>
+                        <TableCell>
+                          {s.fattura_riferimento ? (
+                            <span className="font-mono text-xs bg-zinc-100 px-1.5 py-0.5 rounded border border-zinc-200">{s.fattura_riferimento}</span>
+                          ) : '-'}
+                        </TableCell>
+                        <TableCell className="max-w-[200px] truncate text-zinc-500" title={s.descrizione}>
+                          {s.descrizione || '-'}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-zinc-500 text-sm">
+                          € {Number(s.importo_totale).toLocaleString('it-IT', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell className="text-right font-mono font-bold text-blue-700">
+                          € {s.imponibile.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-purple-700">
+                          {s.iva > 0 ? `€ ${s.iva.toLocaleString('it-IT', { minimumFractionDigits: 2 })}` : (
+                            <span className="text-zinc-400 text-xs">Esente</span>
+                          )}
+                          {s.aliquota > 0 && <span className="text-[10px] text-purple-400 ml-1">({s.aliquota}%)</span>}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile */}
+              <div className="md:hidden divide-y divide-zinc-100">
+                {scadenzeConScorporo.map((s: any) => (
+                  <div key={s.id} className="p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-zinc-700">
+                        {s.data_emissione ? new Date(s.data_emissione).toLocaleDateString('it-IT') : new Date(s.data_scadenza).toLocaleDateString('it-IT')}
+                      </span>
+                      {s.fattura_riferimento && (
+                        <span className="font-mono text-xs bg-zinc-100 px-1.5 py-0.5 rounded">{s.fattura_riferimento}</span>
+                      )}
+                    </div>
+                    <div className="font-medium text-zinc-900">{s.anagrafica_soggetti?.ragione_sociale || 'N/D'}</div>
+                    <div className="grid grid-cols-3 gap-2 bg-zinc-50 rounded-lg border border-zinc-100 p-3 text-center">
+                      <div>
+                        <div className="text-[10px] uppercase tracking-wider text-zinc-400">Lordo</div>
+                        <div className="text-xs font-mono text-zinc-600">€ {Number(s.importo_totale).toLocaleString('it-IT', { minimumFractionDigits: 2 })}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] uppercase tracking-wider text-blue-400">Imponibile</div>
+                        <div className="text-sm font-mono font-bold text-blue-700">€ {s.imponibile.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] uppercase tracking-wider text-purple-400">IVA</div>
+                        <div className="text-xs font-mono text-purple-700">
+                          {s.iva > 0 ? `€ ${s.iva.toLocaleString('it-IT', { minimumFractionDigits: 2 })}` : 'Esente'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Tabella Presenze Singole */}
         <Card>
