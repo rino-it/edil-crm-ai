@@ -22,6 +22,7 @@ interface AssegnaCantiereModalProps {
   currentCantiereId?: string | null;
   // Dettagli fattura visibili nel modal
   soggettoNome?: string;
+  descrizione?: string | null;
   fatturaRiferimento?: string | null;
   dataScadenza?: string;
   tipo?: 'entrata' | 'uscita';
@@ -36,6 +37,7 @@ export function AssegnaCantiereModal({
   cantieri,
   currentCantiereId,
   soggettoNome,
+  descrizione,
   fatturaRiferimento,
   dataScadenza,
   tipo,
@@ -57,6 +59,11 @@ export function AssegnaCantiereModal({
   const [allocazioni, setAllocazioni] = useState<{ cantiere_id: string; importo: number }[]>([
     { cantiere_id: '', importo: importoAllocabile }
   ])
+
+  // IVA: aliquota editabile per scorporo
+  const [aliquotaIva, setAliquotaIva] = useState(22)
+  const ivaGenerata = Math.round((importoAllocabile / (100 + aliquotaIva)) * aliquotaIva * 100) / 100
+  const imponibile = Math.round((importoAllocabile - ivaGenerata) * 100) / 100
 
   const formatEuro = (val: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(val)
 
@@ -122,11 +129,14 @@ export function AssegnaCantiereModal({
         </DialogHeader>
 
         {/* Riepilogo fattura */}
-        <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-4 space-y-2">
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-4 space-y-3">
           <div className="flex items-start justify-between">
-            <div className="space-y-1">
+            <div className="space-y-1.5 flex-1 min-w-0">
               <div className="font-bold text-zinc-900 text-sm">{soggettoNome || 'Soggetto non specificato'}</div>
-              <div className="flex items-center gap-2 text-xs text-zinc-500">
+              {descrizione && (
+                <div className="text-xs text-zinc-600 leading-relaxed">{descrizione}</div>
+              )}
+              <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
                 {fatturaRiferimento && (
                   <span className="font-mono bg-zinc-100 px-1.5 py-0.5 rounded border border-zinc-200">{fatturaRiferimento}</span>
                 )}
@@ -142,7 +152,7 @@ export function AssegnaCantiereModal({
                 )}
               </div>
             </div>
-            <div className="text-right space-y-0.5">
+            <div className="text-right space-y-0.5 ml-4 flex-shrink-0">
               <div className="font-mono font-black text-zinc-900">{formatEuro(importoTotale)}</div>
               {importoResiduo > 0 && importoResiduo < importoTotale && (
                 <div className="text-[10px] text-rose-600 font-mono">Residuo: {formatEuro(importoResiduo)}</div>
@@ -150,10 +160,38 @@ export function AssegnaCantiereModal({
             </div>
           </div>
           {fileUrl && (
-            <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 hover:underline">
-              <FileText size={12} /> Apri fattura PDF
+            <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 transition-colors font-medium">
+              <FileText size={13} /> Visualizza Fattura PDF
             </a>
           )}
+        </div>
+
+        {/* IVA Generata */}
+        <div className="rounded-lg border border-purple-200 bg-purple-50/50 p-3">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <div className="text-xs font-bold text-purple-800 uppercase tracking-wide">IVA Generata</div>
+              <div className="text-[10px] text-purple-600">Scorporo IVA — non assegnabile a cantiere</div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-purple-600">Aliquota:</span>
+                <select
+                  value={aliquotaIva}
+                  onChange={(e) => setAliquotaIva(Number(e.target.value))}
+                  className="text-xs font-mono font-bold text-purple-800 bg-white border border-purple-200 rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-purple-400"
+                >
+                  <option value={4}>4%</option>
+                  <option value={10}>10%</option>
+                  <option value={22}>22%</option>
+                </select>
+              </div>
+              <div className="text-right">
+                <div className="text-xs text-zinc-500">Impon. <span className="font-mono font-bold text-zinc-700">{formatEuro(imponibile)}</span></div>
+                <div className="text-xs text-purple-700">IVA <span className="font-mono font-black text-purple-800">{formatEuro(ivaGenerata)}</span></div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="py-2 space-y-6">

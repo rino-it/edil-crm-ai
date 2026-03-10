@@ -101,11 +101,12 @@ function CantiereButton({ scadenza, cantieri }: { scadenza: ScadenzaWithSoggetto
       importoResiduo={importoResiduo}
       cantieri={cantieri}
       currentCantiereId={scadenza.cantiere_id ?? null}
-      soggettoNome={scadenza.anagrafica_soggetti?.ragione_sociale || scadenza.descrizione || 'N/D'}
+      soggettoNome={scadenza.anagrafica_soggetti?.ragione_sociale || 'N/D'}
+      descrizione={scadenza.descrizione}
       fatturaRiferimento={scadenza.fattura_riferimento}
       dataScadenza={scadenza.data_scadenza}
       tipo={scadenza.tipo}
-      fileUrl={scadenza.file_url ?? null}
+      fileUrl={scadenza.file_url ?? scadenza.titolo?.file_url ?? null}
     >
       <button
         type="button"
