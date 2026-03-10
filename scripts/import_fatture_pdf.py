@@ -69,7 +69,10 @@ log_lines = []
 def log(msg: str):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{ts}] {msg}"
-    print(line)
+    try:
+        print(line)
+    except UnicodeEncodeError:
+        print(line.encode('ascii', 'replace').decode())
     log_lines.append(line)
 
 

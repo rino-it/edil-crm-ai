@@ -263,7 +263,7 @@ def main():
             stato = 'pagato' if csv_pagato else 'da_pagare'
         else:
             stats['csv_no_match'] += 1
-            stato = 'pagato'  # default sicuro: non nel CSV = già gestita/pagata
+            stato = 'da_pagare'  # default: senza info CSV = da verificare/pagare
         
         stats[stato] += 1
 
@@ -295,7 +295,7 @@ def main():
     log(f"   Importo totale: EUR {importo_totale_sum:,.2f}")
     log(f"\n📊 Matching con CSV esposizione:")
     log(f"   Match CSV trovati:    {stats['csv_match']}")
-    log(f"   Senza match CSV:     {stats['csv_no_match']} (→ default pagato)")
+    log(f"   Senza match CSV:     {stats['csv_no_match']} (-> default da_pagare)")
     log(f"   Scadenza da CSV:     {stats['csv_scadenza_usata']}")
     log(f"\n📊 Stato assegnato:")
     log(f"   da_pagare:  {stats['da_pagare']}")

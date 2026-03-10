@@ -18,10 +18,16 @@ SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "eyJhbGciOiJIUzI1NiIsIn
 CARTELLA_ARCHIVIO = r"\\192.168.1.231\scambio\AMMINISTRAZIONE\Clienti e Fornitori\2025\contabilità\Archivio_Fatto"
 # ==================================================
 
+def safe_print(msg):
+    try:
+        print(msg)
+    except UnicodeEncodeError:
+        print(msg.encode('ascii', 'replace').decode())
+
 try:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 except Exception as e:
-    print(f"❌ Errore connessione Supabase: {e}")
+    safe_print(f"[ERR] Errore connessione Supabase: {e}")
     exit()
 
 def pulisci_namespace(xml_content):
@@ -66,7 +72,7 @@ def _crea_scadenze_da_xml(percorso_file, fattura_id, soggetto_id, numero_fattura
         if body is None:
             return 0
     except Exception as e:
-        print(f"   ❌ Errore lettura XML per scadenze: {e}")
+        safe_print(f"   [ERR] Errore lettura XML per scadenze: {e}")
         return 0
 
     # Recupera ragione_sociale per la descrizione
@@ -112,7 +118,7 @@ def _crea_scadenze_da_xml(percorso_file, fattura_id, soggetto_id, numero_fattura
             supabase.table("scadenze_pagamento").insert(scadenza_data).execute()
             scadenze_create += 1
             dom_label = " [SDD]" if is_domiciliazione_rata else ""
-            print(f"   📅 Rata {i+1}/{len(rate_xml)}: €{importo_rata} scade {data_scad_rata}{dom_label}")
+            safe_print(f"   Rata {i+1}/{len(rate_xml)}: EUR {importo_rata} scade {data_scad_rata}{dom_label}")
     else:
         data_scad = calcola_data_scadenza(data_fattura, condizioni_pag)
         scadenza_data = {
@@ -133,7 +139,7 @@ def _crea_scadenze_da_xml(percorso_file, fattura_id, soggetto_id, numero_fattura
         supabase.table("scadenze_pagamento").insert(scadenza_data).execute()
         scadenze_create += 1
         dom_label = " [SDD]" if is_domiciliazione else ""
-        print(f"   📅 Scadenziario: Scadenza {data_scad} generata.{dom_label}")
+        safe_print(f"   Scadenziario: Scadenza {data_scad} generata.{dom_label}")
 
     return scadenze_create
 
@@ -170,7 +176,7 @@ def parse_and_upload(percorso_file):
         except: pass
 
         # Fattura esiste MA scadenze mancanti: recupera
-        print(f"🔧 Scadenze mancanti per fattura esistente: {nome_file}")
+        safe_print(f"[FIX] Scadenze mancanti per fattura esistente: {nome_file}")
         try:
             # Recupera condizioni_pagamento dal soggetto
             cond_res = supabase.table("anagrafica_soggetti").select("condizioni_pagamento").eq("id", sogg_id).execute()
@@ -186,7 +192,7 @@ def parse_and_upload(percorso_file):
         _stats["scadenze_recuperate"] += n
         return
 
-    print(f"✨ Nuova fattura: {nome_file}")
+    safe_print(f"[NEW] Nuova fattura: {nome_file}")
 
     try:
         with open(percorso_file, 'r', encoding='utf-8', errors='ignore') as f:
@@ -291,24 +297,24 @@ def parse_and_upload(percorso_file):
 
         if righe_da_caricare:
             supabase.table("fatture_dettaglio_righe").insert(righe_da_caricare).execute()
-            print(f"   ✅ Caricate {len(righe_da_caricare)} righe dettaglio.")
+            safe_print(f"   [OK] Caricate {len(righe_da_caricare)} righe dettaglio.")
 
     except Exception as e:
         _stats["errori"] += 1
-        print(f"   ❌ Errore su {nome_file}: {e}")
+        safe_print(f"   [ERR] Errore su {nome_file}: {e}")
 
 def run():
-    print(f"🚀 AVVIO IMPORTAZIONE E SCADENZIARIO DA: {CARTELLA_ARCHIVIO}")
+    safe_print(f"AVVIO IMPORTAZIONE E SCADENZIARIO DA: {CARTELLA_ARCHIVIO}")
     if not os.path.exists(CARTELLA_ARCHIVIO):
-        print(f"❌ Cartella non trovata: {CARTELLA_ARCHIVIO}")
+        safe_print(f"[ERR] Cartella non trovata: {CARTELLA_ARCHIVIO}")
         if "--json" in sys.argv:
             print(f"###JSON_RESULT###{json.dumps({'errore': 'cartella_non_trovata', **_stats})}")
         return
     files = [f for f in os.listdir(CARTELLA_ARCHIVIO) if f.lower().endswith('.xml')]
     for f in files:
         parse_and_upload(os.path.join(CARTELLA_ARCHIVIO, f))
-    print(f"✅ ELABORAZIONE COMPLETATA.")
-    print(f"   Nuove fatture: {_stats['nuove']}, Scadenze create: {_stats['scadenze_create']}, "
+    safe_print(f"ELABORAZIONE COMPLETATA.")
+    safe_print(f"   Nuove fatture: {_stats['nuove']}, Scadenze create: {_stats['scadenze_create']}, "
           f"Scadenze recuperate: {_stats['scadenze_recuperate']}, Skip: {_stats['skipped']}, Errori: {_stats['errori']}")
 
     if "--json" in sys.argv:
