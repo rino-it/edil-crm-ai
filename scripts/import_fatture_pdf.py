@@ -55,6 +55,7 @@ if not _contab:
 
 PDF_SOURCE_PATH = _contab / "Archivio_pdf"
 XML_SOURCE_PATH = _contab / "Archivio_Fatto"
+XML_SOURCE_PATH_2024 = _contab / "archivio_xml_2024"
 
 if not SUPABASE_URL or not SUPABASE_KEY:
     print("❌ Variabili d'ambiente NEXT_PUBLIC_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY richieste.")
@@ -289,9 +290,14 @@ def main():
         log(f"❌ Cartella XML non trovata: {XML_SOURCE_PATH}")
         sys.exit(1)
     
-    # 1. Costruisci indice XML
-    log("🔧 Costruzione indice XML...")
+    # 1. Costruisci indice XML (Archivio_Fatto + archivio_xml_2024)
+    log("Costruzione indice XML...")
     xml_index = build_xml_index(XML_SOURCE_PATH)
+    if XML_SOURCE_PATH_2024.exists():
+        xml_index_2024 = build_xml_index(XML_SOURCE_PATH_2024)
+        for k, v in xml_index_2024.items():
+            if k not in xml_index:
+                xml_index[k] = v
     log(f"   {len(xml_index)} XML indicizzati")
     
     # 2. Scansiona PDF (solo ultimi 20 giorni per evitare timeout)
