@@ -306,7 +306,7 @@ export async function registraIncassoFattura(scadenzaId: string, contoId: string
 export async function riprogrammaScadenza(scadenzaId: string, nuovaData: string, importoPianificato?: number | null) {
   const supabase = await createClient();
 
-  const updateData: Record<string, any> = { data_pianificata: nuovaData };
+  const updateData: Record<string, any> = { data_pianificata: nuovaData, data_scadenza: nuovaData };
 
   // Se importoPianificato è specificato, salvalo (null = intero residuo)
   if (importoPianificato !== undefined) {

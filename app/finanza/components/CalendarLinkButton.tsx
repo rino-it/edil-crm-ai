@@ -53,7 +53,7 @@ export function CalendarLinkButton({ scadenza }: { scadenza: any }) {
         <DialogHeader>
           <DialogTitle>Riprogramma Scadenza</DialogTitle>
           <DialogDescription>
-            Aggiorna la data pianificata per cashflow e alert WhatsApp.
+            Aggiorna la data di scadenza e la data pianificata per cashflow e alert WhatsApp.
           </DialogDescription>
         </DialogHeader>
 
