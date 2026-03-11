@@ -2852,28 +2852,48 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
     // ==========================================
     // 0.8. Pre-Filtro ASSEGNI e CAMBIALI (titoli)
     // ==========================================
-    const regexAssegno = /\b(assegno|versamento\s+assegn[io]|incasso\s+assegn[io]|assegn[io]\s+n|a\/b\s+n)\b/i;
-    const regexCambiale = /\b(cambiale|pagar[oò]|tratta|effett[io]\s+n|ri\.?ba\.?)\b/i;
+    const regexAssegno = /\b(assegn[io]|versamento\s+assegn[io]|incasso\s+assegn[io]|assegn[io]\s+n|a\/b\s+n)\b/i;
+    const regexCambiale = /\b(cambial[ie]|pagar[oò]|tratt[ae]|effett[io]\s+n|ri\.?ba\.?|addebito\s+cambial[ie])\b/i;
     const isTitolo = regexAssegno.test(causale) || regexCambiale.test(causale) ||
       (m.xml_causale && (regexAssegno.test(m.xml_causale) || regexCambiale.test(m.xml_causale)));
 
-    if (isTitolo && m.importo > 0) {
-      // Solo incassi (entrate positive)
+    if (isTitolo) {
       const importoAbs = Math.abs(m.importo);
       const dataMov = m.data_operazione || m.data_valuta;
 
-      const { data: titoloMatch } = await supabase
+      // Cerca soggetto nella causale per restringere la ricerca titoli
+      let soggettoTitolo: any = null;
+      for (const s of soggetti) {
+        const nomeNorm = normalizzaNome(s.ragione_sociale);
+        if (nomeNorm.length >= 4 && causaleNorm.includes(nomeNorm)) {
+          soggettoTitolo = s;
+          break;
+        }
+      }
+
+      // Query titoli: filtra per soggetto se trovato, altrimenti cerca per importo/data
+      let titoloQuery = supabase
         .from('titoli')
-        .select('id, tipo, importo, data_scadenza, numero_titolo, scadenza_id, anagrafica_soggetti(ragione_sociale)')
+        .select('id, tipo, importo, data_scadenza, numero_titolo, scadenza_id, soggetto_id, anagrafica_soggetti(ragione_sociale)')
         .eq('stato', 'in_essere')
         .gte('data_scadenza', new Date(new Date(dataMov).getTime() - 30 * 86400000).toISOString().slice(0, 10))
         .lte('data_scadenza', new Date(new Date(dataMov).getTime() + 30 * 86400000).toISOString().slice(0, 10))
         .order('data_scadenza', { ascending: true });
 
+      if (soggettoTitolo) {
+        titoloQuery = titoloQuery.eq('soggetto_id', soggettoTitolo.id);
+      }
+
+      const { data: titoloMatch } = await titoloQuery;
+
       let titoloFound: any = null;
       if (titoloMatch) {
-        // Match per importo esatto (tolleranza 0.50€)
+        // Match per importo (tolleranza 0.50 EUR per eventuali spese incasso)
         titoloFound = titoloMatch.find((t: any) => Math.abs(t.importo - importoAbs) <= 0.50);
+        // Fallback: se non trova per importo ma c'e' soggetto e un solo titolo, prendi quello
+        if (!titoloFound && soggettoTitolo && titoloMatch.length === 1) {
+          titoloFound = titoloMatch[0];
+        }
       }
 
       if (titoloFound) {
@@ -2882,11 +2902,11 @@ export async function preMatchMovimenti(movimenti: any[], scadenzeAperte: any[],
         matchati.push({
           movimento_id: m.id,
           scadenza_id: titoloFound.scadenza_id || null,
-          soggetto_id: null,
-          confidence: 0.96,
-          motivo: `${tipoLabel} ${titoloFound.numero_titolo ? '#' + titoloFound.numero_titolo : ''} ${sogg?.ragione_sociale || ''}`.trim(),
-          ragione_sociale: sogg?.ragione_sociale || tipoLabel,
-          categoria: 'titolo',
+          soggetto_id: titoloFound.soggetto_id || soggettoTitolo?.id || null,
+          confidence: 0.98,
+          motivo: `${tipoLabel} ${titoloFound.numero_titolo ? '#' + titoloFound.numero_titolo : ''} ${sogg?.ragione_sociale || soggettoTitolo?.ragione_sociale || ''}`.trim(),
+          ragione_sociale: sogg?.ragione_sociale || soggettoTitolo?.ragione_sociale || tipoLabel,
+          categoria: 'fattura',
           titolo_id: titoloFound.id,
         });
         continue;

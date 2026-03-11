@@ -26,7 +26,7 @@ import sys
 import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 
 try:
     from supabase import create_client
@@ -294,10 +294,29 @@ def main():
     xml_index = build_xml_index(XML_SOURCE_PATH)
     log(f"   {len(xml_index)} XML indicizzati")
     
-    # 2. Scansiona PDF
-    pdf_files = list(PDF_SOURCE_PATH.glob("*.pdf")) + list(PDF_SOURCE_PATH.glob("*.PDF"))
-    pdf_files = list({p.resolve(): p for p in pdf_files}.values())
-    log(f"📁 Trovati {len(pdf_files)} file PDF")
+    # 2. Scansiona PDF (solo ultimi 20 giorni per evitare timeout)
+    GIORNI_RECENTI = 20
+    data_limite = datetime.now() - timedelta(days=GIORNI_RECENTI)
+    all_pdf_files = list(PDF_SOURCE_PATH.glob("*.pdf")) + list(PDF_SOURCE_PATH.glob("*.PDF"))
+    all_pdf_files = list({p.resolve(): p for p in all_pdf_files}.values())
+
+    pdf_files = []
+    for p in all_pdf_files:
+        _, data_str = estrai_pattern_da_nome(p.name)
+        if data_str:
+            try:
+                data_file = datetime.strptime(data_str, "%d-%m-%Y")
+                if data_file >= data_limite:
+                    pdf_files.append(p)
+                    continue
+            except ValueError:
+                pass
+        # Fallback: usa data modifica file
+        mtime = datetime.fromtimestamp(p.stat().st_mtime)
+        if mtime >= data_limite:
+            pdf_files.append(p)
+
+    log(f"   Totale PDF su disco: {len(all_pdf_files)}, recenti ({GIORNI_RECENTI}gg): {len(pdf_files)}")
     
     stats = {"uploadati": 0, "matchati": 0, "non_matchati": 0, "errori": 0, "no_xml": 0, "gia_presenti": 0}
     non_matchati_list = []
