@@ -1506,6 +1506,123 @@ export async function getTopEsposizioniPerSoggetto(limit = 10): Promise<Esposizi
   return risultati.slice(0, limit);
 }
 
+export interface VoceCronogramma {
+  data: string           // ISO date
+  tipo: 'uscita' | 'entrata'
+  fonte: 'fattura' | 'mutuo' | 'titolo' | 'manuale'
+  soggetto: string
+  descrizione: string
+  importo: number        // residuo da pagare/incassare
+  metodo?: string | null
+  conto_banca?: string | null
+  fattura_rif?: string | null
+  categoria?: string | null
+}
+
+/**
+ * Cronogramma pagamenti/incassi programmati nei prossimi N giorni.
+ * Include: scadenze (fatture, manuali), rate mutui, titoli (assegni/cambiali).
+ * Usato per il report stampabile CFO.
+ */
+export async function getCronogrammaPagamenti(giorni = 30): Promise<{
+  voci: VoceCronogramma[]
+  cassaAttuale: number
+  totaleUscite: number
+  totaleEntrate: number
+  liquiditaNecessaria: number
+}> {
+  const supabase = getSupabaseAdmin();
+  const oggi = new Date();
+  oggi.setHours(0, 0, 0, 0);
+  const limite = new Date(oggi);
+  limite.setDate(limite.getDate() + giorni);
+
+  const oggiISO = oggi.toISOString().split('T')[0];
+  const limiteISO = limite.toISOString().split('T')[0];
+
+  // 1. Cassa attuale
+  const { data: conti } = await supabase.from('conti_banca').select('saldo_attuale').eq('attivo', true);
+  const cassaAttuale = conti?.reduce((acc, c) => acc + (Number(c.saldo_attuale) || 0), 0) || 0;
+
+  // 2. Scadenze programmate (usa data_pianificata, fallback data_scadenza)
+  const { data: scadenze } = await supabase
+    .from('scadenze_pagamento')
+    .select(`
+      id, tipo, importo_totale, importo_pagato, data_pianificata, data_scadenza,
+      descrizione, fattura_riferimento, metodo_pagamento, categoria, fonte,
+      anagrafica_soggetti(ragione_sociale)
+    `)
+    .neq('stato', 'pagato')
+    .or(`data_pianificata.gte.${oggiISO},data_scadenza.gte.${oggiISO}`);
+
+  // 3. Titoli in scadenza (assegni, cambiali) non ancora pagati
+  const { data: titoli } = await supabase
+    .from('titoli')
+    .select('id, tipo, importo, data_scadenza, numero_titolo, banca_incasso, scadenza_id, anagrafica_soggetti(ragione_sociale)')
+    .in('stato', ['in_essere'])
+    .gte('data_scadenza', oggiISO)
+    .lte('data_scadenza', limiteISO);
+
+  const voci: VoceCronogramma[] = [];
+
+  // Scadenze che hanno già un titolo collegato → skippa (il titolo le rappresenta)
+  const scadenzeConTitolo = new Set((titoli || []).map(t => t.scadenza_id).filter(Boolean));
+
+  for (const s of (scadenze || [])) {
+    const dataPref = s.data_pianificata || s.data_scadenza;
+    if (!dataPref) continue;
+    const dataDate = new Date(dataPref);
+    if (dataDate < oggi || dataDate > limite) continue;
+    if (scadenzeConTitolo.has(s.id)) continue; // coperta dal titolo
+
+    const residuo = (Number(s.importo_totale) || 0) - (Number(s.importo_pagato) || 0);
+    if (residuo <= 0) continue;
+
+    const sogg = s.anagrafica_soggetti as any;
+    voci.push({
+      data: dataPref.split('T')[0],
+      tipo: s.tipo as 'uscita' | 'entrata',
+      fonte: (s.fonte as any) || 'fattura',
+      soggetto: sogg?.ragione_sociale || 'N/D',
+      descrizione: s.descrizione || s.fattura_riferimento || '',
+      importo: Math.round(residuo * 100) / 100,
+      metodo: s.metodo_pagamento,
+      fattura_rif: s.fattura_riferimento,
+      categoria: s.categoria,
+    });
+  }
+
+  // Titoli
+  for (const t of (titoli || [])) {
+    const sogg = t.anagrafica_soggetti as any;
+    voci.push({
+      data: t.data_scadenza,
+      tipo: 'uscita',
+      fonte: 'titolo',
+      soggetto: sogg?.ragione_sociale || 'N/D',
+      descrizione: `${t.tipo === 'assegno' ? 'Assegno' : 'Cambiale'} ${t.numero_titolo || ''}`.trim(),
+      importo: Number(t.importo) || 0,
+      metodo: t.tipo,
+      categoria: 'titolo',
+    });
+  }
+
+  // Ordina per data
+  voci.sort((a, b) => a.data.localeCompare(b.data));
+
+  const totaleUscite = voci.filter(v => v.tipo === 'uscita').reduce((acc, v) => acc + v.importo, 0);
+  const totaleEntrate = voci.filter(v => v.tipo === 'entrata').reduce((acc, v) => acc + v.importo, 0);
+  const liquiditaNecessaria = totaleUscite - totaleEntrate;
+
+  return {
+    voci,
+    cassaAttuale: Math.round(cassaAttuale * 100) / 100,
+    totaleUscite: Math.round(totaleUscite * 100) / 100,
+    totaleEntrate: Math.round(totaleEntrate * 100) / 100,
+    liquiditaNecessaria: Math.round(liquiditaNecessaria * 100) / 100,
+  };
+}
+
 export async function getCashflowProiezione() {
   const supabase = getSupabaseAdmin();
   const oggi = new Date();
@@ -2426,7 +2543,14 @@ export async function getStoricoPagamentiPersonale(
 ): Promise<PaginatedResult<any>> {
   const supabase = getSupabaseAdmin();
 
-  const query = supabase
+  // movimenti_banca è partizionata: il join FK con conti_banca può fallire.
+  // Query senza join, poi arricchiamo manualmente.
+  const page = Math.max(1, pagination.page);
+  const pageSize = Math.max(1, pagination.pageSize);
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  const { data, error, count } = await supabase
     .from('movimenti_banca')
     .select(`
       id,
@@ -2436,17 +2560,44 @@ export async function getStoricoPagamentiPersonale(
       stato_riconciliazione,
       personale_id,
       categoria_dedotta,
-      conto_banca_id,
-      conti_banca (
-        nome_banca,
-        nome_conto
-      )
+      conto_banca_id
     `, { count: 'exact' })
     .eq('personale_id', personale_id)
     .eq('stato_riconciliazione', 'riconciliato')
-    .order('data_operazione', { ascending: false });
+    .order('data_operazione', { ascending: false })
+    .range(from, to);
 
-  return await executePaginatedQuery(query, pagination);
+  if (error) {
+    console.error('❌ Errore getStoricoPagamentiPersonale:', error);
+    return { data: [], totalCount: 0, page, pageSize, totalPages: 0 };
+  }
+
+  // Arricchisci con nome banca
+  const contoIds = [...new Set((data || []).map((m: any) => m.conto_banca_id).filter(Boolean))];
+  let contiMap: Record<string, { nome_banca: string; nome_conto: string }> = {};
+  if (contoIds.length > 0) {
+    const { data: conti } = await supabase
+      .from('conti_banca')
+      .select('id, nome_banca, nome_conto')
+      .in('id', contoIds);
+    if (conti) {
+      contiMap = Object.fromEntries(conti.map(c => [c.id, { nome_banca: c.nome_banca, nome_conto: c.nome_conto }]));
+    }
+  }
+
+  const enriched = (data || []).map((m: any) => ({
+    ...m,
+    conti_banca: contiMap[m.conto_banca_id] || null,
+  }));
+
+  const totalCount = count || 0;
+  return {
+    data: enriched,
+    totalCount,
+    page,
+    pageSize,
+    totalPages: Math.ceil(totalCount / pageSize),
+  };
 }
 
 export async function getKPIPersonale(personale_id: string) {
