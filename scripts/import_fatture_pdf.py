@@ -299,11 +299,29 @@ def main():
     pdf_files = list({p.resolve(): p for p in pdf_files}.values())
     log(f"📁 Trovati {len(pdf_files)} file PDF")
     
-    stats = {"uploadati": 0, "matchati": 0, "non_matchati": 0, "errori": 0, "no_xml": 0}
+    stats = {"uploadati": 0, "matchati": 0, "non_matchati": 0, "errori": 0, "no_xml": 0, "gia_presenti": 0}
     non_matchati_list = []
-    
+
+    # Pre-carica lista file già presenti su Storage per skip incrementale
+    log("🔧 Recupero lista PDF già presenti su Storage...")
+    existing_files = set()
+    try:
+        for anno in ["2024", "2025", "2026"]:
+            result = supabase.storage.from_(BUCKET_NAME).list(anno, {"limit": 10000})
+            for f in (result or []):
+                existing_files.add(f["name"])
+        log(f"   {len(existing_files)} file già su Storage")
+    except Exception as e:
+        log(f"  ⚠️ Impossibile leggere lista Storage: {e} — procedo senza skip")
+
     for pdf_path in sorted(pdf_files):
         filename = pdf_path.name
+
+        # Skip incrementale: se il file è già su Storage, non riprocessare
+        if filename in existing_files:
+            stats["gia_presenti"] += 1
+            continue
+
         log(f"\n📄 {filename}")
         
         # 1. Estrai pattern dal nome PDF
@@ -357,7 +375,8 @@ def main():
     log("\n" + "=" * 60)
     log("📊 RIEPILOGO")
     log(f"  File PDF trovati:       {len(pdf_files)}")
-    log(f"  Caricati su Storage:    {stats['uploadati']}")
+    log(f"  Gia presenti (skip):   {stats['gia_presenti']}")
+    log(f"  Nuovi caricati:        {stats['uploadati']}")
     log(f"  Associati a scadenze:   {stats['matchati']}")
     log(f"  Non associati:          {stats['non_matchati']}")
     log(f"  Senza XML gemello:      {stats['no_xml']}")
