@@ -455,7 +455,39 @@ export async function handleConferma(formData: FormData) {
       await allocaPagamentoIntelligente(supabaseAdmin, finalSoggettoId!, importo, movimento_id);
       
     } else {
-      throw new Error("Dati insufficienti per confermare (manca scadenza, soggetto o categoria valida).");
+      // Fallback: leggi dati pre-match salvati sul movimento (soggetto_id, ai_suggerimento)
+      const { data: movFallback } = await supabaseAdmin
+        .from('movimenti_banca')
+        .select('soggetto_id, ai_suggerimento, descrizione')
+        .eq('id', movimento_id)
+        .single();
+
+      if (movFallback?.ai_suggerimento) {
+        await confermaRiconciliazione(
+          movimento_id, movFallback.ai_suggerimento, importo, 'confermato_utente',
+          movFallback.soggetto_id || undefined
+        );
+      } else if (movFallback?.soggetto_id) {
+        await supabaseAdmin
+          .from('movimenti_banca')
+          .update({
+            stato_riconciliazione: 'riconciliato',
+            categoria_dedotta: categoria || 'fattura',
+            ...(note_riconciliazione ? { note_riconciliazione } : {})
+          })
+          .eq('id', movimento_id);
+        await allocaPagamentoIntelligente(supabaseAdmin, movFallback.soggetto_id, importo, movimento_id);
+      } else {
+        // Ultima risorsa: marca come riconciliato senza associazione
+        await supabaseAdmin
+          .from('movimenti_banca')
+          .update({
+            stato_riconciliazione: 'riconciliato',
+            categoria_dedotta: categoria || 'fattura',
+            ...(note_riconciliazione ? { note_riconciliazione } : {})
+          })
+          .eq('id', movimento_id);
+      }
     }
 
     revalidatePath('/finanza/riconciliazione');
