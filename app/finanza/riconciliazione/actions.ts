@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/utils/supabase/server'
 import { createClient as createAdminClient } from "@supabase/supabase-js"
-import { parseCSVBanca, parseXMLBanca, parseXLSBanca, importMovimentiBanca, confermaRiconciliazione, creaLogRiconciliazione, inserisciMutuoConRate, inserisciTitolo } from '@/utils/data-fetcher'
+import { parseCSVBanca, parseXMLBanca, parseXLSBanca, importMovimentiBanca, confermaRiconciliazione, creaLogRiconciliazione, inserisciMutuoConRate, inserisciTitolo, normalizzaNome } from '@/utils/data-fetcher'
 
 // ==========================================
 // AZIONI PER DOCUMENTI GENERICI (NUVOLA)
@@ -455,38 +455,127 @@ export async function handleConferma(formData: FormData) {
       await allocaPagamentoIntelligente(supabaseAdmin, finalSoggettoId!, importo, movimento_id);
       
     } else {
-      // Fallback: leggi dati pre-match salvati sul movimento (soggetto_id, ai_suggerimento)
+      // Fallback attivo: cerca soggetto e titolo/scadenza dalla descrizione del movimento
       const { data: movFallback } = await supabaseAdmin
         .from('movimenti_banca')
-        .select('soggetto_id, ai_suggerimento, descrizione')
+        .select('soggetto_id, ai_suggerimento, descrizione, data_operazione, data_valuta, categoria_dedotta')
         .eq('id', movimento_id)
         .single();
 
+      // 1. Se ci sono dati pre-match (ai_suggerimento / soggetto_id), usali
       if (movFallback?.ai_suggerimento) {
         await confermaRiconciliazione(
           movimento_id, movFallback.ai_suggerimento, importo, 'confermato_utente',
           movFallback.soggetto_id || undefined
         );
-      } else if (movFallback?.soggetto_id) {
-        await supabaseAdmin
-          .from('movimenti_banca')
-          .update({
-            stato_riconciliazione: 'riconciliato',
-            categoria_dedotta: categoria || 'fattura',
-            ...(note_riconciliazione ? { note_riconciliazione } : {})
-          })
-          .eq('id', movimento_id);
-        await allocaPagamentoIntelligente(supabaseAdmin, movFallback.soggetto_id, importo, movimento_id);
       } else {
-        // Ultima risorsa: marca come riconciliato senza associazione
-        await supabaseAdmin
-          .from('movimenti_banca')
-          .update({
-            stato_riconciliazione: 'riconciliato',
-            categoria_dedotta: categoria || 'fattura',
-            ...(note_riconciliazione ? { note_riconciliazione } : {})
-          })
-          .eq('id', movimento_id);
+        // 2. Ricerca attiva: trova soggetto dal testo della descrizione
+        const descrizione = movFallback?.descrizione || '';
+        const descNorm = normalizzaNome(descrizione);
+        let foundSoggettoId = movFallback?.soggetto_id || null;
+        let foundSoggettoNome = '';
+
+        if (!foundSoggettoId && descrizione.length > 3) {
+          const { data: tuttiSoggetti } = await supabaseAdmin
+            .from('anagrafica_soggetti')
+            .select('id, ragione_sociale');
+
+          if (tuttiSoggetti) {
+            for (const s of tuttiSoggetti) {
+              const nomeNorm = normalizzaNome(s.ragione_sociale);
+              if (nomeNorm.length >= 4 && descNorm.includes(nomeNorm)) {
+                foundSoggettoId = s.id;
+                foundSoggettoNome = s.ragione_sociale;
+                break;
+              }
+            }
+          }
+        }
+
+        // 3. Se la descrizione contiene cambiale/assegno/tratta, cerca titolo collegato
+        const regexTitolo = /\b(cambial[ie]|tratt[ae]|assegn[io]|pagar[oò]|effett[io]|ri\.?ba\.?|addebito\s+cambial[ie])\b/i;
+        const isTitolo = regexTitolo.test(descrizione);
+
+        if (isTitolo && foundSoggettoId) {
+          const importoAbs = Math.abs(importo);
+          const dataMov = movFallback?.data_operazione || movFallback?.data_valuta || new Date().toISOString().slice(0, 10);
+
+          const { data: titoli } = await supabaseAdmin
+            .from('titoli')
+            .select('id, tipo, importo, scadenza_id, soggetto_id')
+            .eq('soggetto_id', foundSoggettoId)
+            .eq('stato', 'in_essere')
+            .gte('data_scadenza', new Date(new Date(dataMov).getTime() - 30 * 86400000).toISOString().slice(0, 10))
+            .lte('data_scadenza', new Date(new Date(dataMov).getTime() + 30 * 86400000).toISOString().slice(0, 10));
+
+          let titoloFound: any = null;
+          if (titoli && titoli.length > 0) {
+            titoloFound = titoli.find((t: any) => Math.abs(t.importo - importoAbs) <= 0.50);
+            if (!titoloFound && titoli.length === 1) {
+              titoloFound = titoli[0];
+            }
+          }
+
+          if (titoloFound?.scadenza_id) {
+            await confermaRiconciliazione(
+              movimento_id, titoloFound.scadenza_id, importo, 'confermato_utente', foundSoggettoId
+            );
+          } else if (titoloFound) {
+            // Titolo senza scadenza collegata: marca titolo come pagato e riconcilia movimento
+            await supabaseAdmin
+              .from('titoli')
+              .update({
+                stato: 'pagato',
+                data_pagamento: new Date().toISOString().split('T')[0],
+                movimento_banca_id: movimento_id,
+              })
+              .eq('id', titoloFound.id);
+            await supabaseAdmin
+              .from('movimenti_banca')
+              .update({
+                stato_riconciliazione: 'riconciliato',
+                soggetto_id: foundSoggettoId,
+                categoria_dedotta: categoria || 'fattura',
+                ...(note_riconciliazione ? { note_riconciliazione } : {})
+              })
+              .eq('id', movimento_id);
+            await allocaPagamentoIntelligente(supabaseAdmin, foundSoggettoId, importo, movimento_id);
+          } else {
+            // Titolo non trovato ma soggetto si: riconcilia con soggetto
+            await supabaseAdmin
+              .from('movimenti_banca')
+              .update({
+                stato_riconciliazione: 'riconciliato',
+                soggetto_id: foundSoggettoId,
+                categoria_dedotta: categoria || 'fattura',
+                ...(note_riconciliazione ? { note_riconciliazione } : {})
+              })
+              .eq('id', movimento_id);
+            await allocaPagamentoIntelligente(supabaseAdmin, foundSoggettoId, importo, movimento_id);
+          }
+        } else if (foundSoggettoId) {
+          // Non e' un titolo ma abbiamo il soggetto: riconcilia con allocazione intelligente
+          await supabaseAdmin
+            .from('movimenti_banca')
+            .update({
+              stato_riconciliazione: 'riconciliato',
+              soggetto_id: foundSoggettoId,
+              categoria_dedotta: categoria || 'fattura',
+              ...(note_riconciliazione ? { note_riconciliazione } : {})
+            })
+            .eq('id', movimento_id);
+          await allocaPagamentoIntelligente(supabaseAdmin, foundSoggettoId, importo, movimento_id);
+        } else {
+          // Nessun soggetto trovato: marca come riconciliato senza associazione
+          await supabaseAdmin
+            .from('movimenti_banca')
+            .update({
+              stato_riconciliazione: 'riconciliato',
+              categoria_dedotta: categoria || 'fattura',
+              ...(note_riconciliazione ? { note_riconciliazione } : {})
+            })
+            .eq('id', movimento_id);
+        }
       }
     }
 
