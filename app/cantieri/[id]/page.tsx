@@ -37,25 +37,69 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
     .eq('cantiere_id', id)
     .order('data', { ascending: false })
 
-  // 4. Fetch Scadenze assegnate a questo cantiere (Fatture con IVA)
-  const { data: scadenzeCantiere } = await supabase
+  // 4. Fetch Scadenze assegnate a questo cantiere
+  // 4a. Allocazioni multi-cantiere/DDT da scadenze_cantiere
+  const { data: allocazioniMulti } = await supabase
+    .from('scadenze_cantiere')
+    .select(`
+      importo, ddt_riferimento, scadenza_id,
+      scadenze_pagamento(id, fattura_riferimento, aliquota_iva, importo_totale, data_scadenza, data_emissione, stato, descrizione, tipo, anagrafica_soggetti(ragione_sociale))
+    `)
+    .eq('cantiere_id', id)
+
+  // 4b. Scadenze con cantiere_id diretto (singolo)
+  const { data: scadenzeDirette } = await supabase
     .from('scadenze_pagamento')
     .select('id, fattura_riferimento, importo_totale, aliquota_iva, data_scadenza, data_emissione, stato, descrizione, tipo, anagrafica_soggetti(ragione_sociale)')
     .eq('cantiere_id', id)
     .order('data_scadenza', { ascending: false })
 
-  // Calcoli IVA per scadenze di questo cantiere
+  // Escludi scadenze dirette gia' coperte da allocazioni (evita doppio conteggio DDT single-cantiere)
+  const scadenzeInAllocazioni = new Set((allocazioniMulti || []).map(a => a.scadenza_id))
+  const scadenzeSoloDirette = (scadenzeDirette || []).filter(s => !scadenzeInAllocazioni.has(s.id))
+
+  // Calcoli IVA unificati
   let totaleImponibileFatture = 0
   let totaleIvaCantiere = 0
-  const scadenzeConScorporo = (scadenzeCantiere || []).map((s: any) => {
+
+  // Scorporo su scadenze dirette (importo = importo_totale della scadenza)
+  const scorporoDirette = scadenzeSoloDirette.map((s: any) => {
     const importo = Number(s.importo_totale) || 0
     const aliquota = s.aliquota_iva ?? 22
     const iva = aliquota > 0 ? Math.round((importo / (100 + aliquota)) * aliquota * 100) / 100 : 0
     const imponibile = Math.round((importo - iva) * 100) / 100
     totaleImponibileFatture += imponibile
     totaleIvaCantiere += iva
-    return { ...s, imponibile, iva, aliquota }
+    return { ...s, importo_allocato: importo, imponibile, iva, aliquota, ddt_riferimento: null as string | null }
   })
+
+  // Scorporo su allocazioni multi (importo = quota pro-rata lordo per questo cantiere)
+  const scorporoMulti = (allocazioniMulti || []).map((a: any) => {
+    const sp = a.scadenze_pagamento || {}
+    const importo = Number(a.importo) || 0
+    const aliquota = sp.aliquota_iva ?? 22
+    const iva = aliquota > 0 ? Math.round((importo / (100 + aliquota)) * aliquota * 100) / 100 : 0
+    const imponibile = Math.round((importo - iva) * 100) / 100
+    totaleImponibileFatture += imponibile
+    totaleIvaCantiere += iva
+    return {
+      id: sp.id || a.scadenza_id,
+      fattura_riferimento: sp.fattura_riferimento,
+      importo_totale: sp.importo_totale,
+      importo_allocato: importo,
+      data_scadenza: sp.data_scadenza,
+      data_emissione: sp.data_emissione,
+      stato: sp.stato,
+      descrizione: sp.descrizione,
+      tipo: sp.tipo,
+      anagrafica_soggetti: sp.anagrafica_soggetti,
+      imponibile, iva, aliquota,
+      ddt_riferimento: a.ddt_riferimento as string | null,
+    }
+  })
+
+  const scadenzeConScorporo = [...scorporoDirette, ...scorporoMulti]
+    .sort((a, b) => (b.data_emissione || b.data_scadenza || '').localeCompare(a.data_emissione || a.data_scadenza || ''))
   totaleImponibileFatture = Math.round(totaleImponibileFatture * 100) / 100
   totaleIvaCantiere = Math.round(totaleIvaCantiere * 100) / 100
 
@@ -234,7 +278,7 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
                     <TableRow>
                       <TableHead>Data</TableHead>
                       <TableHead>Fornitore</TableHead>
-                      <TableHead>Fattura</TableHead>
+                      <TableHead>Fattura / DDT</TableHead>
                       <TableHead>Descrizione</TableHead>
                       <TableHead className="text-right">Lordo</TableHead>
                       <TableHead className="text-right">Imponibile</TableHead>
@@ -242,8 +286,8 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {scadenzeConScorporo.map((s: any) => (
-                      <TableRow key={s.id}>
+                    {scadenzeConScorporo.map((s: any, idx: number) => (
+                      <TableRow key={`${s.id}-${idx}`}>
                         <TableCell className="font-medium whitespace-nowrap">
                           {s.data_emissione ? new Date(s.data_emissione).toLocaleDateString('it-IT') : new Date(s.data_scadenza).toLocaleDateString('it-IT')}
                         </TableCell>
@@ -251,15 +295,20 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
                           {s.anagrafica_soggetti?.ragione_sociale || 'N/D'}
                         </TableCell>
                         <TableCell>
-                          {s.fattura_riferimento ? (
-                            <span className="font-mono text-xs bg-zinc-100 px-1.5 py-0.5 rounded border border-zinc-200">{s.fattura_riferimento}</span>
-                          ) : '-'}
+                          <div className="flex flex-col gap-0.5">
+                            {s.fattura_riferimento ? (
+                              <span className="font-mono text-xs bg-zinc-100 px-1.5 py-0.5 rounded border border-zinc-200">{s.fattura_riferimento}</span>
+                            ) : <span className="text-zinc-400 text-xs">-</span>}
+                            {s.ddt_riferimento && (
+                              <span className="font-mono text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">DDT {s.ddt_riferimento}</span>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="max-w-[200px] truncate text-zinc-500" title={s.descrizione}>
                           {s.descrizione || '-'}
                         </TableCell>
                         <TableCell className="text-right font-mono text-zinc-500 text-sm">
-                          € {Number(s.importo_totale).toLocaleString('it-IT', { minimumFractionDigits: 2 })}
+                          € {Number(s.importo_allocato).toLocaleString('it-IT', { minimumFractionDigits: 2 })}
                         </TableCell>
                         <TableCell className="text-right font-mono font-bold text-blue-700">
                           € {s.imponibile.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
@@ -278,21 +327,26 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
 
               {/* Mobile */}
               <div className="md:hidden divide-y divide-zinc-100">
-                {scadenzeConScorporo.map((s: any) => (
-                  <div key={s.id} className="p-4 space-y-2">
+                {scadenzeConScorporo.map((s: any, idx: number) => (
+                  <div key={`${s.id}-${idx}`} className="p-4 space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-zinc-700">
                         {s.data_emissione ? new Date(s.data_emissione).toLocaleDateString('it-IT') : new Date(s.data_scadenza).toLocaleDateString('it-IT')}
                       </span>
-                      {s.fattura_riferimento && (
-                        <span className="font-mono text-xs bg-zinc-100 px-1.5 py-0.5 rounded">{s.fattura_riferimento}</span>
-                      )}
+                      <div className="flex flex-col items-end gap-0.5">
+                        {s.fattura_riferimento && (
+                          <span className="font-mono text-xs bg-zinc-100 px-1.5 py-0.5 rounded">{s.fattura_riferimento}</span>
+                        )}
+                        {s.ddt_riferimento && (
+                          <span className="font-mono text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">DDT {s.ddt_riferimento}</span>
+                        )}
+                      </div>
                     </div>
                     <div className="font-medium text-zinc-900">{s.anagrafica_soggetti?.ragione_sociale || 'N/D'}</div>
                     <div className="grid grid-cols-3 gap-2 bg-zinc-50 rounded-lg border border-zinc-100 p-3 text-center">
                       <div>
                         <div className="text-[10px] uppercase tracking-wider text-zinc-400">Lordo</div>
-                        <div className="text-xs font-mono text-zinc-600">€ {Number(s.importo_totale).toLocaleString('it-IT', { minimumFractionDigits: 2 })}</div>
+                        <div className="text-xs font-mono text-zinc-600">€ {Number(s.importo_allocato).toLocaleString('it-IT', { minimumFractionDigits: 2 })}</div>
                       </div>
                       <div>
                         <div className="text-[10px] uppercase tracking-wider text-blue-400">Imponibile</div>

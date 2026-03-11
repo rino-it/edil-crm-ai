@@ -37,9 +37,47 @@ def pulisci_namespace(xml_content):
 
 def estrai_ddt_da_descrizione(descrizione):
     if not descrizione: return None
-    match = re.search(r'(?:DDT|Doc|Bolla|Rif)\.?\s*(?:n\.?|nr\.?)?\s*0*(\d+)', descrizione, re.IGNORECASE)
+    match = re.search(r'(?:DDT|DOT|Doc|Bolla|Rif)\.?\s*(?:n\.?|nr\.?|n\s)?\s*0*(\d+)', descrizione, re.IGNORECASE)
     if match: return match.group(1)
     return None
+
+
+def assegna_ddt_da_header_descrizioni(dettaglio_linee, ddt_globali):
+    """
+    Quando i DatiDDT non hanno RiferimentoNumeroLinea, le righe nell'XML
+    spesso contengono header con prezzo 0 tipo 'DOT 13176 del 01-12-2025'.
+    Le righe successive con prezzo > 0 appartengono a quel DDT.
+    Ritorna dict {numero_linea: ddt_singolo}.
+    """
+    ddt_per_linea = {}
+    current_ddt = None
+
+    for linea in dettaglio_linee:
+        num_linea_tag = linea.find("NumeroLinea")
+        desc_tag = linea.find("Descrizione")
+        prezzo_tag = linea.find("PrezzoTotale")
+
+        if num_linea_tag is None:
+            continue
+
+        num_linea = num_linea_tag.text
+        desc = desc_tag.text if desc_tag is not None else ""
+        prezzo = float(prezzo_tag.text) if prezzo_tag is not None else 0.0
+
+        header_ddt = estrai_ddt_da_descrizione(desc)
+        if header_ddt and prezzo == 0.0:
+            current_ddt = header_ddt
+            ddt_per_linea[num_linea] = current_ddt
+        elif current_ddt:
+            ddt_per_linea[num_linea] = current_ddt
+
+    if len(ddt_per_linea) > 0:
+        righe_con_ddt = sum(1 for v in ddt_per_linea.values() if v)
+        ddt_unici = set(ddt_per_linea.values())
+        if righe_con_ddt > 0 and len(ddt_unici) > 1:
+            return ddt_per_linea
+
+    return {}
 
 def calcola_data_scadenza(data_emissione_str, condizioni):
     """Calcola la scadenza basata su stringhe tipo '30gg DFFM' o '60gg'"""
@@ -273,9 +311,18 @@ def parse_and_upload(percorso_file):
         
         stringa_ddt_globali = ",".join(ddt_globali) if ddt_globali else None
 
-        # --- DETTAGLIO RIGHE (Mantenuto integro) ---
+        # --- DETTAGLIO RIGHE ---
         righe_da_caricare = []
         dettaglio_linee = body.findall(".//DettaglioLinee")
+
+        # Se i DDT sono globali (no RiferimentoNumeroLinea), prova ad assegnare
+        # ciascuna riga al DDT corretto analizzando le righe-header con prezzo 0
+        ddt_header_map = {}
+        if ddt_globali and not ddt_line_map:
+            ddt_header_map = assegna_ddt_da_header_descrizioni(dettaglio_linee, ddt_globali)
+            if ddt_header_map:
+                safe_print(f"   [DDT] Assegnazione per header-descrizione: {len(set(ddt_header_map.values()))} DDT distinti")
+
         for linea in dettaglio_linee:
             try:
                 num_linea = linea.find("NumeroLinea").text
@@ -284,7 +331,8 @@ def parse_and_upload(percorso_file):
                 prezzo = float(linea.find("PrezzoTotale").text) if linea.find("PrezzoTotale") is not None else 0.0
                 um = linea.find("UnitaMisura").text if linea.find("UnitaMisura") is not None else ""
 
-                ddt_assegnato = ddt_line_map.get(num_linea) or stringa_ddt_globali or estrai_ddt_da_descrizione(desc)
+                # Priorita': 1) RiferimentoNumeroLinea, 2) header-descrizione, 3) globale, 4) regex descrizione
+                ddt_assegnato = ddt_line_map.get(num_linea) or ddt_header_map.get(num_linea) or stringa_ddt_globali or estrai_ddt_da_descrizione(desc)
 
                 righe_da_caricare.append({
                     "fattura_id": fattura_id,
