@@ -2,7 +2,9 @@
 
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { importaEstrattoConto, handleConferma as confermaAction, handleRifiuta as rifiutaAction, quickCreateSoggetto } from './actions'
+import { importaEstrattoConto, handleConferma as confermaAction, handleRifiuta as rifiutaAction, quickCreateSoggetto, getAnteprimaRiconciliazione } from './actions'
+import type { AnteprimaRiconciliazione } from './actions'
+import { AnteprimaRiconciliazioneDialog } from './components/AnteprimaRiconciliazioneDialog'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -88,6 +90,11 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
 
   // Split panel state
   const [splitMovimento, setSplitMovimento] = useState<{ id: string; data_operazione: string; descrizione: string; importo: number } | null>(null);
+
+  // Anteprima riconciliazione (popup conferma)
+  const [anteprimaData, setAnteprimaData] = useState<AnteprimaRiconciliazione | null>(null);
+  const [anteprimaFormData, setAnteprimaFormData] = useState<FormData | null>(null);
+  const [anteprimaLoading, setAnteprimaLoading] = useState(false);
 
   // STEP 6: Stato e logica per la barra di ricerca
   const [searchTerm, setSearchTerm] = useState('');
@@ -213,9 +220,8 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
 
     const isSpeciale = categorieSpeciali.includes(categoria);
 
-    // FIX: auto-risoluzione soggetto/scadenza dal filtro testo se l'utente non ha selezionato dal dropdown
+    // Auto-risoluzione soggetto/scadenza dal filtro testo se l'utente non ha selezionato dal dropdown
     if (!isSpeciale && !scadenzaId && !soggettoId) {
-      // Prima prova dal form submit (più affidabile), fallback allo state locale
       const filtroDaForm = ((formData.get('manual_filter') as string) || '').toLowerCase().trim();
       const filtro = filtroDaForm || (manualFilters[movId] || '').toLowerCase().trim();
 
@@ -251,7 +257,6 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
           }
         }
 
-        // Fallback robusto: se i soggetti sono multipli, scegli la scadenza più vicina per importo
         if (!soggettoId && !scadenzaId && matchingScadenze.length > 0) {
           const candidati = matchingScadenze
             .map(s => {
@@ -269,27 +274,51 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
           }
         }
       }
-
-      // Se non troviamo nelle scadenze aperte, lasciamo che il server cerchi in anagrafica_soggetti
-      // Il campo manual_filter è già nel formData dal campo input
     }
 
-    const result = await confermaAction(formData);
-    if ((result as any)?.error) {
-      // Se il server indica fornitore non trovato, attiva il quick-create
-      if ((result as any).error === 'fornitore_non_trovato') {
-        setQuickCreate({ movId, nome: (result as any).nome || manualFilters[movId] || '', formData });
-        setErrors(prev => ({ ...prev, [movId]: `Fornitore "${(result as any).nome || manualFilters[movId]}" non trovato in anagrafica` }));
+    // Mostra anteprima invece di eseguire direttamente
+    setAnteprimaLoading(true);
+    try {
+      const anteprima = await getAnteprimaRiconciliazione(formData);
+      setAnteprimaData(anteprima);
+      setAnteprimaFormData(formData);
+    } catch (err: any) {
+      setErrors(prev => ({ ...prev, [movId]: err.message || 'Errore anteprima' }));
+    } finally {
+      setAnteprimaLoading(false);
+    }
+  }
+
+  const handleConfermaDefinitiva = async () => {
+    if (!anteprimaFormData) return;
+    setAnteprimaLoading(true);
+
+    // Se nota di credito, propaga il flag al server
+    if (anteprimaData?.isNotaCredito) {
+      anteprimaFormData.set('is_nota_credito', 'true');
+    }
+
+    try {
+      const result = await confermaAction(anteprimaFormData);
+      const movId = anteprimaFormData.get('movimento_id') as string;
+
+      if ((result as any)?.error) {
+        if ((result as any).error === 'fornitore_non_trovato') {
+          setQuickCreate({ movId, nome: (result as any).nome || manualFilters[movId] || '', formData: anteprimaFormData });
+          setErrors(prev => ({ ...prev, [movId]: `Fornitore "${(result as any).nome || manualFilters[movId]}" non trovato in anagrafica` }));
+        } else {
+          setErrors(prev => ({ ...prev, [movId]: (result as any).error }));
+        }
       } else {
-        setErrors(prev => ({ ...prev, [movId]: (result as any).error }));
+        setErrors(prev => { const next = { ...prev }; delete next[movId]; return next; });
+        setExpandedRow(null);
+        setMovimentiLocali(prev => prev.filter(m => m.id !== movId));
       }
-      return;
+    } finally {
+      setAnteprimaData(null);
+      setAnteprimaFormData(null);
+      setAnteprimaLoading(false);
     }
-    // Pulisci errore precedente se successo
-    setErrors(prev => { const next = { ...prev }; delete next[movId]; return next; });
-    setExpandedRow(null);
-
-    setMovimentiLocali(prev => prev.filter(m => m.id !== movId));
   }
 
   const handleRifiuta = async (formData: FormData) => {
@@ -755,6 +784,21 @@ export default function ClientRiconciliazione({ movimenti, scadenzeAperte, conto
             setExpandedRow(null);
           }
           setSplitMovimento(null);
+        }}
+      />
+
+      {/* Dialog Anteprima Riconciliazione */}
+      <AnteprimaRiconciliazioneDialog
+        open={!!anteprimaData}
+        anteprima={anteprimaData}
+        loading={anteprimaLoading}
+        onConferma={handleConfermaDefinitiva}
+        onAnnulla={() => { setAnteprimaData(null); setAnteprimaFormData(null); }}
+        onModifica={() => {
+          const movId = anteprimaFormData?.get('movimento_id') as string;
+          setAnteprimaData(null);
+          setAnteprimaFormData(null);
+          if (movId) setExpandedRow(movId);
         }}
       />
     </div>

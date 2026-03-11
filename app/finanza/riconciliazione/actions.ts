@@ -341,6 +341,7 @@ export async function handleConferma(formData: FormData) {
     const categoria = formData.get('categoria') as string;
     const importo = Number(formData.get('importo'));
     const note_riconciliazione = (formData.get('note_riconciliazione') as string | null) || null;
+    const isNotaCredito = formData.get('is_nota_credito') === 'true';
 
     if (!movimento_id) throw new Error("ID movimento mancante.");
 
@@ -434,11 +435,14 @@ export async function handleConferma(formData: FormData) {
       }
     } else if (scadenza_id) {
       await confermaRiconciliazione(
-        movimento_id, 
-        scadenza_id, 
-        importo, 
+        movimento_id,
+        scadenza_id,
+        importo,
         'confermato_utente',
-        resolvedSoggettoId || soggetto_id || undefined
+        resolvedSoggettoId || soggetto_id || undefined,
+        undefined,
+        undefined,
+        isNotaCredito
       );
     } else if (resolvedSoggettoId || soggetto_id) {
       const finalSoggettoId = resolvedSoggettoId || soggetto_id;
@@ -466,7 +470,8 @@ export async function handleConferma(formData: FormData) {
       if (movFallback?.ai_suggerimento) {
         await confermaRiconciliazione(
           movimento_id, movFallback.ai_suggerimento, importo, 'confermato_utente',
-          movFallback.soggetto_id || undefined
+          movFallback.soggetto_id || undefined,
+          undefined, undefined, isNotaCredito
         );
       } else {
         // 2. Ricerca attiva: trova soggetto dal testo della descrizione
@@ -518,7 +523,8 @@ export async function handleConferma(formData: FormData) {
 
           if (titoloFound?.scadenza_id) {
             await confermaRiconciliazione(
-              movimento_id, titoloFound.scadenza_id, importo, 'confermato_utente', foundSoggettoId
+              movimento_id, titoloFound.scadenza_id, importo, 'confermato_utente', foundSoggettoId,
+              undefined, undefined, isNotaCredito
             );
           } else if (titoloFound) {
             // Titolo senza scadenza collegata: marca titolo come pagato e riconcilia movimento
@@ -588,6 +594,389 @@ export async function handleConferma(formData: FormData) {
     console.error("❌ Errore conferma match:", error);
     return { error: error.message };
   }
+}
+
+// ==========================================
+// ANTEPRIMA RICONCILIAZIONE (READ-ONLY)
+// ==========================================
+export interface AnteprimaRiconciliazione {
+  tipo: 'scadenza' | 'soggetto_allocazione' | 'titolo' | 'categoria_speciale' | 'nota_credito' | 'fallback_soggetto' | 'nessun_match'
+  label: string
+  isNotaCredito: boolean
+  soggetto?: { id: string; ragione_sociale: string }
+  scadenza?: {
+    id: string
+    fattura_riferimento: string | null
+    importo_totale: number
+    residuo_prima: number
+    residuo_dopo: number
+    stato_dopo: 'pagato' | 'parziale'
+  }
+  titolo?: { id: string; tipo: string; numero_titolo: string | null; importo: number }
+  allocazione_fifo?: Array<{
+    scadenza_id: string
+    fattura_riferimento: string | null
+    importo_applicato: number
+    residuo_prima: number
+    residuo_dopo: number
+  }>
+  categoria?: string
+  importo_movimento: number
+  warning?: string
+}
+
+const CATEGORIE_SPECIALI = ['commissione', 'giroconto', 'carta_credito', 'stipendio', 'leasing', 'ente_pubblico', 'cassa_edile', 'cessione_quinto', 'utenza', 'assicurazione', 'f24', 'finanziamento_socio', 'interessi_bancari', 'mutuo'];
+
+const LABEL_CATEGORIE: Record<string, string> = {
+  commissione: 'Commissione bancaria',
+  giroconto: 'Giroconto',
+  carta_credito: 'Carta di credito',
+  stipendio: 'Stipendio',
+  leasing: 'Leasing',
+  ente_pubblico: 'Ente pubblico',
+  cassa_edile: 'Cassa edile',
+  cessione_quinto: 'Cessione del quinto',
+  utenza: 'Utenza',
+  assicurazione: 'Assicurazione',
+  f24: 'F24 / Imposte',
+  finanziamento_socio: 'Finanziamento socio',
+  interessi_bancari: 'Interessi bancari',
+  mutuo: 'Mutuo',
+};
+
+export async function getAnteprimaRiconciliazione(formData: FormData): Promise<AnteprimaRiconciliazione> {
+  const movimento_id = formData.get('movimento_id') as string;
+  const scadenza_id = formData.get('scadenza_id') as string | null;
+  const soggetto_id = formData.get('soggetto_id') as string | null;
+  const categoria = formData.get('categoria') as string;
+  const importo = Number(formData.get('importo'));
+  const manual_filter = (formData.get('manual_filter') as string || '').trim();
+
+  const supabaseAdmin = createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } }
+  );
+
+  // Recupera il movimento per sapere segno e descrizione
+  const { data: movimento } = await supabaseAdmin
+    .from('movimenti_banca')
+    .select('importo, descrizione, soggetto_id, ai_suggerimento, data_operazione, data_valuta')
+    .eq('id', movimento_id)
+    .single();
+
+  const importoReale = movimento?.importo || importo;
+  const isEntrata = importoReale > 0;
+
+  // Risolvi soggetto_id (stessa logica di handleConferma)
+  let resolvedSoggettoId = soggetto_id;
+  if (!CATEGORIE_SPECIALI.includes(categoria) && !scadenza_id && !soggetto_id && manual_filter && manual_filter.length >= 3) {
+    const { data: soggetti } = await supabaseAdmin
+      .from('anagrafica_soggetti')
+      .select('id, ragione_sociale, tipo')
+      .ilike('ragione_sociale', `%${manual_filter}%`);
+    if (soggetti && soggetti.length === 1) {
+      resolvedSoggettoId = soggetti[0].id;
+    }
+  }
+
+  // Helper: determina se e' nota di credito (entrata da fornitore)
+  async function checkNotaCredito(soggettoId: string): Promise<boolean> {
+    if (!isEntrata) return false;
+    const { data: sogg } = await supabaseAdmin
+      .from('anagrafica_soggetti')
+      .select('tipo')
+      .eq('id', soggettoId)
+      .single();
+    return sogg?.tipo === 'fornitore';
+  }
+
+  // Helper: recupera info soggetto
+  async function getSoggettoInfo(soggettoId: string) {
+    const { data } = await supabaseAdmin
+      .from('anagrafica_soggetti')
+      .select('id, ragione_sociale')
+      .eq('id', soggettoId)
+      .single();
+    return data ? { id: data.id, ragione_sociale: data.ragione_sociale } : undefined;
+  }
+
+  // === CATEGORIA SPECIALE ===
+  if (CATEGORIE_SPECIALI.includes(categoria)) {
+    return {
+      tipo: 'categoria_speciale',
+      label: `Registrazione: ${LABEL_CATEGORIE[categoria] || categoria}. Nessuna scadenza collegata.`,
+      isNotaCredito: false,
+      categoria,
+      importo_movimento: importo,
+    };
+  }
+
+  // === SCADENZA ESPLICITA ===
+  if (scadenza_id) {
+    const { data: scad } = await supabaseAdmin
+      .from('scadenze_pagamento')
+      .select('id, fattura_riferimento, importo_totale, importo_pagato, soggetto_id, tipo, anagrafica_soggetti(ragione_sociale)')
+      .eq('id', scadenza_id)
+      .single();
+
+    if (scad) {
+      const finalSoggettoId = resolvedSoggettoId || soggetto_id || scad.soggetto_id;
+      const notaCredito = isEntrata && scad.tipo === 'uscita';
+      const residuoPrima = Number(scad.importo_totale) - Number(scad.importo_pagato || 0);
+      let residuoDopo: number;
+      let statoDopo: 'pagato' | 'parziale';
+
+      if (notaCredito) {
+        const nuovoTotale = Math.max(0, Number(scad.importo_totale) - Math.abs(importo));
+        residuoDopo = nuovoTotale - Number(scad.importo_pagato || 0);
+        statoDopo = residuoDopo <= 0.01 ? 'pagato' : 'parziale';
+      } else {
+        const nuovoPagato = Number(scad.importo_pagato || 0) + Math.abs(importo);
+        residuoDopo = Number(scad.importo_totale) - nuovoPagato;
+        statoDopo = residuoDopo <= 0.01 ? 'pagato' : 'parziale';
+      }
+
+      const soggNome = (scad as any).anagrafica_soggetti?.ragione_sociale || '';
+      const label = notaCredito
+        ? `Nota di credito da ${soggNome}. Riduzione debito fattura ${scad.fattura_riferimento || 'N/A'}: ${residuoPrima.toFixed(2)} -> ${Math.max(0, residuoDopo).toFixed(2)}`
+        : `Pagamento fattura ${scad.fattura_riferimento || 'N/A'} di ${soggNome}. Residuo: ${residuoPrima.toFixed(2)} -> ${Math.max(0, residuoDopo).toFixed(2)}. Stato -> ${statoDopo}`;
+
+      return {
+        tipo: notaCredito ? 'nota_credito' : 'scadenza',
+        label,
+        isNotaCredito: notaCredito,
+        soggetto: soggNome ? { id: finalSoggettoId || '', ragione_sociale: soggNome } : undefined,
+        scadenza: {
+          id: scad.id,
+          fattura_riferimento: scad.fattura_riferimento,
+          importo_totale: Number(scad.importo_totale),
+          residuo_prima: residuoPrima,
+          residuo_dopo: Math.max(0, residuoDopo),
+          stato_dopo: statoDopo,
+        },
+        importo_movimento: importo,
+      };
+    }
+  }
+
+  // === SOGGETTO ESPLICITO (allocazione intelligente) ===
+  if (resolvedSoggettoId || soggetto_id) {
+    const finalSoggettoId = (resolvedSoggettoId || soggetto_id)!;
+    const soggettoInfo = await getSoggettoInfo(finalSoggettoId);
+    const notaCredito = await checkNotaCredito(finalSoggettoId);
+
+    // Simula allocazione FIFO read-only
+    const { data: scadenzeAperte } = await supabaseAdmin
+      .from('scadenze_pagamento')
+      .select('id, importo_totale, importo_pagato, fattura_riferimento, stato')
+      .eq('soggetto_id', finalSoggettoId)
+      .neq('stato', 'pagato')
+      .order('data_scadenza', { ascending: true });
+
+    if (!scadenzeAperte || scadenzeAperte.length === 0) {
+      return {
+        tipo: notaCredito ? 'nota_credito' : 'soggetto_allocazione',
+        label: notaCredito
+          ? `Nota di credito da ${soggettoInfo?.ragione_sociale || ''}. Nessuna fattura aperta su cui applicare il credito.`
+          : `Pagamento a ${soggettoInfo?.ragione_sociale || ''}. Nessuna fattura aperta — acconto non allocabile.`,
+        isNotaCredito: notaCredito,
+        soggetto: soggettoInfo,
+        importo_movimento: importo,
+        warning: 'Nessuna fattura aperta per questo soggetto',
+      };
+    }
+
+    // Simulazione FIFO (read-only)
+    const targetCents = Math.round(importo * 100);
+    const items = scadenzeAperte.map((s: any) => ({
+      ...s,
+      residuoCents: Math.round((Number(s.importo_totale) - Number(s.importo_pagato || 0)) * 100)
+    }));
+
+    const allocazioni: AnteprimaRiconciliazione['allocazione_fifo'] = [];
+    let budgetCents = targetCents;
+
+    // Combinazione esatta
+    let combinazioneEsatta: any[] | null = null;
+    if (items.length <= 20) {
+      function trovaCombinazioneEsatta(index: number, sum: number, subset: any[]): any[] | null {
+        if (sum === targetCents) return subset;
+        if (sum > targetCents || index >= items.length) return null;
+        const include = trovaCombinazioneEsatta(index + 1, sum + items[index].residuoCents, [...subset, items[index]]);
+        if (include) return include;
+        return trovaCombinazioneEsatta(index + 1, sum, subset);
+      }
+      combinazioneEsatta = trovaCombinazioneEsatta(0, 0, []);
+    }
+
+    if (combinazioneEsatta) {
+      for (const s of combinazioneEsatta) {
+        const residuoPrima = s.residuoCents / 100;
+        allocazioni.push({
+          scadenza_id: s.id,
+          fattura_riferimento: s.fattura_riferimento,
+          importo_applicato: residuoPrima,
+          residuo_prima: residuoPrima,
+          residuo_dopo: 0,
+        });
+      }
+    } else {
+      for (const s of items) {
+        if (budgetCents <= 0) break;
+        const daPagareCents = Math.min(s.residuoCents, budgetCents);
+        if (daPagareCents <= 0) continue;
+        budgetCents -= daPagareCents;
+        const residuoPrima = s.residuoCents / 100;
+        allocazioni.push({
+          scadenza_id: s.id,
+          fattura_riferimento: s.fattura_riferimento,
+          importo_applicato: daPagareCents / 100,
+          residuo_prima: residuoPrima,
+          residuo_dopo: (s.residuoCents - daPagareCents) / 100,
+        });
+      }
+    }
+
+    const metodo = combinazioneEsatta ? 'combinazione esatta' : 'FIFO';
+    return {
+      tipo: notaCredito ? 'nota_credito' : 'soggetto_allocazione',
+      label: notaCredito
+        ? `Nota di credito da ${soggettoInfo?.ragione_sociale || ''}. Riduzione debito su ${allocazioni.length} fattur${allocazioni.length === 1 ? 'a' : 'e'}.`
+        : `Pagamento a ${soggettoInfo?.ragione_sociale || ''}. Allocazione ${metodo} su ${allocazioni.length} fattur${allocazioni.length === 1 ? 'a' : 'e'}.`,
+      isNotaCredito: notaCredito,
+      soggetto: soggettoInfo,
+      allocazione_fifo: allocazioni,
+      importo_movimento: importo,
+    };
+  }
+
+  // === FALLBACK: cerca soggetto e titolo dalla descrizione ===
+  const descrizione = movimento?.descrizione || '';
+  const descNorm = normalizzaNome(descrizione);
+  let foundSoggettoId = movimento?.soggetto_id || null;
+  let foundSoggettoNome = '';
+
+  // Se ci sono dati pre-match, usali
+  if (movimento?.ai_suggerimento) {
+    const { data: scad } = await supabaseAdmin
+      .from('scadenze_pagamento')
+      .select('id, fattura_riferimento, importo_totale, importo_pagato, soggetto_id, tipo, anagrafica_soggetti(ragione_sociale)')
+      .eq('id', movimento.ai_suggerimento)
+      .single();
+
+    if (scad) {
+      const soggNome = (scad as any).anagrafica_soggetti?.ragione_sociale || '';
+      const residuoPrima = Number(scad.importo_totale) - Number(scad.importo_pagato || 0);
+      const notaCredito = isEntrata && scad.tipo === 'uscita';
+      let residuoDopo: number;
+      if (notaCredito) {
+        residuoDopo = Math.max(0, Number(scad.importo_totale) - Math.abs(importo)) - Number(scad.importo_pagato || 0);
+      } else {
+        residuoDopo = Number(scad.importo_totale) - (Number(scad.importo_pagato || 0) + Math.abs(importo));
+      }
+      const statoDopo: 'pagato' | 'parziale' = residuoDopo <= 0.01 ? 'pagato' : 'parziale';
+
+      return {
+        tipo: notaCredito ? 'nota_credito' : 'scadenza',
+        label: notaCredito
+          ? `Nota di credito da ${soggNome}. Riduzione debito fattura ${scad.fattura_riferimento || 'N/A'}: ${residuoPrima.toFixed(2)} -> ${Math.max(0, residuoDopo).toFixed(2)}`
+          : `Pagamento fattura ${scad.fattura_riferimento || 'N/A'} di ${soggNome}. Residuo: ${residuoPrima.toFixed(2)} -> ${Math.max(0, residuoDopo).toFixed(2)}. Stato -> ${statoDopo}`,
+        isNotaCredito: notaCredito,
+        soggetto: soggNome ? { id: scad.soggetto_id || '', ragione_sociale: soggNome } : undefined,
+        scadenza: {
+          id: scad.id,
+          fattura_riferimento: scad.fattura_riferimento,
+          importo_totale: Number(scad.importo_totale),
+          residuo_prima: residuoPrima,
+          residuo_dopo: Math.max(0, residuoDopo),
+          stato_dopo: statoDopo,
+        },
+        importo_movimento: importo,
+      };
+    }
+  }
+
+  // Cerca soggetto nella descrizione
+  if (!foundSoggettoId && descrizione.length > 3) {
+    const { data: tuttiSoggetti } = await supabaseAdmin
+      .from('anagrafica_soggetti')
+      .select('id, ragione_sociale');
+    if (tuttiSoggetti) {
+      for (const s of tuttiSoggetti) {
+        const nomeNorm = normalizzaNome(s.ragione_sociale);
+        if (nomeNorm.length >= 4 && descNorm.includes(nomeNorm)) {
+          foundSoggettoId = s.id;
+          foundSoggettoNome = s.ragione_sociale;
+          break;
+        }
+      }
+    }
+  } else if (foundSoggettoId) {
+    const info = await getSoggettoInfo(foundSoggettoId);
+    foundSoggettoNome = info?.ragione_sociale || '';
+  }
+
+  // Cerca titolo (cambiale/assegno)
+  const regexTitolo = /\b(cambial[ie]|tratt[ae]|assegn[io]|pagar[oò]|effett[io]|ri\.?ba\.?|addebito\s+cambial[ie])\b/i;
+  const isTitolo = regexTitolo.test(descrizione);
+
+  if (isTitolo && foundSoggettoId) {
+    const importoAbs = Math.abs(importo);
+    const dataMov = movimento?.data_operazione || movimento?.data_valuta || new Date().toISOString().slice(0, 10);
+
+    const { data: titoli } = await supabaseAdmin
+      .from('titoli')
+      .select('id, tipo, importo, scadenza_id, soggetto_id, numero_titolo')
+      .eq('soggetto_id', foundSoggettoId)
+      .eq('stato', 'in_essere')
+      .gte('data_scadenza', new Date(new Date(dataMov).getTime() - 30 * 86400000).toISOString().slice(0, 10))
+      .lte('data_scadenza', new Date(new Date(dataMov).getTime() + 30 * 86400000).toISOString().slice(0, 10));
+
+    let titoloFound: any = null;
+    if (titoli && titoli.length > 0) {
+      titoloFound = titoli.find((t: any) => Math.abs(t.importo - importoAbs) <= 0.50);
+      if (!titoloFound && titoli.length === 1) titoloFound = titoli[0];
+    }
+
+    if (titoloFound) {
+      const tipoLabel = titoloFound.tipo === 'assegno' ? 'Assegno' : 'Cambiale';
+      return {
+        tipo: 'titolo',
+        label: `Pagamento ${tipoLabel} ${titoloFound.numero_titolo ? 'n. ' + titoloFound.numero_titolo : ''} di ${foundSoggettoNome}. Importo titolo: ${Number(titoloFound.importo).toFixed(2)}`,
+        isNotaCredito: false,
+        soggetto: { id: foundSoggettoId, ragione_sociale: foundSoggettoNome },
+        titolo: {
+          id: titoloFound.id,
+          tipo: titoloFound.tipo,
+          numero_titolo: titoloFound.numero_titolo,
+          importo: Number(titoloFound.importo),
+        },
+        importo_movimento: importo,
+      };
+    }
+  }
+
+  if (foundSoggettoId) {
+    const notaCredito = await checkNotaCredito(foundSoggettoId);
+    return {
+      tipo: notaCredito ? 'nota_credito' : 'fallback_soggetto',
+      label: notaCredito
+        ? `Nota di credito da ${foundSoggettoNome}. Il soggetto e' stato identificato dalla descrizione.`
+        : `Pagamento a ${foundSoggettoNome} (identificato dalla descrizione). Allocazione automatica sulle fatture aperte.`,
+      isNotaCredito: notaCredito,
+      soggetto: { id: foundSoggettoId, ragione_sociale: foundSoggettoNome },
+      importo_movimento: importo,
+    };
+  }
+
+  return {
+    tipo: 'nessun_match',
+    label: 'Nessun soggetto o scadenza trovata. Il movimento sara\' marcato come riconciliato senza associazione.',
+    isNotaCredito: false,
+    importo_movimento: importo,
+    warning: 'Nessun soggetto identificato nella descrizione del movimento',
+  };
 }
 
 export async function handleRifiuta(formData: FormData) {

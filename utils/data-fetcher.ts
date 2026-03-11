@@ -2278,13 +2278,14 @@ export async function getScadenzeApertePerMatch(tipo: 'entrata' | 'uscita') {
 }
 
 export async function confermaRiconciliazione(
-  movimento_id: string, 
-  scadenza_id: string, 
+  movimento_id: string,
+  scadenza_id: string,
   importo_movimento: number,
   tipo_match: 'auto_ai' | 'confermato_utente' | 'manuale' | 'split' = 'manuale',
   soggetto_id?: string,
   ai_confidence?: number,
-  ai_motivo?: string
+  ai_motivo?: string,
+  isNotaCredito?: boolean
 ) {
   const supabase = getSupabaseAdmin();
   let resolvedSoggettoId = soggetto_id;
@@ -2319,17 +2320,34 @@ export async function confermaRiconciliazione(
     .single();
 
   if (scadenza) {
-    const nuovoPagato = (Number(scadenza.importo_pagato) || 0) + Math.abs(importo_movimento);
-    const nuovoStato = nuovoPagato >= Number(scadenza.importo_totale) ? 'pagato' : 'parziale';
-    
-    await supabase
-      .from('scadenze_pagamento')
-      .update({
-        importo_pagato: nuovoPagato,
-        stato: nuovoStato,
-        data_pagamento: new Date().toISOString().split('T')[0]
-      })
-      .eq('id', scadenza_id);
+    if (isNotaCredito) {
+      // Nota di credito: riduci importo_totale (il debito diminuisce)
+      const nuovoTotale = Math.max(0, Number(scadenza.importo_totale) - Math.abs(importo_movimento));
+      const pagato = Number(scadenza.importo_pagato) || 0;
+      const nuovoStato = pagato >= nuovoTotale - 0.01 ? 'pagato' : pagato > 0 ? 'parziale' : 'aperto';
+
+      await supabase
+        .from('scadenze_pagamento')
+        .update({
+          importo_totale: nuovoTotale,
+          stato: nuovoStato,
+          data_pagamento: new Date().toISOString().split('T')[0]
+        })
+        .eq('id', scadenza_id);
+    } else {
+      // Flusso standard: aumenta importo_pagato
+      const nuovoPagato = (Number(scadenza.importo_pagato) || 0) + Math.abs(importo_movimento);
+      const nuovoStato = nuovoPagato >= Number(scadenza.importo_totale) ? 'pagato' : 'parziale';
+
+      await supabase
+        .from('scadenze_pagamento')
+        .update({
+          importo_pagato: nuovoPagato,
+          stato: nuovoStato,
+          data_pagamento: new Date().toISOString().split('T')[0]
+        })
+        .eq('id', scadenza_id);
+    }
       
     await creaLogRiconciliazione({
       movimento_id,
