@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python scripts/import_fatture_pdf.py)"
+      "Bash(python scripts/import_fatture_pdf.py)",
+      "Bash(find supabase/migrations -name \"*.sql\" -exec basename {})"
     ]
   }
 }
