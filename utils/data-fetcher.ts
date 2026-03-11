@@ -1365,7 +1365,7 @@ export async function getKPIFinanziariGlob() {
   // 2. Scadenze aperte (non pagate) → importo RESIDUO
   const { data: scadenze } = await supabase
     .from('scadenze_pagamento')
-    .select('tipo, importo_totale, importo_pagato')
+    .select('tipo, importo_totale, importo_pagato, fonte')
     .neq('stato', 'pagato');
 
   let da_incassare = 0;
@@ -1376,11 +1376,12 @@ export async function getKPIFinanziariGlob() {
       const residuo = (Number(s.importo_totale) || 0) - (Number(s.importo_pagato) || 0);
       if (residuo <= 0) return;
       if (s.tipo === 'entrata') da_incassare += residuo;
-      else if (s.tipo === 'uscita') esposizione_fornitori += residuo;
+      // Esposizione fornitori: escludi debiti verso banche (rate mutuo)
+      else if (s.tipo === 'uscita' && s.fonte !== 'mutuo') esposizione_fornitori += residuo;
     });
   }
 
-  // 3. Bilancio = ciò che ci devono + ciò che abbiamo - ciò che dobbiamo
+  // 3. Bilancio = ciò che ci devono + ciò che abbiamo - ciò che dobbiamo (fornitori, no banche)
   const bilancio_globale = da_incassare + cassa_attuale - esposizione_fornitori;
 
   // 4. DSO (invariato)
@@ -1457,10 +1458,12 @@ export interface EsposizioneSoggetto {
 export async function getTopEsposizioniPerSoggetto(limit = 10): Promise<EsposizioneSoggetto[]> {
   const supabase = getSupabaseAdmin();
 
+  // Escludi debiti verso banche (rate mutuo): le banche non sono fornitori
   const { data } = await supabase
     .from('scadenze_pagamento')
-    .select('soggetto_id, tipo, importo_totale, importo_pagato, anagrafica_soggetti(ragione_sociale, tipo)')
+    .select('soggetto_id, tipo, importo_totale, importo_pagato, fonte, anagrafica_soggetti(ragione_sociale, tipo)')
     .neq('stato', 'pagato')
+    .neq('fonte', 'mutuo')
     .not('soggetto_id', 'is', null);
 
   if (!data) return [];
