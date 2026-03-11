@@ -16,7 +16,6 @@ SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL") or "https://jnhpabgohnfdiqv
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." # Usa la tua key service_role
 
 CARTELLA_ARCHIVIO = r"\\192.168.1.231\scambio\AMMINISTRAZIONE\Clienti e Fornitori\2025\contabilità\Archivio_Fatto"
-CARTELLA_ARCHIVIO_2024 = r"\\192.168.1.231\scambio\AMMINISTRAZIONE\Clienti e Fornitori\2025\contabilità\archivio_xml_2024"
 # ==================================================
 
 def safe_print(msg):
@@ -355,24 +354,15 @@ def parse_and_upload(percorso_file):
         safe_print(f"   [ERR] Errore su {nome_file}: {e}")
 
 def run():
-    cartelle = [CARTELLA_ARCHIVIO, CARTELLA_ARCHIVIO_2024]
-    cartelle_trovate = 0
-
-    for cartella in cartelle:
-        if not os.path.exists(cartella):
-            safe_print(f"[WARN] Cartella non trovata: {cartella}")
-            continue
-        cartelle_trovate += 1
-        safe_print(f"SCANSIONE: {cartella}")
-        files = [f for f in os.listdir(cartella) if f.lower().endswith('.xml')]
-        for f in files:
-            parse_and_upload(os.path.join(cartella, f))
-
-    if cartelle_trovate == 0:
-        safe_print(f"[ERR] Nessuna cartella sorgente trovata")
+    safe_print(f"AVVIO IMPORTAZIONE E SCADENZIARIO DA: {CARTELLA_ARCHIVIO}")
+    if not os.path.exists(CARTELLA_ARCHIVIO):
+        safe_print(f"[ERR] Cartella non trovata: {CARTELLA_ARCHIVIO}")
         if "--json" in sys.argv:
             print(f"###JSON_RESULT###{json.dumps({'errore': 'cartella_non_trovata', **_stats})}")
         return
+    files = [f for f in os.listdir(CARTELLA_ARCHIVIO) if f.lower().endswith('.xml')]
+    for f in files:
+        parse_and_upload(os.path.join(CARTELLA_ARCHIVIO, f))
     safe_print(f"ELABORAZIONE COMPLETATA.")
     safe_print(f"   Nuove fatture: {_stats['nuove']}, Scadenze create: {_stats['scadenze_create']}, "
           f"Scadenze recuperate: {_stats['scadenze_recuperate']}, Skip: {_stats['skipped']}, Errori: {_stats['errori']}")
