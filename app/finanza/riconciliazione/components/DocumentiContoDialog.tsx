@@ -37,13 +37,19 @@ export function DocumentiContoDialog({ contoId, nomeBanca }: { contoId: string, 
   async function handleUpload(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setIsUploading(true)
-    const formData = new FormData(e.currentTarget)
-    formData.append('conto_id', contoId)
-    await uploadDocumentoBanca(formData)
-    const aggiornati = await getDocumentiBanca(contoId, anno)
-    setDocumenti(aggiornati as DocumentoBanca[])
-    setIsUploading(false)
-    ;(e.target as HTMLFormElement).reset()
+    try {
+      const formData = new FormData(e.currentTarget)
+      formData.append('conto_id', contoId)
+      await uploadDocumentoBanca(formData)
+      const aggiornati = await getDocumentiBanca(contoId, anno)
+      setDocumenti(aggiornati as DocumentoBanca[])
+      ;(e.target as HTMLFormElement).reset()
+    } catch (err) {
+      console.error('Errore upload documento:', err)
+      alert(`Errore durante il caricamento: ${err instanceof Error ? err.message : 'errore sconosciuto'}`)
+    } finally {
+      setIsUploading(false)
+    }
   }
 
   async function handleRenameSubmit(id: string) {
@@ -86,7 +92,7 @@ export function DocumentiContoDialog({ contoId, nomeBanca }: { contoId: string, 
             <div className="space-y-2 w-2/3">
               <Label>Seleziona File (Multipli)</Label>
               {/* Aggiunto name="files" e l'attributo multiple */}
-              <Input type="file" name="files" required accept=".pdf,.png,.jpg,.jpeg" multiple />
+              <Input type="file" name="files" required accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx,.csv,.xml,.txt" multiple />
             </div>
           </div>
           <Button type="submit" disabled={isUploading} className="w-full bg-zinc-900 text-white">

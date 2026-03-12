@@ -882,10 +882,12 @@ export async function getKPIAnagrafiche(): Promise<{ fornitori: number; clienti:
   const clienti = data.filter((s: any) => s.tipo === 'cliente').length;
 
   // Calcola totale debiti (uscite non pagate) e crediti (entrate non pagate)
+  // Escludi rate mutuo: gestite nella sezione dedicata, non sono debiti fornitori
   const { data: scadenze } = await supabase
     .from("scadenze_pagamento")
-    .select("tipo, importo_totale, importo_pagato")
-    .in("stato", ["da_pagare", "parziale", "scaduto"]);
+    .select("tipo, importo_totale, importo_pagato, fonte")
+    .in("stato", ["da_pagare", "parziale", "scaduto"])
+    .neq("fonte", "mutuo");
 
   let totale_debiti = 0;
   let totale_crediti = 0;

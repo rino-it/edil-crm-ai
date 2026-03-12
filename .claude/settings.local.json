@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(python scripts/import_fatture_pdf.py)",
-      "Bash(find supabase/migrations -name \"*.sql\" -exec basename {})"
+      "Bash(find supabase/migrations -name \"*.sql\" -exec basename {})",
+      "Bash(cd \"C:\\\\Users\\\\Ufficio\\\\Desktop\\\\PROGETTO X\\\\Sviluppo\\\\edil-crm-ai\" && npx tsc --noEmit --pretty 2>&1 | tail -20)"
     ]
   }
 }
