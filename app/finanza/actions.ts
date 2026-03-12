@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/utils/supabase/server'
+import { revalidatePath } from 'next/cache'
 
 export interface FatturaApertaSoggetto {
   id: string
@@ -42,4 +43,97 @@ export async function getFattureAperteSoggetto(soggettoId: string): Promise<Fatt
     tipo: s.tipo,
     cantiere_nome: s.cantieri?.nome || null,
   }))
+}
+
+export async function saldaFatturaEsposizione(
+  scadenzaId: string,
+  contoId: string,
+  dataPagamento: string
+) {
+  const supabase = await createClient()
+
+  const { data: scadenza, error: errScad } = await supabase
+    .from('scadenze_pagamento')
+    .select('importo_totale, importo_pagato, fattura_riferimento, tipo')
+    .eq('id', scadenzaId)
+    .single()
+
+  if (errScad || !scadenza) throw new Error('Fattura non trovata')
+
+  const residuo = Number(scadenza.importo_totale) - Number(scadenza.importo_pagato || 0)
+
+  const { error: errUpdate } = await supabase
+    .from('scadenze_pagamento')
+    .update({
+      stato: 'pagato',
+      importo_pagato: scadenza.importo_totale,
+      data_pagamento: dataPagamento,
+      metodo_pagamento: 'bonifico'
+    })
+    .eq('id', scadenzaId)
+
+  if (errUpdate) throw new Error('Errore aggiornamento fattura')
+
+  // Movimento bancario riconciliato (segno in base a tipo)
+  const importoMovimento = scadenza.tipo === 'entrata' ? residuo : -residuo
+  await supabase.from('movimenti_banca').insert({
+    conto_banca_id: contoId,
+    data_operazione: dataPagamento,
+    importo: importoMovimento,
+    descrizione: `Saldo ${scadenza.tipo === 'entrata' ? 'incasso' : 'pagamento'}: ${scadenza.fattura_riferimento || 'Fattura'}`,
+    stato_riconciliazione: 'riconciliato',
+    scadenza_id: scadenzaId
+  })
+
+  // Aggiorna saldo banca
+  const { data: conto } = await supabase.from('conti_banca').select('saldo_attuale').eq('id', contoId).single()
+  if (conto) {
+    await supabase.from('conti_banca').update({
+      saldo_attuale: Number(conto.saldo_attuale) + importoMovimento
+    }).eq('id', contoId)
+  }
+
+  revalidatePath('/finanza')
+  revalidatePath('/scadenze')
+  return { success: true }
+}
+
+export async function riprogrammaScadenzaEsposizione(
+  scadenzaId: string,
+  nuovaData: string
+) {
+  const supabase = await createClient()
+
+  const { error } = await supabase
+    .from('scadenze_pagamento')
+    .update({ data_scadenza: nuovaData, data_pianificata: nuovaData })
+    .eq('id', scadenzaId)
+
+  if (error) throw new Error('Errore riprogrammazione')
+
+  revalidatePath('/finanza')
+  revalidatePath('/finanza/programmazione')
+  revalidatePath('/scadenze')
+  return { success: true }
+}
+
+export async function assegnaCantiereEsposizione(
+  scadenzaId: string,
+  cantiereId: string
+) {
+  const supabase = await createClient()
+
+  const { error } = await supabase
+    .from('scadenze_pagamento')
+    .update({ cantiere_id: cantiereId || null })
+    .eq('id', scadenzaId)
+
+  if (error) throw new Error('Errore assegnazione cantiere')
+
+  // Rimuovi allocazioni multi se presenti (passaggio a singolo)
+  await supabase.from('scadenze_cantiere').delete().eq('scadenza_id', scadenzaId)
+
+  revalidatePath('/finanza')
+  revalidatePath('/scadenze')
+  return { success: true }
 }

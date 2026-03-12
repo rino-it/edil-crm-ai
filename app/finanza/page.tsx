@@ -6,7 +6,9 @@ import {
   getCashflowPrevisionale,
   getAgingAnalysisData,
   getFinanzaPerCantiere,
-  getTopEsposizioniPerSoggetto
+  getTopEsposizioniPerSoggetto,
+  getCantieriAttivi,
+  getContiBanca,
 } from '@/utils/data-fetcher'
 import AgingChart from './AgingChart'
 import SyncPipelineButton from './components/SyncPipelineButton'
@@ -25,14 +27,19 @@ export default async function FinanzaPage() {
   if (!user) redirect('/login')
 
   // Fetching Parallelo (Nota: Ora facciamo due chiamate all'Aging)
-  const [kpis, cashflowData, agingCrediti, agingDebiti, cantieriData, topEsposizioni] = await Promise.all([
+  const [kpis, cashflowData, agingCrediti, agingDebiti, cantieriData, topEsposizioni, cantieriRaw, contiBancaRaw] = await Promise.all([
     getKPIFinanziariGlob(),
     getCashflowPrevisionale(90),
     getAgingAnalysisData('entrata'),
     getAgingAnalysisData('uscita'),
     getFinanzaPerCantiere(),
-    getTopEsposizioniPerSoggetto(0)
+    getTopEsposizioniPerSoggetto(0),
+    getCantieriAttivi(),
+    getContiBanca(),
   ])
+
+  const cantieri = cantieriRaw.map(c => ({ id: c.id, label: c.nome }))
+  const contiBanca = contiBancaRaw.map(c => ({ id: c.id, label: c.nome_banca }))
 
   // Proiezioni T+30, T+60, T+90
   const proiezioneT30 = cashflowData[30]?.saldo ?? null
@@ -219,7 +226,7 @@ export default async function FinanzaPage() {
             {topEsposizioni.length > 0 && (
               <div>
                 <h3 className="text-sm font-bold text-zinc-700 mb-3">Top Esposizioni per Soggetto</h3>
-                <EsposizioniTable data={topEsposizioni} />
+                <EsposizioniTable data={topEsposizioni} cantieri={cantieri} contiBanca={contiBanca} />
               </div>
             )}
           </CardContent>
