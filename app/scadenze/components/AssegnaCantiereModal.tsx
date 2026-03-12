@@ -633,11 +633,11 @@ export function AssegnaCantiereModal({
         )}
       </DialogTrigger>
 
-      <DialogContent className={`bg-white p-0 gap-0 ${hasPdf ? 'sm:max-w-[95vw] md:max-w-[90vw] lg:max-w-[1200px] h-[85vh] overflow-hidden' : 'sm:max-w-[600px]'}`}>
+      <DialogContent className={`bg-white p-0 gap-0 ${hasPdf ? 'sm:max-w-[95vw] md:max-w-[90vw] lg:max-w-[1200px] h-[85vh] overflow-hidden flex flex-col' : 'sm:max-w-[600px]'}`}>
 
         {hasPdf ? (
           /* LAYOUT SPLIT: PDF a sinistra + Form a destra */
-          <div className="flex h-full">
+          <div className="flex h-full overflow-hidden">
             {/* Colonna sinistra: PDF viewer */}
             <div className="flex-1 border-r border-zinc-200 bg-zinc-100 flex flex-col min-w-0">
               <div className="px-4 py-2.5 border-b border-zinc-200 bg-white flex items-center gap-2">
@@ -657,7 +657,7 @@ export function AssegnaCantiereModal({
             </div>
 
             {/* Colonna destra: form assegnazione */}
-            <div className="w-[420px] flex-shrink-0 flex flex-col min-h-0">
+            <div className="w-[420px] flex-shrink-0 flex flex-col min-h-0 overflow-hidden">
               <div className="px-4 py-2.5 border-b border-zinc-200 flex-shrink-0">
                 <h2 className="text-base font-bold text-zinc-900">Assegnazione Cantiere</h2>
                 <p className="text-xs text-zinc-500">Associa a uno o più cantieri</p>
