@@ -1196,7 +1196,7 @@ export async function getKPIAnagrafiche(): Promise<{ fornitori: number; clienti:
     .from("scadenze_pagamento")
     .select("tipo, importo_totale, importo_pagato, fonte")
     .in("stato", ["da_pagare", "parziale", "scaduto"])
-    .neq("fonte", "mutuo");
+    .or('fonte.neq.mutuo,fonte.is.null');
 
   let totale_debiti = 0;
   let totale_crediti = 0;
@@ -1465,7 +1465,7 @@ export async function getTopEsposizioniPerSoggetto(limit = 10): Promise<Esposizi
     .from('scadenze_pagamento')
     .select('soggetto_id, tipo, importo_totale, importo_pagato, fonte, anagrafica_soggetti(ragione_sociale, tipo)')
     .neq('stato', 'pagato')
-    .neq('fonte', 'mutuo')
+    .or('fonte.neq.mutuo,fonte.is.null')
     .not('soggetto_id', 'is', null);
 
   if (!data) return [];
@@ -3370,7 +3370,8 @@ export async function getScadenzePaginated(
 
   // 2. Applichiamo i filtri dinamicamente
   // Escludi rate mutuo dallo scadenziario: gestite nella sezione Mutui e Titoli
-  query = query.neq('fonte', 'mutuo');
+  // neq esclude anche NULL in PostgREST, quindi usiamo or() per incluire fonte=NULL
+  query = query.or('fonte.neq.mutuo,fonte.is.null');
 
   if (filtri.tipo) {
     query = query.eq('tipo', filtri.tipo);

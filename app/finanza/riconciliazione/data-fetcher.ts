@@ -887,7 +887,7 @@ export async function getKPIAnagrafiche(): Promise<{ fornitori: number; clienti:
     .from("scadenze_pagamento")
     .select("tipo, importo_totale, importo_pagato, fonte")
     .in("stato", ["da_pagare", "parziale", "scaduto"])
-    .neq("fonte", "mutuo");
+    .or('fonte.neq.mutuo,fonte.is.null');
 
   let totale_debiti = 0;
   let totale_crediti = 0;
