@@ -680,17 +680,42 @@ export async function POST(request: NextRequest) {
               const dataScadenzaFinale = titData.data_scadenza || titData.data_emissione || new Date().toISOString().split('T')[0]
 
               // Cerca soggetto in anagrafica per nome fornitore/emittente
+              // Strategia: 1) ilike esatto, 2) senza punti (s.r.l. vs srl), 3) prime parole
               let soggettoId: string | undefined = undefined
               if (titData.emittente) {
-                const ricercaNome = titData.emittente.toLowerCase()
-                const { data: candidati } = await supabaseAdmin
+                const ricercaNome = titData.emittente.toLowerCase().trim()
+                // Tentativo 1: match diretto
+                let { data: candidati } = await supabaseAdmin
                   .from('anagrafica_soggetti')
                   .select('id, ragione_sociale')
                   .ilike('ragione_sociale', `%${ricercaNome}%`)
                   .limit(1)
+                // Tentativo 2: senza punti (gestisce "srl" vs "s.r.l.", "snc" vs "s.n.c.")
+                if ((!candidati || candidati.length === 0) && ricercaNome.length >= 3) {
+                  const senzaPunti = ricercaNome.replace(/\./g, '')
+                  const res2 = await supabaseAdmin
+                    .from('anagrafica_soggetti')
+                    .select('id, ragione_sociale')
+                  candidati = (res2.data || []).filter(s =>
+                    s.ragione_sociale.toLowerCase().replace(/\./g, '').includes(senzaPunti) ||
+                    senzaPunti.includes(s.ragione_sociale.toLowerCase().replace(/\./g, ''))
+                  ).slice(0, 1)
+                }
+                // Tentativo 3: prima parola significativa (>= 5 chars)
+                if ((!candidati || candidati.length === 0) && ricercaNome.length >= 5) {
+                  const primaParola = ricercaNome.split(/\s+/).find(p => p.length >= 5) || ricercaNome.split(/\s+/)[0]
+                  if (primaParola && primaParola.length >= 4) {
+                    const res3 = await supabaseAdmin
+                      .from('anagrafica_soggetti')
+                      .select('id, ragione_sociale')
+                      .ilike('ragione_sociale', `%${primaParola}%`)
+                      .limit(3)
+                    candidati = res3.data || []
+                  }
+                }
                 if (candidati && candidati.length > 0) {
                   soggettoId = candidati[0].id
-                  console.log(`✅ Soggetto trovato: ${candidati[0].ragione_sociale} → ${soggettoId}`)
+                  console.log(`Soggetto trovato: ${candidati[0].ragione_sociale} -> ${soggettoId}`)
                 }
               }
 
