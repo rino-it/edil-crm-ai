@@ -1508,7 +1508,7 @@ export async function getTopEsposizioniPerSoggetto(limit = 10): Promise<Esposizi
 
   risultati.sort((a, b) => Math.abs(b.entrate_residuo + b.uscite_residuo) - Math.abs(a.entrate_residuo + a.uscite_residuo));
 
-  return risultati.slice(0, limit);
+  return limit > 0 ? risultati.slice(0, limit) : risultati;
 }
 
 export interface VoceCronogramma {

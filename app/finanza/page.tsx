@@ -10,6 +10,7 @@ import {
 } from '@/utils/data-fetcher'
 import AgingChart from './AgingChart'
 import SyncPipelineButton from './components/SyncPipelineButton'
+import { EsposizioniTable } from './components/EsposizioniTable'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -30,7 +31,7 @@ export default async function FinanzaPage() {
     getAgingAnalysisData('entrata'),
     getAgingAnalysisData('uscita'),
     getFinanzaPerCantiere(),
-    getTopEsposizioniPerSoggetto(10)
+    getTopEsposizioniPerSoggetto(0)
   ])
 
   // Proiezioni T+30, T+60, T+90
@@ -218,47 +219,7 @@ export default async function FinanzaPage() {
             {topEsposizioni.length > 0 && (
               <div>
                 <h3 className="text-sm font-bold text-zinc-700 mb-3">Top Esposizioni per Soggetto</h3>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader className="bg-zinc-50/80">
-                      <TableRow>
-                        <TableHead className="font-semibold">Soggetto</TableHead>
-                        <TableHead className="font-semibold w-[70px]">Tipo</TableHead>
-                        <TableHead className="text-right font-semibold w-[120px]">Crediti</TableHead>
-                        <TableHead className="text-right font-semibold w-[120px]">Debiti</TableHead>
-                        <TableHead className="text-right font-semibold w-[120px]">Netto</TableHead>
-                        <TableHead className="text-right font-semibold w-[60px]">Fatt.</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {topEsposizioni.map((e, i) => (
-                        <TableRow key={e.soggetto_id} className={i < 3 ? 'bg-amber-50/30' : ''}>
-                          <TableCell className="font-medium text-zinc-900">
-                            <div className="flex items-center gap-2">
-                              {i < 3 && <span className="text-[10px] font-black text-amber-600 bg-amber-100 rounded-full w-5 h-5 flex items-center justify-center">{i + 1}</span>}
-                              <span className="truncate max-w-[200px]">{e.ragione_sociale}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className={`text-[10px] ${e.tipo_soggetto === 'cliente' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : e.tipo_soggetto === 'fornitore' ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-zinc-50 text-zinc-600'}`}>
-                              {e.tipo_soggetto || 'N/D'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-emerald-700">
-                            {e.entrate_residuo > 0 ? formatEuro(e.entrate_residuo) : <span className="text-zinc-300">—</span>}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-rose-700">
-                            {e.uscite_residuo > 0 ? formatEuro(e.uscite_residuo) : <span className="text-zinc-300">—</span>}
-                          </TableCell>
-                          <TableCell className={`text-right font-mono font-bold ${e.netto >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                            {formatEuro(e.netto)}
-                          </TableCell>
-                          <TableCell className="text-right text-zinc-500 text-sm">{e.n_fatture}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                <EsposizioniTable data={topEsposizioni} />
               </div>
             )}
           </CardContent>

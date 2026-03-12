@@ -50,7 +50,7 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
   // 4b. Scadenze con cantiere_id diretto (singolo)
   const { data: scadenzeDirette } = await supabase
     .from('scadenze_pagamento')
-    .select('id, fattura_riferimento, importo_totale, aliquota_iva, data_scadenza, data_emissione, stato, descrizione, tipo, anagrafica_soggetti(ragione_sociale)')
+    .select('id, fattura_riferimento, importo_totale, importo_pagato, aliquota_iva, data_scadenza, data_emissione, stato, descrizione, tipo, anagrafica_soggetti(ragione_sociale)')
     .eq('cantiere_id', id)
     .order('data_scadenza', { ascending: false })
 
@@ -62,7 +62,7 @@ export default async function CantierePage({ params }: { params: Promise<{ id: s
   let totaleImponibileFatture = 0
   let totaleIvaCantiere = 0
 
-  // Scorporo su scadenze dirette (importo = importo_totale della scadenza)
+  // Scorporo su scadenze dirette (importo = totale fattura: assegnazione singolo = intera fattura monocantiere)
   const scorporoDirette = scadenzeSoloDirette.map((s: any) => {
     const importo = Number(s.importo_totale) || 0
     const aliquota = s.aliquota_iva ?? 22
