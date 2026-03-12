@@ -581,41 +581,38 @@ def run_sync(dry_run: bool = False) -> None:
     print(f"  Nuovi (UUID non trovato): {len(nuovi_raw)}")
     print(f"  Esistenti da aggiornare : {len(da_aggiornare)}")
 
-    # ── SECONDARY DEDUP ──────────────────────────────────────────────────────
-    # UUID5 usa soggetto_id: se il fuzzy matching cambia soggetto_id tra run,
-    # lo stesso UUID5 cambia → lo script creerebbe un duplicato (INSERT).
-    # Qui cerchiamo record con stessa (soggetto_id, fattura_riferimento, data_emissione,
-    # importo_totale, fonte='excel') già presenti sotto un UUID diverso.
-    # Se trovati → UPDATE il record esistente, non INSERT.
+    # ── SECONDARY DEDUP (cross-fonte) ────────────────────────────────────────
+    # Controlla TUTTE le scadenze uscita esistenti (qualsiasi fonte),
+    # non solo fonte='excel'. Evita duplicati quando la stessa fattura
+    # esiste gia con fonte diversa (null, verificato, fattura, ecc).
     nuovi: list[dict] = []
-    redirect_update: list[dict] = []  # nuovi che in realtà esistono sotto altro UUID
+    redirect_update: list[dict] = []
+    skipped_cross_fonte: list[dict] = []
 
     if nuovi_raw:
-        # Fetch tutti gli ID excel esistenti con i campi di matching
-        excel_esistenti: list[dict] = []
+        uscite_esistenti: list[dict] = []
         offset2 = 0
         while True:
             res_ex = supabase.table("scadenze_pagamento") \
-                .select("id, soggetto_id, fattura_riferimento, data_emissione, importo_totale") \
+                .select("id, soggetto_id, fattura_riferimento, data_emissione, importo_totale, fonte") \
                 .eq("tipo", "uscita") \
-                .eq("fonte", "excel") \
                 .range(offset2, offset2 + 999) \
                 .execute()
-            excel_esistenti.extend(res_ex.data)
+            uscite_esistenti.extend(res_ex.data)
             if len(res_ex.data) < 1000:
                 break
             offset2 += 1000
 
-        # Indice: (soggetto_id, fattura_rif, data_emissione, importo) → id_esistente
-        idx_excel = {}
-        for ex in excel_esistenti:
+        # Indice: (soggetto_id, fattura_rif, data_emissione, importo) -> (id, fonte)
+        idx_uscite: dict[tuple, tuple[str, str | None]] = {}
+        for ex in uscite_esistenti:
             k = (
                 ex.get("soggetto_id"),
                 ex.get("fattura_riferimento"),
                 ex.get("data_emissione"),
                 round(float(ex.get("importo_totale") or 0), 2),
             )
-            idx_excel[k] = ex["id"]
+            idx_uscite[k] = (ex["id"], ex.get("fonte"))
 
         for r in nuovi_raw:
             k = (
@@ -624,27 +621,49 @@ def run_sync(dry_run: bool = False) -> None:
                 r.get("data_emissione"),
                 round(float(r.get("importo_totale") or 0), 2),
             )
-            if k in idx_excel:
-                # Record esiste sotto UUID diverso → reindirizza ad UPDATE
-                r_update = {**r, "id": idx_excel[k]}
-                redirect_update.append(r_update)
+            if k in idx_uscite:
+                existing_id, existing_fonte = idx_uscite[k]
+                if existing_fonte == "excel":
+                    # Stessa fonte: UUID instabile, reindirizza ad UPDATE
+                    r_update = {**r, "id": existing_id}
+                    redirect_update.append(r_update)
+                else:
+                    # Fonte diversa: la scadenza esiste gia, non creare duplicato
+                    skipped_cross_fonte.append(r)
             else:
                 nuovi.append(r)
 
         if redirect_update:
             print(f"  UUID instabili corretti  : {len(redirect_update)} (UPDATE su UUID esistente)")
+        if skipped_cross_fonte:
+            print(f"  Duplicati cross-fonte    : {len(skipped_cross_fonte)} (esistono con fonte diversa, SKIP)")
         da_aggiornare.extend(redirect_update)
 
     print(f"  Effettivamente nuovi     : {len(nuovi)}")
+
+    # Guard: non creare nuove scadenze senza --allow-create
+    allow_create = "--allow-create" in sys.argv
+    if nuovi and not allow_create:
+        print(f"\n  BLOCCATO: {len(nuovi)} nuove scadenze NON create (serve --allow-create)")
+        print(f"  Dettaglio:")
+        for r in nuovi[:10]:
+            sid = r.get("soggetto_id", "?")
+            nome = next((n for n, i in mappa_soggetti.items() if i == sid), "?")
+            print(f"    {nome[:40]:<40} {r.get('fattura_riferimento','')[:20]:<20} EUR {r.get('importo_totale',0):>10,.2f}")
+        if len(nuovi) > 10:
+            print(f"    ... e altri {len(nuovi) - 10}")
+        nuovi = []
     # ─────────────────────────────────────────────────────────────────────────
 
     if nuovi:
         for i in range(0, len(nuovi), CHUNK_SIZE):
             supabase.table("scadenze_pagamento").insert(nuovi[i : i + CHUNK_SIZE]).execute()
 
+    # importo_totale ESCLUSO: non sovrascrivere importi di rate splittate
+    # o correzioni manuali. Il sync aggiorna solo dati di pagamento e stato.
     CAMPI_UPDATE = {
         "importo_pagato", "stato", "data_pagamento", "metodo_pagamento",
-        "importo_totale", "data_scadenza", "data_emissione", "note",
+        "data_scadenza", "data_emissione", "note",
         "cantiere_id", "soggetto_id", "fattura_riferimento",
     }
     if da_aggiornare:
