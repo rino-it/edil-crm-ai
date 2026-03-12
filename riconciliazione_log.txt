@@ -11810,3 +11810,257 @@ ELABORAZIONE COMPLETATA.
    Nuove fatture: 0, Scadenze create: 0, Scadenze recuperate: 0, Skip: 0, Errori: 683
 [12/03/2026 22:22:59.85] Fine importazione XML 
 ---------------------------------------- 
+[12/03/2026 23:21:25.75] Avvio importazione XML 
+AVVIO IMPORTAZIONE E SCADENZIARIO DA: \\192.168.1.231\scambio\AMMINISTRAZIONE\Clienti e Fornitori\2025\contabilità\Archivio_Fatto
+[NEW] Nuova fattura: Fatt.Acq._N.2501C337335_del_01-01-2025_IT12454611000_B7LXR (1).xml
+   [ERR] Errore su Fatt.Acq._N.2501C337335_del_01-01-2025_IT12454611000_B7LXR (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.000000009456026D_del_30-12-2025_IT0526289001425364_TI1KY (1).xml
+   [ERR] Errore su Fatt.Acq._N.000000009456026D_del_30-12-2025_IT0526289001425364_TI1KY (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.000000076844658T_del_30-12-2025_IT0526289001425364_TA9TH (1).xml
+   [ERR] Errore su Fatt.Acq._N.000000076844658T_del_30-12-2025_IT0526289001425364_TA9TH (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.000000108034386P_del_30-12-2025_IT0526289001425364_02H89 (1).xml
+   [ERR] Errore su Fatt.Acq._N.000000108034386P_del_30-12-2025_IT0526289001425364_02H89 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.000000214013111P_del_30-12-2025_IT0526289001425364_02IP4 (1).xml
+   [ERR] Errore su Fatt.Acq._N.000000214013111P_del_30-12-2025_IT0526289001425364_02IP4 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.000000602017587P_del_30-12-2025_IT0526289001425364_02J0X (1).xml
+   [ERR] Errore su Fatt.Acq._N.000000602017587P_del_30-12-2025_IT0526289001425364_02J0X (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.084530256903984_del_31-12-2025_IT01132850155_05fWz (1).xml
+   [ERR] Errore su Fatt.Acq._N.084530256903984_del_31-12-2025_IT01132850155_05fWz (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.FPR_69_25_del_28-12-2025_IT01879020517A2025_isAcH (1).xml
+   [ERR] Errore su Fatt.Acq._N.FPR_69_25_del_28-12-2025_IT01879020517A2025_isAcH (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.FPR_70_25_del_28-12-2025_IT01879020517A2025_is9nk (1).xml
+   [ERR] Errore su Fatt.Acq._N.FPR_70_25_del_28-12-2025_IT01879020517A2025_is9nk (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.PJ10899325_del_31-12-2025_IT0526289001426003_1QSMB (1).xml
+   [ERR] Errore su Fatt.Acq._N.PJ10899325_del_31-12-2025_IT0526289001426003_1QSMB (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.1310_ED_2025_del_15-12-2025_IT01812710166_I603Q (1).xml
+   [ERR] Errore su Fatt.Acq._N.1310_ED_2025_del_15-12-2025_IT01812710166_I603Q (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.1855_1_del_13-12-2025_IT00788740165_00P74 (1).xml
+   [ERR] Errore su Fatt.Acq._N.1855_1_del_13-12-2025_IT00788740165_00P74 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.2_del_11-12-2025_IT04541580165_XRJyk (1).xml
+   [ERR] Errore su Fatt.Acq._N.2_del_11-12-2025_IT04541580165_XRJyk (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.7X05592028_del_13-12-2025_IT00488410010_qQBYH (1).xml
+   [ERR] Errore su Fatt.Acq._N.7X05592028_del_13-12-2025_IT00488410010_qQBYH (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.8B00951897_del_13-12-2025_IT00488410010_qShJb (1).xml
+   [ERR] Errore su Fatt.Acq._N.8B00951897_del_13-12-2025_IT00488410010_qShJb (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.041-057252_del_04-12-2025_IT05602710963_FBKGR (1).xml
+   [ERR] Errore su Fatt.Acq._N.041-057252_del_04-12-2025_IT05602710963_FBKGR (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.115_del_05-12-2025_IT016417907022025D_0cxuB (1).xml
+   [ERR] Errore su Fatt.Acq._N.115_del_05-12-2025_IT016417907022025D_0cxuB (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.00125FT04478151_del_10-12-2025_IT01934790971_lb2dw (1).xml
+   [ERR] Errore su Fatt.Acq._N.00125FT04478151_del_10-12-2025_IT01934790971_lb2dw (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.259_2025_del_30-11-2025_IT016417907022025d_0cJIE (1).xml
+   [ERR] Errore su Fatt.Acq._N.259_2025_del_30-11-2025_IT016417907022025d_0cJIE (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.260_2025_del_30-11-2025_IT016417907022025z_0cIRq (1).xml
+   [ERR] Errore su Fatt.Acq._N.260_2025_del_30-11-2025_IT016417907022025z_0cIRq (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.365_del_12-12-2025_IT01027120771_00401 (1).xml
+   [ERR] Errore su Fatt.Acq._N.365_del_12-12-2025_IT01027120771_00401 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.1031_001_del_11-12-2025_IT03336420967_vfqsn (1).xml
+   [ERR] Errore su Fatt.Acq._N.1031_001_del_11-12-2025_IT03336420967_vfqsn (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.1169_IN_del_16-12-2025_IT01394200362_96Qk7 (1).xml
+   [ERR] Errore su Fatt.Acq._N.1169_IN_del_16-12-2025_IT01394200362_96Qk7 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.1432_B_del_12-12-2025_IT02787860168_00I1U (1).xml
+   [ERR] Errore su Fatt.Acq._N.1432_B_del_12-12-2025_IT02787860168_00I1U (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.1691_1_del_29-11-2025_IT00788740165_00P0Y (1).xml
+   [ERR] Errore su Fatt.Acq._N.1691_1_del_29-11-2025_IT00788740165_00P0Y (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.2001_250192664_del_30-11-2025_IT01394200362_951Kd (1).xml
+   [ERR] Errore su Fatt.Acq._N.2001_250192664_del_30-11-2025_IT01394200362_951Kd (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.2025_V9_2523489_del_04-12-2025_IT11036210158_HZ46X (1).xml
+   [ERR] Errore su Fatt.Acq._N.2025_V9_2523489_del_04-12-2025_IT11036210158_HZ46X (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.2481_2025_del_30-11-2025_IT016417907022025Z_0cQfJ (1).xml
+   [ERR] Errore su Fatt.Acq._N.2481_2025_del_30-11-2025_IT016417907022025Z_0cQfJ (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.2512C249727_del_01-12-2025_IT12454611000_EFR5I (1).xml
+   [ERR] Errore su Fatt.Acq._N.2512C249727_del_01-12-2025_IT12454611000_EFR5I (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.2512C305355_del_01-12-2025_IT12454611000_EGT2G (1).xml
+   [ERR] Errore su Fatt.Acq._N.2512C305355_del_01-12-2025_IT12454611000_EGT2G (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.2512C314400_del_01-12-2025_IT12454611000_EHK71 (1).xml
+   [ERR] Errore su Fatt.Acq._N.2512C314400_del_01-12-2025_IT12454611000_EHK71 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.2512C375454_del_01-12-2025_IT12454611000_EJCV7 (1).xml
+   [ERR] Errore su Fatt.Acq._N.2512C375454_del_01-12-2025_IT12454611000_EJCV7 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.004364_del_30-11-2025_IT02285430167_00L73 (1).xml
+   [ERR] Errore su Fatt.Acq._N.004364_del_30-11-2025_IT02285430167_00L73 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.05387-4161720435-76_del_02-12-2025_IT03830780361_C7KTK (1).xml
+   [ERR] Errore su Fatt.Acq._N.05387-4161720435-76_del_02-12-2025_IT03830780361_C7KTK (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.7827_del_30-11-2025_IT02107890168BNXBB_00TFM (1).xml
+   [ERR] Errore su Fatt.Acq._N.7827_del_30-11-2025_IT02107890168BNXBB_00TFM (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.9140_del_05-12-2025_IT016417907022025h_0cuSA (1).xml
+   [ERR] Errore su Fatt.Acq._N.9140_del_05-12-2025_IT016417907022025h_0cuSA (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.17324_25_del_30-11-2025_IT01264220169_03MC4 (1).xml
+   [ERR] Errore su Fatt.Acq._N.17324_25_del_30-11-2025_IT01264220169_03MC4 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.000000008664058D_del_30-11-2025_IT0526289001425334_MRP94 (1).xml
+   [ERR] Errore su Fatt.Acq._N.000000008664058D_del_30-11-2025_IT0526289001425334_MRP94 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.0000000019137015_del_30-11-2025_IT0526289001425334_MYPKV (1).xml
+   [ERR] Errore su Fatt.Acq._N.0000000019137015_del_30-11-2025_IT0526289001425334_MYPKV (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.40240519_del_01-12-2025_IT07334940157_cxAlm (1).xml
+   [ERR] Errore su Fatt.Acq._N.40240519_del_01-12-2025_IT07334940157_cxAlm (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.000000073991235T_del_30-11-2025_IT0526289001425334_NASZ3 (1).xml
+   [ERR] Errore su Fatt.Acq._N.000000073991235T_del_30-11-2025_IT0526289001425334_NASZ3 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.000000108032058P_del_30-11-2025_IT0526289001425334_MYSJP (1).xml
+   [ERR] Errore su Fatt.Acq._N.000000108032058P_del_30-11-2025_IT0526289001425334_MYSJP (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.202511152268_del_03-12-2025_IT02355260981_cyzCU (1).xml
+   [ERR] Errore su Fatt.Acq._N.202511152268_del_03-12-2025_IT02355260981_cyzCU (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.E5-0966676_del_10-12-2025_IT03589630239_4Q3QC (1).xml
+   [ERR] Errore su Fatt.Acq._N.E5-0966676_del_10-12-2025_IT03589630239_4Q3QC (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.E5-0966679_del_10-12-2025_IT03589630239_4Q3QF (1).xml
+   [ERR] Errore su Fatt.Acq._N.E5-0966679_del_10-12-2025_IT03589630239_4Q3QF (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.E04538_del_30-11-2025_IT02355260981_d3F6Y (1).xml
+   [ERR] Errore su Fatt.Acq._N.E04538_del_30-11-2025_IT02355260981_d3F6Y (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.FE_1551_25_del_12-12-2025_IT01879020517A2025_idCzJ (1).xml
+   [ERR] Errore su Fatt.Acq._N.FE_1551_25_del_12-12-2025_IT01879020517A2025_idCzJ (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.IT53HCK3ABEI_del_16-12-2025_IT08973230967_E6SEp (1).xml
+   [ERR] Errore su Fatt.Acq._N.IT53HCK3ABEI_del_16-12-2025_IT08973230967_E6SEp (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.IT53HIF2ABEI_del_16-12-2025_IT08973230967_E6ju3 (1).xml
+   [ERR] Errore su Fatt.Acq._N.IT53HIF2ABEI_del_16-12-2025_IT08973230967_E6ju3 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.PJ10765593_del_30-11-2025_IT0526289001425336_OQEMH (1).xml
+   [ERR] Errore su Fatt.Acq._N.PJ10765593_del_30-11-2025_IT0526289001425336_OQEMH (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.PJ10854034_del_15-12-2025_IT0526289001425351_RLU0J (1).xml
+   [ERR] Errore su Fatt.Acq._N.PJ10854034_del_15-12-2025_IT0526289001425351_RLU0J (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.V00121_del_30-11-2025_IT1229346015500001_LICY5 (1).xml
+   [ERR] Errore su Fatt.Acq._N.V00121_del_30-11-2025_IT1229346015500001_LICY5 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.1_1002_del_18-09-2025_SM03473_EdgtZ (1).xml
+   [ERR] Errore su Fatt.Acq._N.1_1002_del_18-09-2025_SM03473_EdgtZ (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.VEN0101001202_del_16-12-2025_IT06628860964_fBla6 (1).xml
+   [ERR] Errore su Fatt.Acq._N.VEN0101001202_del_16-12-2025_IT06628860964_fBla6 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.01S620252800531146_del_15-10-2025_IT03632460485_EMFTI (1).xml
+   [ERR] Errore su Fatt.Acq._N.01S620252800531146_del_15-10-2025_IT03632460485_EMFTI (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.2_235_del_27-10-2025_SM03473_EuzaB (1).xml
+   [ERR] Errore su Fatt.Acq._N.2_235_del_27-10-2025_SM03473_EuzaB (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.2_del_07-11-2025_IT04411480165_Xz3of (1).xml
+   [ERR] Errore su Fatt.Acq._N.2_del_07-11-2025_IT04411480165_Xz3of (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.7X04952571_del_11-11-2025_IT00488410010_ptPcj (1).xml
+   [ERR] Errore su Fatt.Acq._N.7X04952571_del_11-11-2025_IT00488410010_ptPcj (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.8B00666928_del_11-08-2025_IT00488410010_oKTch (1).xml
+   [ERR] Errore su Fatt.Acq._N.8B00666928_del_11-08-2025_IT00488410010_oKTch (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.8B00705394_del_11-09-2025_IT00488410010_orWRs (1).xml
+   [ERR] Errore su Fatt.Acq._N.8B00705394_del_11-09-2025_IT00488410010_orWRs (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.8B00790466_del_09-10-2025_IT00488410010_pOraS (1).xml
+   [ERR] Errore su Fatt.Acq._N.8B00790466_del_09-10-2025_IT00488410010_pOraS (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.8B00905171_del_11-11-2025_IT00488410010_pwCVi (1).xml
+   [ERR] Errore su Fatt.Acq._N.8B00905171_del_11-11-2025_IT00488410010_pwCVi (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.9_del_20-10-2025_IT016417907022025Y_0aVtU (1).xml
+   [ERR] Errore su Fatt.Acq._N.9_del_20-10-2025_IT016417907022025Y_0aVtU (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.23_del_10-10-2025_NL10209790152_Kl7n1 (1).xml
+   [ERR] Errore su Fatt.Acq._N.23_del_10-10-2025_NL10209790152_Kl7n1 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.25OT0308716_del_04-09-2025_IT12454611000_DOB7D (1).xml
+   [ERR] Errore su Fatt.Acq._N.25OT0308716_del_04-09-2025_IT12454611000_DOB7D (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.27_del_03-11-2025_NL10209790152_L1QZC (1).xml
+   [ERR] Errore su Fatt.Acq._N.27_del_03-11-2025_NL10209790152_L1QZC (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.28_del_28-10-2025_IT03606720161_00B4G (1).xml
+   [ERR] Errore su Fatt.Acq._N.28_del_28-10-2025_IT03606720161_00B4G (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.29_del_17-11-2025_IT03606720161_00B4H (1).xml
+   [ERR] Errore su Fatt.Acq._N.29_del_17-11-2025_IT03606720161_00B4H (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.34_001_del_06-10-2025_IT04146670163_HV84V (1).xml
+   [ERR] Errore su Fatt.Acq._N.34_001_del_06-10-2025_IT04146670163_HV84V (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.37_001_del_18-11-2025_IT04146670163_HV84Z (1).xml
+   [ERR] Errore su Fatt.Acq._N.37_001_del_18-11-2025_IT04146670163_HV84Z (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.041-038114_del_11-08-2025_IT05602710963_ELY0M (1).xml
+   [ERR] Errore su Fatt.Acq._N.041-038114_del_11-08-2025_IT05602710963_ELY0M (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.041-048881_del_17-10-2025_IT05602710963_F0FGL (1).xml
+   [ERR] Errore su Fatt.Acq._N.041-048881_del_17-10-2025_IT05602710963_F0FGL (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.041-052108_del_05-11-2025_IT05602710963_F4OYC (1).xml
+   [ERR] Errore su Fatt.Acq._N.041-052108_del_05-11-2025_IT05602710963_F4OYC (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.041-052116_del_05-11-2025_IT05602710963_F4P2E (1).xml
+   [ERR] Errore su Fatt.Acq._N.041-052116_del_05-11-2025_IT05602710963_F4P2E (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.041-054936_del_21-11-2025_IT05602710963_F8LF0 (1).xml
+   [ERR] Errore su Fatt.Acq._N.041-054936_del_21-11-2025_IT05602710963_F8LF0 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.041-055369_del_24-11-2025_IT05602710963_F94LL (1).xml
+   [ERR] Errore su Fatt.Acq._N.041-055369_del_24-11-2025_IT05602710963_F94LL (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.41_del_20-10-2025_NL10209790152_Kn3b6 (1).xml
+   [ERR] Errore su Fatt.Acq._N.41_del_20-10-2025_NL10209790152_Kn3b6 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.43_del_28-08-2025_IT06628860964_eW2Ow (1).xml
+   [ERR] Errore su Fatt.Acq._N.43_del_28-08-2025_IT06628860964_eW2Ow (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.84_2025_del_01-08-2025_IT07945211006H4MDU_3EU98 (1).xml
+   [ERR] Errore su Fatt.Acq._N.84_2025_del_01-08-2025_IT07945211006H4MDU_3EU98 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.89_F_del_30-08-2025_IT06628860964_eSOL7 (1).xml
+   [ERR] Errore su Fatt.Acq._N.89_F_del_30-08-2025_IT06628860964_eSOL7 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.102_del_08-11-2025_IT016417907022025O_0budx (1).xml
+   [ERR] Errore su Fatt.Acq._N.102_del_08-11-2025_IT016417907022025O_0budx (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.108_del_22-10-2025_IT016417907022025C_0aX2j (1).xml
+   [ERR] Errore su Fatt.Acq._N.108_del_22-10-2025_IT016417907022025C_0aX2j (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.141_del_14-10-2025_IT12281740154Z0002_DVQK4 (1).xml
+   [ERR] Errore su Fatt.Acq._N.141_del_14-10-2025_IT12281740154Z0002_DVQK4 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.158_E_del_29-08-2025_IT03336420967_t15at (1).xml
+   [ERR] Errore su Fatt.Acq._N.158_E_del_29-08-2025_IT03336420967_t15at (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.166_del_10-11-2025_IT0164179070220254_0bIgD (1).xml
+   [ERR] Errore su Fatt.Acq._N.166_del_10-11-2025_IT0164179070220254_0bIgD (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.169_del_01-09-2025_IT04418010163BNXBB_001EY (1).xml
+   [ERR] Errore su Fatt.Acq._N.169_del_01-09-2025_IT04418010163BNXBB_001EY (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.256_del_29-10-2025_IT04576050167_00B0U (1).xml
+   [ERR] Errore su Fatt.Acq._N.256_del_29-10-2025_IT04576050167_00B0U (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.262_del_07-08-2025_IT01027120771_0039A (1).xml
+   [ERR] Errore su Fatt.Acq._N.262_del_07-08-2025_IT01027120771_0039A (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.283_del_01-09-2025_IT01027120771_003AF (1).xml
+   [ERR] Errore su Fatt.Acq._N.283_del_01-09-2025_IT01027120771_003AF (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.349_02077_del_01-11-2025_IT02448510046TESI3_MOD0X (1).xml
+   [ERR] Errore su Fatt.Acq._N.349_02077_del_01-11-2025_IT02448510046TESI3_MOD0X (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.416_del_18-08-2025_NL10209790152_KCs8L (1).xml
+   [ERR] Errore su Fatt.Acq._N.416_del_18-08-2025_NL10209790152_KCs8L (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.442_del_30-09-2025_IT03704410160_03601 (1).xml
+   [ERR] Errore su Fatt.Acq._N.442_del_30-09-2025_IT03704410160_03601 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.498_del_12-09-2025_IT04077341008_JA363 (1).xml
+   [ERR] Errore su Fatt.Acq._N.498_del_12-09-2025_IT04077341008_JA363 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.719A_del_07-11-2025_IT08435150969_03fpJ (1).xml
+   [ERR] Errore su Fatt.Acq._N.719A_del_07-11-2025_IT08435150969_03fpJ (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.737_del_17-10-2025_IT02798910168_00HFT (1).xml
+   [ERR] Errore su Fatt.Acq._N.737_del_17-10-2025_IT02798910168_00HFT (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.755A_del_21-11-2025_IT08435150969_03inx (1).xml
+   [ERR] Errore su Fatt.Acq._N.755A_del_21-11-2025_IT08435150969_03inx (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.759_del_03-11-2025_IT02798910168_00HGK (1).xml
+   [ERR] Errore su Fatt.Acq._N.759_del_03-11-2025_IT02798910168_00HGK (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.760_del_03-11-2025_IT02798910168_00HGL (1).xml
+   [ERR] Errore su Fatt.Acq._N.760_del_03-11-2025_IT02798910168_00HGL (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.764_2025_del_28-08-2025_IT016417907022025j_08EUh (1).xml
+   [ERR] Errore su Fatt.Acq._N.764_2025_del_28-08-2025_IT016417907022025j_08EUh (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.1000_VON_25060472_del_03-10-2025_IT02313821007_KYSI9 (1).xml
+   [ERR] Errore su Fatt.Acq._N.1000_VON_25060472_del_03-10-2025_IT02313821007_KYSI9 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.1149_B_del_03-10-2025_IT02787860168_00HEK (1).xml
+   [ERR] Errore su Fatt.Acq._N.1149_B_del_03-10-2025_IT02787860168_00HEK (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.1417_del_31-08-2025_IT06628860964_eSKf1 (1).xml
+   [ERR] Errore su Fatt.Acq._N.1417_del_31-08-2025_IT06628860964_eSKf1 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.1533_del_05-11-2025_IT01901770402_6qr8z (1).xml
+   [ERR] Errore su Fatt.Acq._N.1533_del_05-11-2025_IT01901770402_6qr8z (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.001602_A25_del_04-08-2025_IT01394200362_8w0y0 (1).xml
+   [ERR] Errore su Fatt.Acq._N.001602_A25_del_04-08-2025_IT01394200362_8w0y0 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.1606_del_30-09-2025_IT06628860964_f5Yqc (1).xml
+   [ERR] Errore su Fatt.Acq._N.1606_del_30-09-2025_IT06628860964_f5Yqc (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.1641_25_del_21-10-2025_IT01533080675_8eXOd (1).xml
+   [ERR] Errore su Fatt.Acq._N.1641_25_del_21-10-2025_IT01533080675_8eXOd (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.1659_del_24-09-2025_IT01533080675_8caB3 (1).xml
+   [ERR] Errore su Fatt.Acq._N.1659_del_24-09-2025_IT01533080675_8caB3 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.1726_2025_del_31-08-2025_IT016417907022025e_09eKT (1).xml
+   [ERR] Errore su Fatt.Acq._N.1726_2025_del_31-08-2025_IT016417907022025e_09eKT (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.001753_A25_del_03-09-2025_IT01394200362_8xxZx (1).xml
+   [ERR] Errore su Fatt.Acq._N.001753_A25_del_03-09-2025_IT01394200362_8xxZx (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.2007_del_04-11-2025_IT06628860964_fjgGP (1).xml
+   [ERR] Errore su Fatt.Acq._N.2007_del_04-11-2025_IT06628860964_fjgGP (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.1860_2025_del_15-09-2025_IT016417907022025L_0adrJ (1).xml
+   [ERR] Errore su Fatt.Acq._N.1860_2025_del_15-09-2025_IT016417907022025L_0adrJ (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.1954__C_del_30-09-2025_IT09280900961_00M9Q (1).xml
+   [ERR] Errore su Fatt.Acq._N.1954__C_del_30-09-2025_IT09280900961_00M9Q (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.1980_2025_del_30-09-2025_IT016417907022025u_0auB2 (1).xml
+   [ERR] Errore su Fatt.Acq._N.1980_2025_del_30-09-2025_IT016417907022025u_0auB2 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.2025_39_20282_del_28-08-2025_IT02355260981_bK5DE (1).xml
+   [ERR] Errore su Fatt.Acq._N.2025_39_20282_del_28-08-2025_IT02355260981_bK5DE (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.2025-A7004-0005624_del_13-11-2025_IT04222190169_48459 (1).xml
+   [ERR] Errore su Fatt.Acq._N.2025-A7004-0005624_del_13-11-2025_IT04222190169_48459 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.2108_2025_del_15-10-2025_IT016417907022025M_0bgKI (1).xml
+   [ERR] Errore su Fatt.Acq._N.2108_2025_del_15-10-2025_IT016417907022025M_0bgKI (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.2180_del_19-09-2025_IT02252980160_00QVL (1).xml
+   [ERR] Errore su Fatt.Acq._N.2180_del_19-09-2025_IT02252980160_00QVL (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.002199_A25_del_05-11-2025_IT01394200362_93FME (1).xml
+   [ERR] Errore su Fatt.Acq._N.002199_A25_del_05-11-2025_IT01394200362_93FME (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.2201_del_03-10-2025_IT08435150969_038eZ (1).xml
+   [ERR] Errore su Fatt.Acq._N.2201_del_03-10-2025_IT08435150969_038eZ (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.2508C377227_del_01-08-2025_IT12454611000_D3SAD (1).xml
+   [ERR] Errore su Fatt.Acq._N.2508C377227_del_01-08-2025_IT12454611000_D3SAD (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.2509C253974_del_01-09-2025_IT12454611000_DKKU6 (1).xml
+   [ERR] Errore su Fatt.Acq._N.2509C253974_del_01-09-2025_IT12454611000_DKKU6 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.2509C316805_del_01-09-2025_IT12454611000_DM0KO (1).xml
+   [ERR] Errore su Fatt.Acq._N.2509C316805_del_01-09-2025_IT12454611000_DM0KO (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.2509C331805_del_01-09-2025_IT12454611000_DM8AC (1).xml
+   [ERR] Errore su Fatt.Acq._N.2509C331805_del_01-09-2025_IT12454611000_DM8AC (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.2509C376690_del_01-09-2025_IT12454611000_DMXO4 (1).xml
+   [ERR] Errore su Fatt.Acq._N.2509C376690_del_01-09-2025_IT12454611000_DMXO4 (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.2510C270588_del_01-10-2025_IT12454611000_DURGJ (1).xml
+   [ERR] Errore su Fatt.Acq._N.2510C270588_del_01-10-2025_IT12454611000_DURGJ (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}
+[NEW] Nuova fattura: Fatt.Acq._N.2510C313955_del_01-10-2025_IT12454611000_DVROK (1).xml
+   [ERR] Errore su Fatt.Acq._N.2510C313955_del_01-10-2025_IT12454611000_DVROK (1).xml: {'message': 'JSON could not be generated', 'code': 401, 'hint': 'Refer to full message for details', 'details': 'b\'{"message":"Invalid API key","hint":"Double check your Supabase `anon` or `service_role` API key."}\''}

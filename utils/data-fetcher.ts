@@ -3322,16 +3322,69 @@ export interface ScadenzeKPIs {
 
 export async function getScadenzeKPIs(): Promise<ScadenzeKPIs> {
   const supabase = getSupabaseAdmin();
-  
-  // Richiama la funzione RPC creata nella migrazione SQL
-  const { data, error } = await supabase.rpc('get_scadenze_kpis');
-  
+
+  // Query diretta: esclude mutui dai KPI (la vecchia RPC non li filtrava)
+  const { data: rows, error } = await supabase
+    .from('scadenze_pagamento')
+    .select('tipo, stato, importo_totale, importo_pagato, fonte, cantiere_id, data_emissione, data_pagamento')
+    .neq('stato', 'pagato')
+    .or('fonte.neq.mutuo,fonte.is.null');
+
   if (error) {
-    console.error("❌ Errore getScadenzeKPIs:", error);
+    console.error("Errore getScadenzeKPIs:", error);
     return { daIncassare: 0, daPagare: 0, scaduto: 0, daSmistare: 0, dso: 0 };
   }
-  
-  return data as ScadenzeKPIs;
+
+  let daIncassare = 0;
+  let daPagare = 0;
+  let scaduto = 0;
+  let daSmistare = 0;
+
+  for (const r of rows || []) {
+    const residuo = Number(r.importo_totale) - Number(r.importo_pagato || 0);
+
+    if (r.stato === 'scaduto') {
+      scaduto += residuo;
+    }
+
+    // daPagare = TUTTE le uscite aperte (da_pagare + parziale + scaduto)
+    if (r.tipo === 'uscita') {
+      daPagare += residuo;
+    } else if (r.tipo === 'entrata') {
+      daIncassare += residuo;
+    }
+
+    if (!r.cantiere_id) {
+      daSmistare++;
+    }
+  }
+
+  // DSO: media giorni incasso ultimi 90gg (solo entrate pagate)
+  let dso = 0;
+  const { data: dsoRows } = await supabase
+    .from('scadenze_pagamento')
+    .select('data_emissione, data_pagamento')
+    .eq('tipo', 'entrata')
+    .eq('stato', 'pagato')
+    .gte('data_pagamento', new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10))
+    .not('data_emissione', 'is', null)
+    .not('data_pagamento', 'is', null);
+
+  if (dsoRows && dsoRows.length > 0) {
+    const totalDays = dsoRows.reduce((acc, r) => {
+      const diff = new Date(r.data_pagamento!).getTime() - new Date(r.data_emissione!).getTime();
+      return acc + diff / 86400000;
+    }, 0);
+    dso = Math.round(totalDays / dsoRows.length);
+  }
+
+  return {
+    daIncassare: Math.round(daIncassare * 100) / 100,
+    daPagare: Math.round(daPagare * 100) / 100,
+    scaduto: Math.round(scaduto * 100) / 100,
+    daSmistare,
+    dso,
+  };
 }
 
 import { ScadenzaWithSoggetto } from '@/types/finanza';
