@@ -14,11 +14,10 @@ export default async function DaPagarePage({
   // Fetch parallelo: scadenze + cantieri per dropdown inline
   const [result, cantieriRaw] = await Promise.all([
     getScadenzePaginated(
-      { 
-        tipo: 'uscita', 
-        stato: ['da_pagare', 'parziale', 'scaduto'], 
-        scadenzaEntroGiorni: 30,
-        search: params.search 
+      {
+        tipo: 'uscita',
+        stato: ['da_pagare', 'parziale', 'scaduto'],
+        search: params.search
       },
       { page, pageSize }
     ),
@@ -32,7 +31,7 @@ export default async function DaPagarePage({
       <div className="flex justify-between items-end">
         <div>
           <h2 className="text-xl font-bold text-zinc-800">Uscite da Pagare</h2>
-          <p className="text-sm text-zinc-500">Fatture scadute e in scadenza nei prossimi 30 giorni.</p>
+          <p className="text-sm text-zinc-500">Tutte le fatture in uscita ancora aperte.</p>
         </div>
       </div>
       
