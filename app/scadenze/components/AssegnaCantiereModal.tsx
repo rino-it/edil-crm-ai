@@ -633,7 +633,7 @@ export function AssegnaCantiereModal({
         )}
       </DialogTrigger>
 
-      <DialogContent className={`bg-white p-0 gap-0 ${hasPdf ? 'sm:max-w-[95vw] md:max-w-[90vw] lg:max-w-[1200px] h-[85vh]' : 'sm:max-w-[600px]'}`}>
+      <DialogContent className={`bg-white p-0 gap-0 ${hasPdf ? 'sm:max-w-[95vw] md:max-w-[90vw] lg:max-w-[1200px] h-[85vh] overflow-hidden' : 'sm:max-w-[600px]'}`}>
 
         {hasPdf ? (
           /* LAYOUT SPLIT: PDF a sinistra + Form a destra */
