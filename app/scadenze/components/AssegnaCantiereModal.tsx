@@ -466,7 +466,7 @@ export function AssegnaCantiereModal({
       )}
 
       {/* Selettore modalita + form cantiere */}
-      <div className="mt-3 flex-1 overflow-y-auto space-y-3">
+      <div className="mt-3 flex-1 overflow-y-auto space-y-3 min-h-0">
         {/* Tabs modalita */}
         <div className="flex p-1 bg-zinc-100 rounded-lg">
           {ddtGruppiConDdt.length > 0 && (
@@ -670,14 +670,16 @@ export function AssegnaCantiereModal({
 
         ) : (
           /* LAYOUT SINGOLO: solo form (no PDF) */
-          <div className="p-6">
-            <DialogHeader className="mb-4">
+          <div className="p-6 flex flex-col max-h-[85vh]">
+            <DialogHeader className="mb-4 flex-shrink-0">
               <DialogTitle className="text-xl">Assegnazione Cantiere</DialogTitle>
               <DialogDescription>
                 Associa questa fattura a uno o più cantieri.
               </DialogDescription>
             </DialogHeader>
-            {formContent}
+            <div className="flex-1 min-h-0 flex flex-col">
+              {formContent}
+            </div>
           </div>
         )}
 
