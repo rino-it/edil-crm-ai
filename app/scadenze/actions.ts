@@ -690,3 +690,88 @@ export async function salvaAssegnazioneDDT(payload: {
   revalidatePath('/finanza')
   revalidatePath('/cantieri')
 }
+
+
+/**
+ * Dividi una scadenza in N rate (piano rateale).
+ * La scadenza originale viene eliminata e sostituita da N nuove scadenze,
+ * ciascuna con importo e data scadenza propri.
+ * I campi ereditati: soggetto_id, fattura_riferimento, fattura_fornitore_id,
+ * cantiere_id, tipo, fonte, data_emissione, descrizione, aliquota_iva, file_url.
+ */
+export async function dividiInRate(payload: {
+  scadenza_id: string
+  rate: { importo: number; data_scadenza: string }[]
+}) {
+  const supabase = await createClient()
+
+  const { scadenza_id, rate } = payload
+
+  if (!rate || rate.length < 2) {
+    throw new Error('Servono almeno 2 rate')
+  }
+
+  const { data: originale, error: errRead } = await supabase
+    .from('scadenze_pagamento')
+    .select('*')
+    .eq('id', scadenza_id)
+    .single()
+
+  if (errRead || !originale) {
+    throw new Error('Scadenza non trovata')
+  }
+
+  if (originale.stato === 'pagato') {
+    throw new Error('Non puoi dividere una scadenza gia pagata')
+  }
+
+  const sommaRate = rate.reduce((acc, r) => acc + r.importo, 0)
+  const residuo = (originale.importo_totale || 0) - (originale.importo_pagato || 0)
+  if (Math.abs(sommaRate - residuo) > 0.02) {
+    throw new Error(`La somma delle rate (${sommaRate.toFixed(2)}) non corrisponde al residuo (${residuo.toFixed(2)})`)
+  }
+
+  const nuoveScadenze = rate.map((rata, i) => ({
+    tipo: originale.tipo,
+    soggetto_id: originale.soggetto_id,
+    fattura_riferimento: originale.fattura_riferimento,
+    fattura_fornitore_id: originale.fattura_fornitore_id,
+    cantiere_id: originale.cantiere_id,
+    data_emissione: originale.data_emissione,
+    descrizione: originale.descrizione
+      ? `${originale.descrizione} (Rata ${i + 1}/${rate.length})`
+      : `Rata ${i + 1}/${rate.length}`,
+    importo_totale: rata.importo,
+    importo_pagato: 0,
+    data_scadenza: rata.data_scadenza,
+    data_pianificata: rata.data_scadenza,
+    stato: new Date(rata.data_scadenza) < new Date() ? 'scaduto' : 'da_pagare',
+    fonte: originale.fonte,
+    aliquota_iva: originale.aliquota_iva,
+    file_url: originale.file_url,
+    auto_domiciliazione: originale.auto_domiciliazione,
+  }))
+
+  const { error: errInsert } = await supabase
+    .from('scadenze_pagamento')
+    .insert(nuoveScadenze)
+
+  if (errInsert) {
+    throw new Error(`Errore creazione rate: ${errInsert.message}`)
+  }
+
+  const { error: errDelete } = await supabase
+    .from('scadenze_pagamento')
+    .delete()
+    .eq('id', scadenza_id)
+
+  if (errDelete) {
+    throw new Error(`Rate create ma errore eliminazione originale: ${errDelete.message}`)
+  }
+
+  revalidatePath('/scadenze')
+  revalidatePath('/finanza')
+  revalidatePath('/finanza/programmazione')
+
+  return { success: true, n_rate: rate.length }
+}

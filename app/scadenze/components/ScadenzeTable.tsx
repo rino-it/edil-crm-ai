@@ -14,6 +14,7 @@ import { IncassoManualeDialog } from "./IncassoManualeDialog"
 import { aggiornaFatturaRiferimento } from '../actions'
 import { toast } from 'sonner'
 import { AssegnaCantiereModal } from './AssegnaCantiereModal'
+import { DividiInRateDialog } from './DividiInRateDialog'
 
 interface ScadenzeTableProps {
   data: ScadenzaWithSoggetto[];
@@ -279,19 +280,24 @@ export function ScadenzeTable({
                     </Badge>
                   </TableCell>
 
-                  {/* Colonna Azione: solo calendario */}
+                  {/* Colonna Azione: calendario + rate */}
                   <TableCell className="text-center px-1">
-                    {s.data_scadenza ? (
-                      <CalendarLinkButton scadenza={s} />
-                    ) : (
-                      <button
-                        disabled
-                        className="inline-flex items-center justify-center size-7 rounded-md text-zinc-300 cursor-not-allowed"
-                        title="Data scadenza mancante"
-                      >
-                        <CalendarPlus size={13} />
-                      </button>
-                    )}
+                    <div className="flex items-center justify-center gap-1">
+                      {s.data_scadenza ? (
+                        <CalendarLinkButton scadenza={s} />
+                      ) : (
+                        <button
+                          disabled
+                          className="inline-flex items-center justify-center size-7 rounded-md text-zinc-300 cursor-not-allowed"
+                          title="Data scadenza mancante"
+                        >
+                          <CalendarPlus size={13} />
+                        </button>
+                      )}
+                      {s.stato !== 'pagato' && s.tipo === 'uscita' && (
+                        <DividiInRateDialog scadenza={s} />
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               )
@@ -409,6 +415,9 @@ export function ScadenzeTable({
                   <div className="flex items-center">
                     <CalendarLinkButton scadenza={s} />
                   </div>
+                )}
+                {s.stato !== 'pagato' && s.tipo === 'uscita' && (
+                  <DividiInRateDialog scadenza={s} />
                 )}
               </div>
             </div>
