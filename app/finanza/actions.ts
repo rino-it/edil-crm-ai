@@ -123,12 +123,29 @@ export async function assegnaCantiereEsposizione(
 ) {
   const supabase = await createClient()
 
+  // Leggi fattura_riferimento e soggetto per propagare alle rate sorelle
+  const { data: scadenza } = await supabase
+    .from('scadenze_pagamento')
+    .select('fattura_riferimento, soggetto_id')
+    .eq('id', scadenzaId)
+    .single()
+
   const { error } = await supabase
     .from('scadenze_pagamento')
     .update({ cantiere_id: cantiereId || null })
     .eq('id', scadenzaId)
 
   if (error) throw new Error('Errore assegnazione cantiere')
+
+  // Propaga alle rate sorelle (stessa fattura, stesso soggetto - incluse pagate)
+  if (scadenza?.fattura_riferimento && scadenza?.soggetto_id) {
+    await supabase
+      .from('scadenze_pagamento')
+      .update({ cantiere_id: cantiereId || null })
+      .eq('fattura_riferimento', scadenza.fattura_riferimento)
+      .eq('soggetto_id', scadenza.soggetto_id)
+      .neq('id', scadenzaId)
+  }
 
   // Rimuovi allocazioni multi se presenti (passaggio a singolo)
   await supabase.from('scadenze_cantiere').delete().eq('scadenza_id', scadenzaId)

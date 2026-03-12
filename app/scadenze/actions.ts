@@ -168,12 +168,30 @@ export async function salvaAssegnazioneCantiere(
   const supabase = await createClient()
 
   if (data.mode === 'singolo') {
+    // Singolo = intera fattura monocantiere: propaga a tutte le rate sorelle (incluse pagate)
+    const { data: scadenza } = await supabase
+      .from('scadenze_pagamento')
+      .select('fattura_riferimento, soggetto_id')
+      .eq('id', scadenzaId)
+      .single()
+
+    // Aggiorna la scadenza corrente
     const { error: errUpdate } = await supabase
       .from('scadenze_pagamento')
       .update({ cantiere_id: data.cantiere_id || null })
       .eq('id', scadenzaId)
 
     if (errUpdate) throw new Error("Errore aggiornamento cantiere")
+
+    // Propaga alle rate sorelle (stessa fattura, stesso soggetto)
+    if (scadenza?.fattura_riferimento && scadenza?.soggetto_id) {
+      await supabase
+        .from('scadenze_pagamento')
+        .update({ cantiere_id: data.cantiere_id || null })
+        .eq('fattura_riferimento', scadenza.fattura_riferimento)
+        .eq('soggetto_id', scadenza.soggetto_id)
+        .neq('id', scadenzaId)
+    }
 
     const { error: errDelete } = await supabase
       .from('scadenze_cantiere')
