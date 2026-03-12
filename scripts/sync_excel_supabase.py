@@ -196,21 +196,22 @@ def trova_soggetto_best_score(fornitore_nome: str, mappa: dict[str, str]) -> flo
 
 
 def trova_cantiere(cantiere_nome: str, mappa_cantieri: dict[str, str]) -> str | None:
-    """Match cantiere 3 livelli: esatto -> contains -> fuzzy >=0.85."""
+    """Match cantiere 2 livelli: esatto normalizzato -> fuzzy >= 0.92.
+
+    Substring match rimosso: causava assegnazioni errate
+    (es. 'Via Vertova' matchava cantiere 'Vertova').
+    """
     target = norm(cantiere_nome)
     if not target:
         return None
     if target in mappa_cantieri:
         return mappa_cantieri[target]
-    for nome_db, cid in mappa_cantieri.items():
-        if nome_db in target or target in nome_db:
-            return cid
     best_score, best_id = 0.0, None
     for nome_db, cid in mappa_cantieri.items():
         score = SequenceMatcher(None, target, nome_db).ratio()
         if score > best_score:
             best_score, best_id = score, cid
-    return best_id if best_score >= 0.85 else None
+    return best_id if best_score >= 0.92 else None
 
 
 def calcola_stato(
@@ -659,12 +660,16 @@ def run_sync(dry_run: bool = False) -> None:
         for i in range(0, len(nuovi), CHUNK_SIZE):
             supabase.table("scadenze_pagamento").insert(nuovi[i : i + CHUNK_SIZE]).execute()
 
-    # importo_totale ESCLUSO: non sovrascrivere importi di rate splittate
-    # o correzioni manuali. Il sync aggiorna solo dati di pagamento e stato.
+    # CAMPI_UPDATE ridotto: il sync aggiorna solo metadati e date.
+    # ESCLUSI (gestiti manualmente o da riconciliazione):
+    #   - importo_totale: protegge rate splittate
+    #   - importo_pagato: non azzerare pagamenti registrati
+    #   - stato: non resuscitare scadenze pagate
+    #   - cantiere_id: assegnazione cantiere e' manuale
     CAMPI_UPDATE = {
-        "importo_pagato", "stato", "data_pagamento", "metodo_pagamento",
+        "data_pagamento", "metodo_pagamento",
         "data_scadenza", "data_emissione", "note",
-        "cantiere_id", "soggetto_id", "fattura_riferimento",
+        "soggetto_id", "fattura_riferimento",
     }
     if da_aggiornare:
         for r in da_aggiornare:

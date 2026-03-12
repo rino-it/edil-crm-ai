@@ -3367,6 +3367,9 @@ export async function getScadenzePaginated(
     `, { count: 'exact' });
 
   // 2. Applichiamo i filtri dinamicamente
+  // Escludi rate mutuo: gestite nella sezione dedicata, non tra le scadenze fornitori
+  query = query.neq('fonte', 'mutuo');
+
   if (filtri.tipo) {
     query = query.eq('tipo', filtri.tipo);
   }

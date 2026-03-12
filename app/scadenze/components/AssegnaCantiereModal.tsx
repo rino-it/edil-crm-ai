@@ -395,7 +395,7 @@ export function AssegnaCantiereModal({
 
   // ─── Form assegnazione (colonna destra o unica) ──────────────────
   const formContent = (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col min-h-0 flex-1">
       {/* Header riepilogo fattura */}
       <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3 space-y-2">
         <div className="flex items-start justify-between">
@@ -657,8 +657,8 @@ export function AssegnaCantiereModal({
             </div>
 
             {/* Colonna destra: form assegnazione */}
-            <div className="w-[420px] flex-shrink-0 flex flex-col">
-              <div className="px-4 py-2.5 border-b border-zinc-200">
+            <div className="w-[420px] flex-shrink-0 flex flex-col min-h-0">
+              <div className="px-4 py-2.5 border-b border-zinc-200 flex-shrink-0">
                 <h2 className="text-base font-bold text-zinc-900">Assegnazione Cantiere</h2>
                 <p className="text-xs text-zinc-500">Associa a uno o più cantieri</p>
               </div>
