@@ -924,14 +924,7 @@ export async function importaPdfFatture(
     const numNorm = normalizzaNum(pattern.numero)
     const piva = estraiPivaDaNome(file.name)
 
-    // Check doppione
-    if (doppioni.has(numNorm + '|' + dataIso)) {
-      risultati.push({ filename: file.name, status: 'duplicato', fatturaRif: pattern.numero })
-      totali.duplicati++
-      continue
-    }
-
-    // Matching in memoria
+    // Matching in memoria: prima cerco scadenze aperte, poi verifico doppione
     const candidati = scadenzePerData.get(dataIso) || []
     let target: (typeof candidati)[0] | null = null
 
@@ -960,9 +953,15 @@ export async function importaPdfFatture(
       }
     }
 
+    // Se nessuna scadenza aperta trovata, verifica se e' doppione o non esiste
     if (!target) {
-      risultati.push({ filename: file.name, status: 'non_trovato', fatturaRif: pattern.numero, error: `Nessuna scadenza per fatt. ${pattern.numero} del ${dataIso}` })
-      totali.nonTrovati++
+      if (doppioni.has(numNorm + '|' + dataIso)) {
+        risultati.push({ filename: file.name, status: 'duplicato', fatturaRif: pattern.numero })
+        totali.duplicati++
+      } else {
+        risultati.push({ filename: file.name, status: 'non_trovato', fatturaRif: pattern.numero, error: `Nessuna scadenza per fatt. ${pattern.numero} del ${dataIso}` })
+        totali.nonTrovati++
+      }
       continue
     }
 
