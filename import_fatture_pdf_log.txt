@@ -19485,3 +19485,78 @@ PDF non associati (116):
 [2026-03-13 16:22:42]   Errori:                   0
 [2026-03-13 16:22:42] ============================================================
 
+[2026-03-13 16:56:16] ============================================================
+[2026-03-13 16:56:16] IMPORT FATTURE PDF -> Supabase Storage + Associazione Scadenze
+[2026-03-13 16:56:16] Sorgente PDF: \\192.168.1.231\scambio\AMMINISTRAZIONE\Clienti e Fornitori\2025\contabilità\Archivio_pdf
+[2026-03-13 16:56:16] Bucket: fatture-pdf
+[2026-03-13 16:56:16] ============================================================
+[2026-03-13 16:56:16] Pre-caricamento scadenze aperte...
+[2026-03-13 16:56:16]    322 scadenze aperte (senza PDF)
+[2026-03-13 16:56:17]    772 scadenze gia' con PDF
+[2026-03-13 16:56:17] Pre-caricamento mappa PIVA...
+[2026-03-13 16:56:17]    391 chiavi PIVA/CF mappate
+[2026-03-13 16:56:17] Scansione PDF (ultimi 7 giorni)...
+[2026-03-13 16:56:17]    Totale PDF su disco: 1456, recenti (7gg): 0
+[2026-03-13 16:56:17] 
+============================================================
+[2026-03-13 16:56:17] RIEPILOGO
+[2026-03-13 16:56:17]   PDF recenti scansionati: 0
+[2026-03-13 16:56:17]   Gia' con PDF (skip):     0
+[2026-03-13 16:56:17]   Pattern non riconosciuto: 0
+[2026-03-13 16:56:17]   Nuovi caricati:           0
+[2026-03-13 16:56:17]   Associati a scadenze:     0
+[2026-03-13 16:56:17]   Non associati:            0
+[2026-03-13 16:56:17]   Errori:                   0
+[2026-03-13 16:56:17] ============================================================
+
+[2026-03-13 16:57:14] ============================================================
+[2026-03-13 16:57:14] IMPORT FATTURE PDF -> Supabase Storage + Associazione Scadenze
+[2026-03-13 16:57:14] Sorgente PDF: \\192.168.1.231\scambio\AMMINISTRAZIONE\Clienti e Fornitori\2025\contabilità\Archivio_pdf
+[2026-03-13 16:57:14] Bucket: fatture-pdf
+[2026-03-13 16:57:14] ============================================================
+[2026-03-13 16:57:14] Pre-caricamento scadenze aperte...
+[2026-03-13 16:57:14]    322 scadenze aperte (senza PDF)
+[2026-03-13 16:57:14]    772 scadenze gia' con PDF
+[2026-03-13 16:57:14] Pre-caricamento mappa PIVA...
+[2026-03-13 16:57:14]    391 chiavi PIVA/CF mappate
+[2026-03-13 16:57:14] Scansione PDF (ultimi 7 giorni)...
+[2026-03-13 16:57:15]    Totale PDF su disco: 1456, recenti (7gg): 0
+[2026-03-13 16:57:15] 
+============================================================
+[2026-03-13 16:57:15] RIEPILOGO
+[2026-03-13 16:57:15]   PDF recenti scansionati: 0
+[2026-03-13 16:57:15]   Gia' con PDF (skip):     0
+[2026-03-13 16:57:15]   Pattern non riconosciuto: 0
+[2026-03-13 16:57:15]   Nuovi caricati:           0
+[2026-03-13 16:57:15]   Associati a scadenze:     0
+[2026-03-13 16:57:15]   Non associati:            0
+[2026-03-13 16:57:15]   Errori:                   0
+[2026-03-13 16:57:15] ============================================================
+
+[2026-03-13 16:58:57] ============================================================
+[2026-03-13 16:58:57] IMPORT FATTURE PDF -> Supabase Storage + Associazione Scadenze
+[2026-03-13 16:58:57] Sorgente PDF: \\192.168.1.231\scambio\AMMINISTRAZIONE\Clienti e Fornitori\2025\contabilità\Archivio_pdf
+[2026-03-13 16:58:57] Bucket: fatture-pdf
+[2026-03-13 16:58:57] ============================================================
+[2026-03-13 16:58:57] Pre-caricamento scadenze aperte...
+[2026-03-13 16:58:58]    322 scadenze aperte (senza PDF)
+[2026-03-13 16:58:58]    772 scadenze gia' con PDF
+[2026-03-13 16:58:58] Pre-caricamento mappa PIVA...
+[2026-03-13 16:58:58]    391 chiavi PIVA/CF mappate
+[2026-03-13 16:58:58] Scansione PDF (ultimi 7 giorni)...
+[2026-03-13 16:58:59]    Totale PDF su disco: 1473, recenti (7gg): 2
+[2026-03-13 16:58:59] 
+============================================================
+[2026-03-13 16:58:59] RIEPILOGO
+[2026-03-13 16:58:59]   PDF recenti scansionati: 2
+[2026-03-13 16:58:59]   Gia' con PDF (skip):     1
+[2026-03-13 16:58:59]   Pattern non riconosciuto: 0
+[2026-03-13 16:58:59]   Nuovi caricati:           0
+[2026-03-13 16:58:59]   Associati a scadenze:     0
+[2026-03-13 16:58:59]   Non associati:            1
+[2026-03-13 16:58:59]   Errori:                   0
+[2026-03-13 16:58:59] 
+PDF non associati (1):
+[2026-03-13 16:58:59]   - Fatt.Acq._N.E6-0202498_del_10-03-2026_c1z0ax4b6o.pdf -> num='E6-0202498' del 2026-03-10 piva=None
+[2026-03-13 16:58:59] ============================================================
+

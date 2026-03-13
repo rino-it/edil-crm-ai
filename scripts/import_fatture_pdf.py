@@ -99,7 +99,7 @@ def normalizza_num(s: str) -> str:
     """Normalizza numero fattura per confronto: rimuove separatori."""
     if not s:
         return ""
-    return re.sub(r"[/\\\s\-.]", "", s).upper()
+    return re.sub(r"[/\\\s\-._]", "", s).upper()
 
 
 # --- Upload su Supabase Storage ---

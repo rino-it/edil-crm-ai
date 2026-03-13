@@ -856,7 +856,7 @@ function estraiPivaDaNome(filename: string): string | null {
 
 function normalizzaNum(s: string): string {
   if (!s) return ''
-  return s.replace(/[/\\\s\-.]/g, '').toUpperCase()
+  return s.replace(/[/\\\s\-._]/g, '').toUpperCase()
 }
 
 export async function importaPdfFatture(
