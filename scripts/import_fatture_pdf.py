@@ -109,18 +109,29 @@ def estrai_piva_da_nome_xml(filename: str) -> str | None:
     return None
 
 
+# Indice XML lazy: costruito una sola volta al primo accesso
+_xml_index: dict | None = None
+
+def _get_xml_index(xml_dir: Path) -> dict:
+    """Costruisce (o ritorna cached) indice {(numero_nel_nome, data_ddmmyyyy): (xml_path, piva)}"""
+    global _xml_index
+    if _xml_index is not None:
+        return _xml_index
+    _xml_index = {}
+    for xml_file in xml_dir.glob("*.xml"):
+        num, data = estrai_pattern_da_nome(xml_file.name)
+        if num and data:
+            piva = estrai_piva_da_nome_xml(xml_file.name)
+            _xml_index[(num, data)] = (xml_file, piva)
+    log(f"   Indice XML costruito: {len(_xml_index)} file")
+    return _xml_index
+
 def trova_xml_gemello(num_file: str, data_file: str, xml_dir: Path):
-    """Cerca l'XML gemello per un dato (numero, data) usando glob mirato.
-    Ritorna (xml_path, piva) o (None, None)."""
-    pattern = f"*_N.{num_file}_del_{data_file}_*.xml"
-    matches = list(xml_dir.glob(pattern))
-    if not matches:
-        pattern = f"*{num_file}_del_{data_file}_*.xml"
-        matches = list(xml_dir.glob(pattern))
-    if matches:
-        xml_path = matches[0]
-        piva = estrai_piva_da_nome_xml(xml_path.name)
-        return xml_path, piva
+    """Cerca l'XML gemello nell'indice cached. Ritorna (xml_path, piva) o (None, None)."""
+    index = _get_xml_index(xml_dir)
+    entry = index.get((num_file, data_file))
+    if entry:
+        return entry
     return None, None
 
 
@@ -344,21 +355,26 @@ def main():
     stats = {"uploadati": 0, "matchati": 0, "non_matchati": 0, "errori": 0, "no_xml": 0, "gia_presenti": 0}
     non_matchati_list = []
 
+    # Pre-filtra: estrai pattern da ogni PDF e pre-skip quelli gia' con PDF
+    # Questo evita di costruire l'indice XML se non ci sono PDF nuovi
+    pdf_da_processare = []
     for pdf_path in sorted(pdf_files):
         filename = pdf_path.name
-
-        # 1. Estrai pattern dal nome PDF
         num_file, data_file = estrai_pattern_da_nome(filename)
         if not num_file:
             stats["non_matchati"] += 1
             non_matchati_list.append(f"  - {filename} -> (pattern non riconosciuto)")
             continue
-
-        # Converti data dd-mm-yyyy -> ISO yyyy-mm-dd
         parts = data_file.split("-")
         data_iso = f"{parts[2]}-{parts[1]}-{parts[0]}"
+        pdf_da_processare.append((pdf_path, num_file, data_file, data_iso))
 
-        # 2. Cerca XML gemello on-demand (1 glob mirato, non indice globale)
+    log(f"   PDF con pattern valido: {len(pdf_da_processare)}")
+
+    for pdf_path, num_file, data_file, data_iso in pdf_da_processare:
+        filename = pdf_path.name
+
+        # Cerca XML gemello (indice costruito lazy al primo accesso)
         xml_path, piva = trova_xml_gemello(num_file, data_file, XML_SOURCE_PATH)
         numero_reale = num_file
         if xml_path:
@@ -368,7 +384,7 @@ def main():
         else:
             stats["no_xml"] += 1
 
-        # 3. Skip se questa scadenza ha gia' un PDF associato
+        # Skip se questa scadenza ha gia' un PDF associato
         if (numero_reale, data_iso) in scadenze_con_pdf:
             stats["gia_presenti"] += 1
             continue
@@ -377,7 +393,7 @@ def main():
         if xml_path:
             log(f"  XML -> Numero: {numero_reale!r}, PIVA: {piva}, data: {data_iso}")
 
-        # 4. Upload su Storage
+        # Upload su Storage
         file_url = upload_pdf(str(pdf_path), filename)
         if not file_url:
             stats["errori"] += 1
@@ -385,7 +401,7 @@ def main():
 
         stats["uploadati"] += 1
 
-        # 5. Matching con scadenze
+        # Matching con scadenze
         matched = match_e_aggiorna(numero_reale, data_iso, piva, file_url)
         if matched:
             stats["matchati"] += 1
