@@ -95,32 +95,33 @@ def estrai_pattern_da_nome(filename: str):
     return None, None
 
 
-# ─── Indice XML: mappa (numero_file, data) → (xml_path, piva) ───────
+# ─── Ricerca XML gemello on-demand ──────────────────────────────────
 def estrai_piva_da_nome_xml(filename: str) -> str | None:
     """
     Estrae la PIVA dal nome XML.
     Es: "Fatt.Acq._N.2601C240477_del_01-01-2026_IT12454611000.xml" → "12454611000"
-    Es: "Fatt.Acq._N.8_del_26-02-2026_IT016417907022026n_01TPx (1).xml" → "016417907022026n"
-    La PIVA è il blocco dopo _del_dd-mm-yyyy_ e prima del prossimo _ o .xml
     """
     match = re.search(r"_del_\d{2}-\d{2}-\d{4}_([A-Z]{2}\d[\w]+)", filename)
     if match:
         raw = match.group(1)
-        # Rimuovi prefisso paese (IT, NL, ecc.)
         if len(raw) > 2 and raw[:2].isalpha():
             return raw[2:]
     return None
 
 
-def build_xml_index(xml_dir: Path) -> dict:
-    """Costruisce indice {(numero_nel_nome, data_ddmmyyyy): (xml_path, piva)}"""
-    index = {}
-    for xml_file in xml_dir.glob("*.xml"):
-        num, data = estrai_pattern_da_nome(xml_file.name)
-        if num and data:
-            piva = estrai_piva_da_nome_xml(xml_file.name)
-            index[(num, data)] = (xml_file, piva)
-    return index
+def trova_xml_gemello(num_file: str, data_file: str, xml_dir: Path):
+    """Cerca l'XML gemello per un dato (numero, data) usando glob mirato.
+    Ritorna (xml_path, piva) o (None, None)."""
+    pattern = f"*_N.{num_file}_del_{data_file}_*.xml"
+    matches = list(xml_dir.glob(pattern))
+    if not matches:
+        pattern = f"*{num_file}_del_{data_file}_*.xml"
+        matches = list(xml_dir.glob(pattern))
+    if matches:
+        xml_path = matches[0]
+        piva = estrai_piva_da_nome_xml(xml_path.name)
+        return xml_path, piva
+    return None, None
 
 
 # ─── Leggi <Numero> dal contenuto XML ────────────────────────────────
@@ -276,27 +277,50 @@ def match_e_aggiorna(numero_fattura: str | None, data_emissione: str, piva: str 
 # ─── Main ────────────────────────────────────────────────────────────
 def main():
     log("=" * 60)
-    log("📄 IMPORT FATTURE PDF → Supabase Storage + Associazione Scadenze")
+    log("IMPORT FATTURE PDF -> Supabase Storage + Associazione Scadenze")
     log(f"Sorgente PDF: {PDF_SOURCE_PATH}")
     log(f"Sorgente XML: {XML_SOURCE_PATH}")
     log(f"Bucket: {BUCKET_NAME}")
     log("=" * 60)
-    
+
     if not PDF_SOURCE_PATH.exists():
-        log(f"❌ Cartella PDF non trovata: {PDF_SOURCE_PATH}")
+        log(f"Cartella PDF non trovata: {PDF_SOURCE_PATH}")
         sys.exit(1)
     if not XML_SOURCE_PATH.exists():
-        log(f"❌ Cartella XML non trovata: {XML_SOURCE_PATH}")
+        log(f"Cartella XML non trovata: {XML_SOURCE_PATH}")
         sys.exit(1)
-    
-    # 1. Costruisci indice XML
-    log("🔧 Costruzione indice XML...")
-    xml_index = build_xml_index(XML_SOURCE_PATH)
-    log(f"   {len(xml_index)} XML indicizzati")
-    
-    # 2. Scansiona PDF (solo ultimi 20 giorni per evitare timeout)
-    GIORNI_RECENTI = 20
-    data_limite = datetime.now() - timedelta(days=GIORNI_RECENTI)
+
+    # Flag --days per override giorni recenti (default 7)
+    giorni_recenti = 7
+    for arg in sys.argv:
+        if arg.startswith("--days="):
+            try:
+                giorni_recenti = int(arg.split("=")[1])
+            except ValueError:
+                pass
+        elif arg == "--days" and sys.argv.index(arg) + 1 < len(sys.argv):
+            try:
+                giorni_recenti = int(sys.argv[sys.argv.index(arg) + 1])
+            except ValueError:
+                pass
+
+    # 1. Pre-carica set di scadenze che hanno gia' un file_url (skip incrementale via DB)
+    log("Pre-caricamento scadenze con PDF gia' associato...")
+    scadenze_con_pdf = set()
+    try:
+        res = supabase.table("scadenze_pagamento") \
+            .select("fattura_riferimento, data_emissione") \
+            .not_.is_("file_url", "null") \
+            .execute()
+        for r in (res.data or []):
+            if r.get("fattura_riferimento") and r.get("data_emissione"):
+                scadenze_con_pdf.add((r["fattura_riferimento"], r["data_emissione"]))
+        log(f"   {len(scadenze_con_pdf)} scadenze gia' con PDF associato")
+    except Exception as e:
+        log(f"   Errore pre-caricamento: {e} — procedo senza skip")
+
+    # 2. Scansiona PDF recenti
+    data_limite = datetime.now() - timedelta(days=giorni_recenti)
     all_pdf_files = list(PDF_SOURCE_PATH.glob("*.pdf")) + list(PDF_SOURCE_PATH.glob("*.PDF"))
     all_pdf_files = list({p.resolve(): p for p in all_pdf_files}.values())
 
@@ -311,108 +335,86 @@ def main():
                     continue
             except ValueError:
                 pass
-        # Fallback: usa data modifica file
         mtime = datetime.fromtimestamp(p.stat().st_mtime)
         if mtime >= data_limite:
             pdf_files.append(p)
 
-    log(f"   Totale PDF su disco: {len(all_pdf_files)}, recenti ({GIORNI_RECENTI}gg): {len(pdf_files)}")
-    
+    log(f"   Totale PDF su disco: {len(all_pdf_files)}, recenti ({giorni_recenti}gg): {len(pdf_files)}")
+
     stats = {"uploadati": 0, "matchati": 0, "non_matchati": 0, "errori": 0, "no_xml": 0, "gia_presenti": 0}
     non_matchati_list = []
-
-    # Pre-carica lista file già presenti su Storage per skip incrementale
-    log("🔧 Recupero lista PDF già presenti su Storage...")
-    existing_files = set()
-    try:
-        for anno in ["2024", "2025", "2026"]:
-            result = supabase.storage.from_(BUCKET_NAME).list(anno, {"limit": 10000})
-            for f in (result or []):
-                existing_files.add(f["name"])
-        log(f"   {len(existing_files)} file già su Storage")
-    except Exception as e:
-        log(f"  ⚠️ Impossibile leggere lista Storage: {e} — procedo senza skip")
 
     for pdf_path in sorted(pdf_files):
         filename = pdf_path.name
 
-        # Skip incrementale: se il file è già su Storage, non riprocessare
-        if filename in existing_files:
-            stats["gia_presenti"] += 1
-            continue
-
-        log(f"\n📄 {filename}")
-        
         # 1. Estrai pattern dal nome PDF
         num_file, data_file = estrai_pattern_da_nome(filename)
         if not num_file:
-            log(f"  ⚠️ Pattern non riconosciuto nel nome file")
             stats["non_matchati"] += 1
-            non_matchati_list.append(f"  - {filename} → (pattern non riconosciuto)")
+            non_matchati_list.append(f"  - {filename} -> (pattern non riconosciuto)")
             continue
-        
-        # Converti data dd-mm-yyyy → ISO yyyy-mm-dd
+
+        # Converti data dd-mm-yyyy -> ISO yyyy-mm-dd
         parts = data_file.split("-")
         data_iso = f"{parts[2]}-{parts[1]}-{parts[0]}"
-        
-        # 2. Cerca XML gemello
-        xml_entry = xml_index.get((num_file, data_file))
-        piva = None
-        if xml_entry:
-            xml_path, piva = xml_entry
-            # 3. Leggi il vero numero fattura dall'XML
-            numero_reale = leggi_numero_da_xml(xml_path)
-            if numero_reale:
-                log(f"  🔍 XML → Numero: {numero_reale!r}, PIVA: {piva}, data: {data_iso}")
-            else:
-                log(f"  ⚠️ XML trovato ma tag <Numero> non leggibile, uso nome file")
-                numero_reale = num_file
+
+        # 2. Cerca XML gemello on-demand (1 glob mirato, non indice globale)
+        xml_path, piva = trova_xml_gemello(num_file, data_file, XML_SOURCE_PATH)
+        numero_reale = num_file
+        if xml_path:
+            nr = leggi_numero_da_xml(xml_path)
+            if nr:
+                numero_reale = nr
         else:
-            log(f"  ⚠️ Nessun XML gemello trovato, uso nome file: {num_file}")
-            numero_reale = num_file
             stats["no_xml"] += 1
-        
+
+        # 3. Skip se questa scadenza ha gia' un PDF associato
+        if (numero_reale, data_iso) in scadenze_con_pdf:
+            stats["gia_presenti"] += 1
+            continue
+
+        log(f"\n  {filename}")
+        if xml_path:
+            log(f"  XML -> Numero: {numero_reale!r}, PIVA: {piva}, data: {data_iso}")
+
         # 4. Upload su Storage
         file_url = upload_pdf(str(pdf_path), filename)
         if not file_url:
             stats["errori"] += 1
             continue
-        
+
         stats["uploadati"] += 1
-        log(f"  ☁️ Caricato su Storage")
-        
-        # 5. Matching con scadenze (numero reale da XML + data + PIVA)
+
+        # 5. Matching con scadenze
         matched = match_e_aggiorna(numero_reale, data_iso, piva, file_url)
         if matched:
             stats["matchati"] += 1
         else:
             stats["non_matchati"] += 1
-            non_matchati_list.append(f"  - {filename} → fatt={numero_reale!r} del {data_iso}")
-            log(f"  ℹ️ Nessuna scadenza trovata per fatt={numero_reale!r} del {data_iso}")
-    
+            non_matchati_list.append(f"  - {filename} -> fatt={numero_reale!r} del {data_iso}")
+            log(f"  Nessuna scadenza trovata per fatt={numero_reale!r} del {data_iso}")
+
     # Riepilogo
     log("\n" + "=" * 60)
-    log("📊 RIEPILOGO")
-    log(f"  File PDF trovati:       {len(pdf_files)}")
-    log(f"  Gia presenti (skip):   {stats['gia_presenti']}")
-    log(f"  Nuovi caricati:        {stats['uploadati']}")
+    log("RIEPILOGO")
+    log(f"  File PDF recenti:       {len(pdf_files)}")
+    log(f"  Gia con PDF (skip):     {stats['gia_presenti']}")
+    log(f"  Nuovi caricati:         {stats['uploadati']}")
     log(f"  Associati a scadenze:   {stats['matchati']}")
     log(f"  Non associati:          {stats['non_matchati']}")
     log(f"  Senza XML gemello:      {stats['no_xml']}")
     log(f"  Errori upload:          {stats['errori']}")
-    
+
     if non_matchati_list:
-        log(f"\n⚠️ PDF caricati ma NON associati ({len(non_matchati_list)}):")
+        log(f"\nPDF caricati ma NON associati ({len(non_matchati_list)}):")
         for line in non_matchati_list:
             log(line)
-    
+
     log("=" * 60)
-    
+
     # Salva log
     with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write("\n".join(log_lines) + "\n\n")
-    
-    log(f"📝 Log salvato in {LOG_FILE}")
 
     if "--json" in sys.argv:
         print(f"###JSON_RESULT###{json.dumps(stats)}")

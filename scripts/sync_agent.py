@@ -39,8 +39,7 @@ PYTHON = sys.executable  # usa lo stesso python del venv
 
 STEPS = [
     {"name": "riconciliazione_xml",  "script": "riconciliazione_xml.py",  "args": ["--json"], "label": "Importazione XML Fornitori"},
-    {"name": "import_fatture_pdf",   "script": "import_fatture_pdf.py",   "args": ["--json"], "label": "Associazione PDF Fatture"},
-    {"name": "crea_scadenze_orfane", "script": "crea_scadenze_orfane.py", "args": ["--execute", "--json"], "label": "Creazione Scadenze Orfane"},
+    {"name": "import_fatture_pdf",   "script": "import_fatture_pdf.py",   "args": ["--json"], "label": "Associazione PDF Fatture", "timeout": 600},
 ]
 
 POLL_INTERVAL = 5  # secondi
@@ -73,6 +72,7 @@ def run_step(step: dict) -> dict:
             "error": f"Script non trovato: {step['script']}",
         }
 
+    step_timeout = step.get("timeout", 180)
     start = time.time()
     try:
         result = subprocess.run(
@@ -80,7 +80,7 @@ def run_step(step: dict) -> dict:
             cwd=str(SCRIPTS_DIR),
             capture_output=True,
             text=True,
-            timeout=180,  # 3 minuti per script
+            timeout=step_timeout,
         )
         duration_ms = int((time.time() - start) * 1000)
         data = parse_json_result(result.stdout)
@@ -108,7 +108,7 @@ def run_step(step: dict) -> dict:
             "label": step["label"],
             "status": "error",
             "duration_ms": int((time.time() - start) * 1000),
-            "error": "Timeout (3 minuti superato)",
+            "error": f"Timeout ({step_timeout}s superato)",
         }
     except Exception as e:
         return {

@@ -187,49 +187,16 @@ def _crea_scadenze_da_xml(percorso_file, fattura_id, soggetto_id, numero_fattura
 # Contatori globali per output JSON
 _stats = {"nuove": 0, "scadenze_create": 0, "scadenze_recuperate": 0, "skipped": 0, "errori": 0}
 
+# Set pre-caricato di nome_file_xml gia' importati (popolato in run())
+_xml_gia_importati: set = set()
+
 
 def parse_and_upload(percorso_file):
     nome_file = os.path.basename(percorso_file)
 
-    # --- CHECK FATTURA ESISTENTE (FIX: non skip se mancano scadenze) ---
-    fattura_esistente = None
-    try:
-        res = supabase.table("fatture_fornitori").select(
-            "id, soggetto_id, numero_fattura, data_fattura, importo_totale"
-        ).eq("nome_file_xml", nome_file).execute()
-        if res.data and len(res.data) > 0:
-            fattura_esistente = res.data[0]
-    except: pass
-
-    if fattura_esistente:
-        # Fattura esiste: verifica se le scadenze sono presenti
-        sogg_id = fattura_esistente.get("soggetto_id")
-        num_fatt = fattura_esistente.get("numero_fattura")
-        data_fatt = fattura_esistente.get("data_fattura")
-        try:
-            sc_res = supabase.table("scadenze_pagamento").select("id").eq(
-                "soggetto_id", sogg_id
-            ).eq("fattura_riferimento", num_fatt).eq("data_emissione", data_fatt).execute()
-            if sc_res.data and len(sc_res.data) > 0:
-                _stats["skipped"] += 1
-                return  # Fattura E scadenze esistono: skip completo
-        except: pass
-
-        # Fattura esiste MA scadenze mancanti: recupera
-        safe_print(f"[FIX] Scadenze mancanti per fattura esistente: {nome_file}")
-        try:
-            # Recupera condizioni_pagamento dal soggetto
-            cond_res = supabase.table("anagrafica_soggetti").select("condizioni_pagamento").eq("id", sogg_id).execute()
-            condizioni_pag = cond_res.data[0].get('condizioni_pagamento', '30gg DFFM') if cond_res.data else '30gg DFFM'
-        except:
-            condizioni_pag = '30gg DFFM'
-
-        n = _crea_scadenze_da_xml(
-            percorso_file,
-            fattura_esistente["id"], sogg_id, num_fatt, data_fatt,
-            fattura_esistente.get("importo_totale", 0), condizioni_pag
-        )
-        _stats["scadenze_recuperate"] += n
+    # Skip rapido: se il file e' gia' stato importato, non fare query
+    if nome_file in _xml_gia_importati:
+        _stats["skipped"] += 1
         return
 
     safe_print(f"[NEW] Nuova fattura: {nome_file}")
@@ -354,15 +321,29 @@ def parse_and_upload(percorso_file):
         safe_print(f"   [ERR] Errore su {nome_file}: {e}")
 
 def run():
+    global _xml_gia_importati
     safe_print(f"AVVIO IMPORTAZIONE E SCADENZIARIO DA: {CARTELLA_ARCHIVIO}")
     if not os.path.exists(CARTELLA_ARCHIVIO):
         safe_print(f"[ERR] Cartella non trovata: {CARTELLA_ARCHIVIO}")
         if "--json" in sys.argv:
             print(f"###JSON_RESULT###{json.dumps({'errore': 'cartella_non_trovata', **_stats})}")
         return
+
+    # Pre-carica lista XML gia' importati (1 sola query invece di 683)
+    try:
+        res = supabase.table("fatture_fornitori").select("nome_file_xml").execute()
+        _xml_gia_importati = {r["nome_file_xml"] for r in (res.data or []) if r.get("nome_file_xml")}
+        safe_print(f"   {len(_xml_gia_importati)} fatture gia' importate in DB")
+    except Exception as e:
+        safe_print(f"[WARN] Errore pre-caricamento indice: {e} — procedo con check per-file")
+
     files = [f for f in os.listdir(CARTELLA_ARCHIVIO) if f.lower().endswith('.xml')]
-    for f in files:
+    nuovi = [f for f in files if f not in _xml_gia_importati]
+    safe_print(f"   {len(files)} XML su disco, {len(nuovi)} da processare")
+
+    for f in nuovi:
         parse_and_upload(os.path.join(CARTELLA_ARCHIVIO, f))
+    _stats["skipped"] = len(files) - len(nuovi)
     safe_print(f"ELABORAZIONE COMPLETATA.")
     safe_print(f"   Nuove fatture: {_stats['nuove']}, Scadenze create: {_stats['scadenze_create']}, "
           f"Scadenze recuperate: {_stats['scadenze_recuperate']}, Skip: {_stats['skipped']}, Errori: {_stats['errori']}")
