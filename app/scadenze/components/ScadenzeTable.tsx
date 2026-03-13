@@ -4,7 +4,7 @@ import { useState, useTransition, useRef } from 'react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { CheckCircle2, CalendarPlus, ArrowRight, FileText, Loader2, Pencil, Check, X, MapPin } from "lucide-react"
+import { CheckCircle2, CalendarPlus, ArrowRight, FileText, Loader2, Pencil, Check, X, MapPin, Paperclip } from "lucide-react"
 import Link from "next/link"
 import { ScadenzaWithSoggetto } from "@/types/finanza"
 import { PaginatedResult } from "@/types/pagination"
@@ -15,6 +15,7 @@ import { aggiornaFatturaRiferimento } from '../actions'
 import { toast } from 'sonner'
 import { AssegnaCantiereModal } from './AssegnaCantiereModal'
 import { DividiInRateDialog } from './DividiInRateDialog'
+import { AllegaDocumentoButton } from './AllegaDocumentoButton'
 
 interface ScadenzeTableProps {
   data: ScadenzaWithSoggetto[];
@@ -199,29 +200,12 @@ export function ScadenzeTable({
               const importoResiduo = Number(s.importo_totale) - Number(s.importo_pagato || 0);
               const isScaduta = new Date(s.data_scadenza) < new Date() && s.stato !== 'pagato';
               const attachmentUrl = s.file_url ?? s.titolo?.file_url ?? null;
-              const attachmentTitle = s.file_url
-                ? 'Apri fattura PDF'
-                : s.titolo?.file_url
-                  ? `Apri allegato titolo ${s.titolo.tipo ?? ''}`.trim()
-                  : '';
 
               return (
                 <TableRow key={s.id} className="group hover:bg-zinc-50/50 transition-colors">
                   {/* Colonna FT - allegato PDF (prima colonna) */}
                   <TableCell className="text-center px-1">
-                    {attachmentUrl ? (
-                      <a
-                        href={attachmentUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title={attachmentTitle}
-                        className="inline-flex items-center justify-center size-7 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 transition-colors"
-                      >
-                        <FileText size={13} />
-                      </a>
-                    ) : (
-                      <span className="text-zinc-200 text-[10px]">—</span>
-                    )}
+                    <AllegaDocumentoButton scadenzaId={s.id} currentUrl={attachmentUrl} compact />
                   </TableCell>
 
                   <TableCell className="font-bold text-zinc-900">
@@ -339,17 +323,6 @@ export function ScadenzeTable({
                   )}
                   <div className="text-xs text-zinc-500 font-mono flex items-center gap-1.5">
                     <FatturaEditCell scadenzaId={s.id} initial={s.fattura_riferimento ?? null} fileUrl={s.file_url ?? null} />
-                    {attachmentUrl && (
-                      <a
-                        href={attachmentUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title={attachmentTitle}
-                        className="inline-flex items-center justify-center size-5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 transition-colors flex-shrink-0"
-                      >
-                        <FileText size={10} />
-                      </a>
-                    )}
                   </div>
                   {showCantiereColumn && (
                     <div className="mt-1">
@@ -387,17 +360,7 @@ export function ScadenzeTable({
               </div>
 
               <div className="flex gap-2">
-                {attachmentUrl && (
-                  <a
-                    href={attachmentUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={attachmentTitle}
-                    className="inline-flex items-center justify-center h-11 w-12 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 transition-colors"
-                  >
-                    <FileText size={16} />
-                  </a>
-                )}
+                <AllegaDocumentoButton scadenzaId={s.id} currentUrl={attachmentUrl} compact={false} />
                 {showPagamentoActions && s.stato !== 'pagato' && (
                   s.tipo === 'entrata' ? (
                     <div className="flex-1">

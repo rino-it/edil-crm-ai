@@ -14,6 +14,7 @@ import {
   inserisciTitolo,
   risolviPersonale,
   inserisciPresenze,
+  normalizzaNome,
   type PersonaRisolta,
   type PresenzaInput,
 } from '@/utils/data-fetcher'
@@ -1049,14 +1050,32 @@ export async function POST(request: NextRequest) {
               const ragSoc = datiFin.fornitore?.ragione_sociale?.trim();
               let skipRiepilogo = false;
               if (ragSoc) {
-                const { data: matchesSogg } = await supabaseAdmin
+                let matchesSogg: { id: string; ragione_sociale: string }[] = [];
+                const { data: directMatches } = await supabaseAdmin
                   .from('anagrafica_soggetti')
                   .select('id, ragione_sociale')
                   .ilike('ragione_sociale', `%${ragSoc}%`)
                   .limit(5);
+                matchesSogg = directMatches || [];
 
-                if (matchesSogg && matchesSogg.length > 1) {
-                  // Match incerto → chiedi conferma soggetto
+                // Fallback normalizzato: S.P.A. = SPA, S.R.L. = SRL, etc.
+                if (matchesSogg.length === 0) {
+                  const nomeNorm = normalizzaNome(ragSoc);
+                  if (nomeNorm.length >= 2) {
+                    const { data: allSoggetti } = await supabaseAdmin
+                      .from('anagrafica_soggetti')
+                      .select('id, ragione_sociale');
+                    matchesSogg = (allSoggetti || []).filter(
+                      (s: any) => normalizzaNome(s.ragione_sociale) === nomeNorm
+                    );
+                    if (matchesSogg.length === 1) {
+                      // Match unico normalizzato → conferma automatica
+                      datiFin._soggetto_confermato_id = matchesSogg[0].id;
+                    }
+                  }
+                }
+
+                if (matchesSogg.length > 1) {
                   const opzioni = matchesSogg.map((m: { id: string; ragione_sociale: string }, i: number) => `${i + 1}. ${m.ragione_sociale}`).join('\n');
                   finalReply = `Ho trovato più corrispondenze per "${ragSoc}":\n\n${opzioni}\n\n` +
                     `Rispondi con il numero corretto, oppure scrivi il nome esatto.`;

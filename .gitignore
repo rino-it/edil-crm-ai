@@ -43,3 +43,7 @@ next-env.d.ts
 # claude code (config locale)
 .claude/settings.local.json
 .claude/worktrees/
+
+# log operativi
+riconciliazione_log.txt
+*.log

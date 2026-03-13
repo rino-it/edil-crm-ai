@@ -84,6 +84,7 @@ export interface FatturaEstratta {
   condizioni_pagamento: string | null;
   ddt_riferimento: string[] | null;
   note: string | null;
+  _soggetto_confermato_id?: string | null;
 }
 
 // ============================================================

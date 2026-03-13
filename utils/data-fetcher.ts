@@ -913,33 +913,43 @@ export async function inserisciFatturaFornitore(data: InserisciFatturaInput): Pr
         .single();
       condizioniPag = s?.condizioni_pagamento || condizioniPag;
     } else if (ragioneSociale) {
-      // Cerca match in anagrafica per ragione_sociale
+      // Cerca match in anagrafica: prima ilike diretto, poi normalizzato
       const { data: matches } = await supabase
         .from('anagrafica_soggetti')
         .select('id, ragione_sociale, condizioni_pagamento')
         .ilike('ragione_sociale', `%${ragioneSociale}%`)
         .limit(5);
 
-      if (matches && matches.length === 1) {
-        // Match unico → usa direttamente
-        soggettoId = matches[0].id;
-        condizioniPag = matches[0].condizioni_pagamento || condizioniPag;
-      } else if (matches && matches.length > 1) {
-        // Match multiplo → prendi il primo risultato
+      if (matches && matches.length >= 1) {
         soggettoId = matches[0].id;
         condizioniPag = matches[0].condizioni_pagamento || condizioniPag;
       } else {
-        // Nessun match → crea nuovo soggetto
-        const { data: created } = await supabase
-          .from('anagrafica_soggetti')
-          .insert({
-            ragione_sociale: ragioneSociale,
-            tipo: 'fornitore',
-            partita_iva: (piva && piva.length === 11) ? piva : null,
-          })
-          .select('id')
-          .single();
-        if (created) soggettoId = created.id;
+        // Fallback: ricerca normalizzata (S.P.A. = SPA, S.R.L. = SRL, etc.)
+        const nomeNorm = normalizzaNome(ragioneSociale);
+        if (nomeNorm.length >= 2) {
+          const { data: allSoggetti } = await supabase
+            .from('anagrafica_soggetti')
+            .select('id, ragione_sociale, condizioni_pagamento');
+          const matchNorm = (allSoggetti || []).find(
+            (s: any) => normalizzaNome(s.ragione_sociale) === nomeNorm
+          );
+          if (matchNorm) {
+            soggettoId = matchNorm.id;
+            condizioniPag = matchNorm.condizioni_pagamento || condizioniPag;
+          }
+        }
+        if (!soggettoId) {
+          const { data: created } = await supabase
+            .from('anagrafica_soggetti')
+            .insert({
+              ragione_sociale: ragioneSociale,
+              tipo: 'fornitore',
+              partita_iva: (piva && piva.length === 11) ? piva : null,
+            })
+            .select('id')
+            .single();
+          if (created) soggettoId = created.id;
+        }
       }
     }
 
@@ -1105,12 +1115,27 @@ export async function inserisciDocumentoPagamento(data: InserisciDocumentoInput)
       if (existing) {
         soggettoId = existing.id;
       } else {
-        const { data: created } = await supabase
-          .from('anagrafica_soggetti')
-          .insert({ ragione_sociale: emittente, tipo: 'fornitore' })
-          .select('id')
-          .single();
-        if (created) soggettoId = created.id;
+        // Fallback: ricerca normalizzata (S.P.A. = SPA, S.R.L. = SRL, etc.)
+        const nomeNorm = normalizzaNome(emittente);
+        if (nomeNorm.length >= 2) {
+          const { data: allSoggetti } = await supabase
+            .from('anagrafica_soggetti')
+            .select('id, ragione_sociale');
+          const matchNorm = (allSoggetti || []).find(
+            (s: any) => normalizzaNome(s.ragione_sociale) === nomeNorm
+          );
+          if (matchNorm) {
+            soggettoId = matchNorm.id;
+          }
+        }
+        if (!soggettoId) {
+          const { data: created } = await supabase
+            .from('anagrafica_soggetti')
+            .insert({ ragione_sociale: emittente, tipo: 'fornitore' })
+            .select('id')
+            .single();
+          if (created) soggettoId = created.id;
+        }
       }
     }
 

@@ -18,6 +18,7 @@ import { ArrowLeft, Save, Trash2, Receipt, History, Wallet, BrainCircuit, FileTe
 import { PaginationControls } from "@/components/ui/pagination-controls"
 import { DEFAULT_PAGE_SIZE } from '@/types/pagination'
 import Link from 'next/link'
+import { AllegaDocumentoButton } from '@/app/scadenze/components/AllegaDocumentoButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -370,21 +371,11 @@ export default async function SoggettoDetailPage({
                         </td>
                         <td className="p-4 text-right font-bold text-zinc-900">{formatEuro(s.importo_totale)}</td>
                         <td className="p-4 text-center">
-                          {(() => {
-                            const attachmentUrl = s.file_url || s.titolo?.file_url;
-                            const attachmentTitle = s.file_url
-                              ? 'Apri documento allegato'
-                              : s.titolo?.file_url
-                                ? `Apri allegato titolo ${s.titolo?.tipo || ''}`.trim()
-                                : '';
-                            return attachmentUrl ? (
-                              <a href={attachmentUrl} target="_blank" rel="noopener noreferrer" title={attachmentTitle}>
-                                <Paperclip className="h-4 w-4 text-blue-500 hover:text-blue-700 transition-colors inline-block" />
-                              </a>
-                            ) : (
-                              <span className="text-zinc-200">—</span>
-                            );
-                          })()}
+                          <AllegaDocumentoButton
+                            scadenzaId={s.id}
+                            currentUrl={s.file_url || s.titolo?.file_url || null}
+                            compact
+                          />
                         </td>
                       </tr>
                     ))}
@@ -410,6 +401,7 @@ export default async function SoggettoDetailPage({
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-[40px] text-center">Doc</TableHead>
                   <TableHead>Scadenza</TableHead>
                   <TableHead>Fattura</TableHead>
                   <TableHead className="text-right">Totale</TableHead>
@@ -420,13 +412,16 @@ export default async function SoggettoDetailPage({
               </TableHeader>
               <TableBody>
                 {fattureAperte.data.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-zinc-400">Nessuna fattura aperta al momento.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-zinc-400">Nessuna fattura aperta al momento.</TableCell></TableRow>
                 ) : (
                   fattureAperte.data.map((f: any) => {
                     const residuo = Number(f.importo_totale) - Number(f.importo_pagato || 0);
                     const isScaduta = new Date(f.data_scadenza) < new Date();
                     return (
                       <TableRow key={f.id} className="hover:bg-zinc-50/50">
+                        <TableCell className="text-center px-1">
+                          <AllegaDocumentoButton scadenzaId={f.id} currentUrl={f.file_url || null} compact />
+                        </TableCell>
                         <TableCell className="text-sm">
                           {new Date(f.data_scadenza).toLocaleDateString('it-IT')}
                         </TableCell>
