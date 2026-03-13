@@ -804,26 +804,15 @@ export async function allegaDocumentoScadenza(
   const maxSize = 10 * 1024 * 1024 // 10 MB
   if (file.size > maxSize) return { success: false, error: 'File troppo grande (max 10 MB)' }
 
-  const supabase = await createClient()
-
-  // Upload su Supabase Storage
+  // Upload con service role (bypassa RLS su Storage)
+  const { uploadFileToSupabase } = await import('@/utils/supabase/upload')
   const buffer = Buffer.from(await file.arrayBuffer())
-  const ext = file.name.split('.').pop() || 'pdf'
-  const path = `${Date.now()}_${scadenzaId}.${ext}`
+  const url = await uploadFileToSupabase(buffer, `${scadenzaId}_${file.name}`, file.type)
 
-  const { error: uploadErr } = await supabase.storage
-    .from('cantiere-docs')
-    .upload(path, buffer, { contentType: file.type, upsert: false })
-
-  if (uploadErr) return { success: false, error: `Errore upload: ${uploadErr.message}` }
-
-  const { data: publicUrlData } = supabase.storage
-    .from('cantiere-docs')
-    .getPublicUrl(path)
-
-  const url = publicUrlData.publicUrl
+  if (!url) return { success: false, error: 'Errore upload file' }
 
   // Aggiorna file_url sulla scadenza
+  const supabase = await createClient()
   const { error: updateErr } = await supabase
     .from('scadenze_pagamento')
     .update({ file_url: url })
