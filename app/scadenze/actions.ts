@@ -825,3 +825,180 @@ export async function allegaDocumentoScadenza(
   revalidatePath('/anagrafiche')
   return { success: true, url }
 }
+
+
+// ─── Import Bulk PDF Fatture ─────────────────────────────────────
+
+export interface ImportPdfResult {
+  filename: string
+  status: 'associato' | 'duplicato' | 'non_trovato' | 'errore' | 'no_pattern'
+  scadenzaId?: string
+  fatturaRif?: string
+  error?: string
+}
+
+function estraiPatternDaNome(filename: string): { numero: string; data: string } | null {
+  let match = filename.match(/_N\.(.+?)_del_(\d{2}-\d{2}-\d{4})_/)
+  if (match) return { numero: match[1], data: match[2] }
+  match = filename.match(/^(.+?)_del_(\d{2}-\d{2}-\d{4})_/)
+  if (match) return { numero: match[1], data: match[2] }
+  return null
+}
+
+function estraiPivaDaNome(filename: string): string | null {
+  const match = filename.match(/_del_\d{2}-\d{2}-\d{4}_([A-Z]{2}\d[\w]+)/)
+  if (match) {
+    const raw = match[1]
+    if (raw.length > 2 && /^[A-Z]{2}/.test(raw)) return raw.slice(2)
+  }
+  return null
+}
+
+function normalizzaNum(s: string): string {
+  if (!s) return ''
+  return s.replace(/[/\\\s\-.]/g, '').toUpperCase()
+}
+
+export async function importaPdfFatture(
+  formData: FormData
+): Promise<{ risultati: ImportPdfResult[]; totali: { associati: number; duplicati: number; nonTrovati: number; errori: number; noPattern: number } }> {
+  const supabase = await createClient()
+  const { uploadFileToSupabase } = await import('@/utils/supabase/upload')
+
+  // 1. Pre-carica scadenze aperte (senza file_url)
+  const { data: scadenzeAperte } = await supabase
+    .from('scadenze_pagamento')
+    .select('id, fattura_riferimento, data_emissione, soggetto_id')
+    .is('file_url', null)
+
+  const scadenzePerData = new Map<string, Array<{ id: string; fattura_riferimento: string | null; soggetto_id: string | null }>>()
+  for (const sc of scadenzeAperte || []) {
+    if (!sc.data_emissione) continue
+    const list = scadenzePerData.get(sc.data_emissione) || []
+    list.push(sc)
+    scadenzePerData.set(sc.data_emissione, list)
+  }
+
+  // 2. Pre-carica scadenze con PDF (per rilevamento doppioni)
+  const { data: scadenzeConPdf } = await supabase
+    .from('scadenze_pagamento')
+    .select('fattura_riferimento, data_emissione')
+    .not('file_url', 'is', null)
+
+  const doppioni = new Set<string>()
+  for (const sc of scadenzeConPdf || []) {
+    if (sc.fattura_riferimento && sc.data_emissione) {
+      doppioni.add(normalizzaNum(sc.fattura_riferimento) + '|' + sc.data_emissione)
+    }
+  }
+
+  // 3. Pre-carica mappa PIVA -> soggetto_id
+  const { data: soggetti } = await supabase
+    .from('anagrafica_soggetti')
+    .select('id, partita_iva, codice_fiscale')
+
+  const pivaMap = new Map<string, string>()
+  for (const s of soggetti || []) {
+    if (s.partita_iva) {
+      pivaMap.set(s.partita_iva, s.id)
+      if (s.partita_iva.length > 11) pivaMap.set(s.partita_iva.slice(0, 11), s.id)
+    }
+    if (s.codice_fiscale) pivaMap.set(s.codice_fiscale, s.id)
+  }
+
+  // 4. Processa ogni file
+  const files = formData.getAll('files') as File[]
+  const risultati: ImportPdfResult[] = []
+  const totali = { associati: 0, duplicati: 0, nonTrovati: 0, errori: 0, noPattern: 0 }
+
+  for (const file of files) {
+    const pattern = estraiPatternDaNome(file.name)
+    if (!pattern) {
+      risultati.push({ filename: file.name, status: 'no_pattern', error: 'Nome file non riconosciuto' })
+      totali.noPattern++
+      continue
+    }
+
+    const parts = pattern.data.split('-')
+    const dataIso = `${parts[2]}-${parts[1]}-${parts[0]}`
+    const numNorm = normalizzaNum(pattern.numero)
+    const piva = estraiPivaDaNome(file.name)
+
+    // Check doppione
+    if (doppioni.has(numNorm + '|' + dataIso)) {
+      risultati.push({ filename: file.name, status: 'duplicato', fatturaRif: pattern.numero })
+      totali.duplicati++
+      continue
+    }
+
+    // Matching in memoria
+    const candidati = scadenzePerData.get(dataIso) || []
+    let target: (typeof candidati)[0] | null = null
+
+    // Strategia 1: numero normalizzato + data
+    for (const sc of candidati) {
+      if (normalizzaNum(sc.fattura_riferimento || '') === numNorm) {
+        target = sc
+        break
+      }
+    }
+
+    // Strategia 2: PIVA + data
+    if (!target && piva) {
+      const soggettoId = pivaMap.get(piva) || (piva.length > 11 ? pivaMap.get(piva.slice(0, 11)) : undefined)
+      if (soggettoId) {
+        const matchPiva = candidati.filter(sc => sc.soggetto_id === soggettoId)
+        if (matchPiva.length === 1) {
+          target = matchPiva[0]
+        } else if (matchPiva.length > 1) {
+          target = matchPiva.reduce((best, sc) => {
+            const bestScore = normalizzaNum(best.fattura_riferimento || '') === numNorm ? 1000 : 0
+            const scScore = normalizzaNum(sc.fattura_riferimento || '') === numNorm ? 1000 : 0
+            return scScore > bestScore ? sc : best
+          })
+        }
+      }
+    }
+
+    if (!target) {
+      risultati.push({ filename: file.name, status: 'non_trovato', fatturaRif: pattern.numero, error: `Nessuna scadenza per fatt. ${pattern.numero} del ${dataIso}` })
+      totali.nonTrovati++
+      continue
+    }
+
+    // Upload
+    const buffer = Buffer.from(await file.arrayBuffer())
+    const url = await uploadFileToSupabase(buffer, `fattura_${target.id}_${file.name}`, file.type)
+    if (!url) {
+      risultati.push({ filename: file.name, status: 'errore', error: 'Upload fallito' })
+      totali.errori++
+      continue
+    }
+
+    // Update file_url
+    const { error: updateErr } = await supabase
+      .from('scadenze_pagamento')
+      .update({ file_url: url })
+      .eq('id', target.id)
+
+    if (updateErr) {
+      risultati.push({ filename: file.name, status: 'errore', error: updateErr.message })
+      totali.errori++
+      continue
+    }
+
+    // Rimuovi dalla lista aperte e aggiungi ai doppioni
+    const idx = candidati.indexOf(target)
+    if (idx >= 0) candidati.splice(idx, 1)
+    doppioni.add(numNorm + '|' + dataIso)
+
+    risultati.push({ filename: file.name, status: 'associato', scadenzaId: target.id, fatturaRif: target.fattura_riferimento || pattern.numero })
+    totali.associati++
+  }
+
+  revalidatePath('/scadenze')
+  revalidatePath('/finanza')
+  revalidatePath('/anagrafiche')
+
+  return { risultati, totali }
+}

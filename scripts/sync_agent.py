@@ -39,7 +39,6 @@ PYTHON = sys.executable  # usa lo stesso python del venv
 
 STEPS = [
     {"name": "riconciliazione_xml",  "script": "riconciliazione_xml.py",  "args": ["--json"], "label": "Importazione XML Fornitori"},
-    {"name": "import_fatture_pdf",   "script": "import_fatture_pdf.py",   "args": ["--json"], "label": "Associazione PDF Fatture", "timeout": 600},
 ]
 
 POLL_INTERVAL = 5  # secondi

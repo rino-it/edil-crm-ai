@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Badge } from "@/components/ui/badge";
 import { Archive, ArrowDownToLine, ArrowUpFromLine, CircleAlert, Inbox } from 'lucide-react';
+import ImportaPdfModal from './ImportaPdfModal';
 
 export default function ScadenzeNav({ badgeDaSmistare }: { badgeDaSmistare: number }) {
   const pathname = usePathname();
@@ -18,7 +19,7 @@ export default function ScadenzeNav({ badgeDaSmistare }: { badgeDaSmistare: numb
 
   return (
     <div className="overflow-x-auto -mx-4 px-4">
-      <nav className="flex gap-2 md:gap-6 border-b border-border/50 min-w-max">
+      <nav className="flex gap-2 md:gap-6 border-b border-border/50 min-w-max items-center">
         {tabs.map((tab) => {
           const isActive = pathname === tab.href;
           const Icon = tab.icon;
@@ -46,6 +47,9 @@ export default function ScadenzeNav({ badgeDaSmistare }: { badgeDaSmistare: numb
             </Link>
           )
         })}
+        <div className="ml-auto pb-2 pl-4">
+          <ImportaPdfModal />
+        </div>
       </nav>
     </div>
   );
