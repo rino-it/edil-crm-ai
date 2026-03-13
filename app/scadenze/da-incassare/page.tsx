@@ -15,9 +15,9 @@ export default async function DaIncassarePage({
   const [result, cantieriRaw] = await Promise.all([
     getScadenzePaginated(
       { 
-        tipo: 'entrata', 
-        stato: ['da_pagare', 'parziale'], 
-        search: params.search 
+        tipo: 'entrata',
+        stato: ['da_pagare', 'parziale', 'scaduto'],
+        search: params.search
       },
       { page, pageSize }
     ),
