@@ -23,6 +23,7 @@ RETURNS TABLE(
 LANGUAGE plpgsql STABLE AS $$
 DECLARE
   v_piva_clean text;
+  v_nome_norm text;
 BEGIN
   -- Pulisci PIVA: rimuovi prefisso paese (IT, etc.)
   IF p_partita_iva IS NOT NULL AND length(p_partita_iva) > 0 THEN
@@ -31,6 +32,13 @@ BEGIN
       v_piva_clean := NULL;
     END IF;
   END IF;
+
+  -- Normalizza nome: rimuovi suffissi legali, punteggiatura
+  v_nome_norm := lower(trim(p_nome));
+  v_nome_norm := regexp_replace(v_nome_norm, '\b(s\.?r\.?l\.?|s\.?p\.?a\.?|s\.?n\.?c\.?|s\.?a\.?s\.?|s\.?c\.?r\.?l\.?|srl|spa|snc|sas|di|e|&)\b', ' ', 'gi');
+  v_nome_norm := regexp_replace(v_nome_norm, '[^a-z0-9]', ' ', 'g');
+  v_nome_norm := regexp_replace(v_nome_norm, '\s+', ' ', 'g');
+  v_nome_norm := trim(v_nome_norm);
 
   -- Tier 0: Match esatto per PIVA
   IF v_piva_clean IS NOT NULL THEN
@@ -58,6 +66,30 @@ BEGIN
     1.0::float AS confidence
   FROM anagrafica_soggetti s
   WHERE lower(trim(s.ragione_sociale)) = lower(trim(p_nome))
+  LIMIT 1;
+
+  IF FOUND THEN RETURN; END IF;
+
+  -- Tier 1.5: Match normalizzato (senza suffissi legali SPA/SRL/etc.)
+  -- "AON S.P.A." = "AON SPA" = "aon"
+  RETURN QUERY
+  SELECT
+    s.id, s.ragione_sociale, s.partita_iva, s.codice_fiscale,
+    s.condizioni_pagamento,
+    'normalizzato'::text AS match_type,
+    0.95::float AS confidence
+  FROM anagrafica_soggetti s
+  WHERE v_nome_norm = trim(regexp_replace(
+    regexp_replace(
+      regexp_replace(
+        lower(trim(s.ragione_sociale)),
+        '\b(s\.?r\.?l\.?|s\.?p\.?a\.?|s\.?n\.?c\.?|s\.?a\.?s\.?|s\.?c\.?r\.?l\.?|srl|spa|snc|sas|di|e|&)\b', ' ', 'gi'
+      ),
+      '[^a-z0-9]', ' ', 'g'
+    ),
+    '\s+', ' ', 'g'
+  ))
+  AND length(v_nome_norm) >= 2
   LIMIT 1;
 
   IF FOUND THEN RETURN; END IF;

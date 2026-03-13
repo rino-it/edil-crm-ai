@@ -15,6 +15,7 @@ import {
   risolviPersonale,
   inserisciPresenze,
   normalizzaNome,
+  matchSoggetto,
   type PersonaRisolta,
   type PresenzaInput,
 } from '@/utils/data-fetcher'
@@ -1048,43 +1049,22 @@ export async function POST(request: NextRequest) {
               // Flusso fattura/proforma/nota_credito standard
               // Check match soggetto incerto (match multiplo in anagrafica)
               const ragSoc = datiFin.fornitore?.ragione_sociale?.trim();
+              const pivaForn = datiFin.fornitore?.partita_iva || null;
               let skipRiepilogo = false;
               if (ragSoc) {
-                let matchesSogg: { id: string; ragione_sociale: string }[] = [];
-                const { data: directMatches } = await supabaseAdmin
-                  .from('anagrafica_soggetti')
-                  .select('id, ragione_sociale')
-                  .ilike('ragione_sociale', `%${ragSoc}%`)
-                  .limit(5);
-                matchesSogg = directMatches || [];
-
-                // Fallback normalizzato: S.P.A. = SPA, S.R.L. = SRL, etc.
-                if (matchesSogg.length === 0) {
-                  const nomeNorm = normalizzaNome(ragSoc);
-                  if (nomeNorm.length >= 2) {
-                    const { data: allSoggetti } = await supabaseAdmin
-                      .from('anagrafica_soggetti')
-                      .select('id, ragione_sociale');
-                    matchesSogg = (allSoggetti || []).filter(
-                      (s: any) => normalizzaNome(s.ragione_sociale) === nomeNorm
-                    );
-                    if (matchesSogg.length === 1) {
-                      // Match unico normalizzato → conferma automatica
-                      datiFin._soggetto_confermato_id = matchesSogg[0].id;
-                    }
-                  }
-                }
-
-                if (matchesSogg.length > 1) {
-                  const opzioni = matchesSogg.map((m: { id: string; ragione_sociale: string }, i: number) => `${i + 1}. ${m.ragione_sociale}`).join('\n');
-                  finalReply = `Ho trovato più corrispondenze per "${ragSoc}":\n\n${opzioni}\n\n` +
-                    `Rispondi con il numero corretto, oppure scrivi il nome esatto.`;
+                const soggettoMatch = await matchSoggetto(ragSoc, pivaForn);
+                if (soggettoMatch && soggettoMatch.confidence >= 0.8) {
+                  datiFin._soggetto_confermato_id = soggettoMatch.id;
+                } else if (soggettoMatch && soggettoMatch.confidence >= 0.5) {
+                  finalReply = `Ho trovato una corrispondenza possibile per "${ragSoc}":\n\n` +
+                    `1. ${soggettoMatch.ragione_sociale}\n2. Crea nuovo soggetto\n\n` +
+                    `Rispondi con il numero corretto.`;
                   interactionStep = 'waiting_confirm_soggetto';
                   tempData = {
                     _flow_type: 'fattura',
                     ...datiFin,
                     file_url: uploadedFileUrl,
-                    _soggetti_candidati: matchesSogg,
+                    _soggetti_candidati: [{ id: soggettoMatch.id, ragione_sociale: soggettoMatch.ragione_sociale }],
                   };
                   skipRiepilogo = true;
                 }
@@ -1127,8 +1107,31 @@ export async function POST(request: NextRequest) {
           else if (geminiResult.category === 'documento_pagamento' && geminiResult.extracted_data) {
             const dati = geminiResult.extracted_data as unknown as DocumentoPagamentoEstratto;
 
-            // BUG 4: Multe — importo spesso scritto a mano → chiedi SEMPRE conferma manuale
-            if (dati.tipo_documento === 'multa') {
+            // Pre-match soggetto emittente
+            const emittenteDoc = dati.emittente?.trim();
+            let skipDocRiepilogo = false;
+            if (emittenteDoc) {
+              const soggettoMatchDoc = await matchSoggetto(emittenteDoc);
+              if (soggettoMatchDoc && soggettoMatchDoc.confidence >= 0.8) {
+                (dati as any)._soggetto_confermato_id = soggettoMatchDoc.id;
+              } else if (soggettoMatchDoc && soggettoMatchDoc.confidence >= 0.5) {
+                finalReply = `Ho trovato una corrispondenza possibile per "${emittenteDoc}":\n\n` +
+                  `1. ${soggettoMatchDoc.ragione_sociale}\n2. Crea nuovo soggetto\n\n` +
+                  `Rispondi con il numero corretto.`;
+                interactionStep = 'waiting_confirm_soggetto';
+                tempData = {
+                  _flow_type: 'documento_pagamento',
+                  ...dati,
+                  file_url: uploadedFileUrl,
+                  _soggetti_candidati: [{ id: soggettoMatchDoc.id, ragione_sociale: soggettoMatchDoc.ragione_sociale }],
+                };
+                skipDocRiepilogo = true;
+              }
+            }
+
+            if (skipDocRiepilogo) {
+              // Attende conferma soggetto
+            } else if (dati.tipo_documento === 'multa') {
               const importoSuggerito = dati.importo_totale && dati.importo_totale > 0
                 ? `\nImporto letto: EUR ${dati.importo_totale.toFixed(2)} (potrebbe essere errato)\n` : '';
               finalReply = `*🚨 MULTA RILEVATA*\n\n` +
@@ -1180,15 +1183,40 @@ export async function POST(request: NextRequest) {
           // =====================================================
           else if (geminiResult.category === 'titolo_pagamento' && geminiResult.extracted_data) {
             const dati = geminiResult.extracted_data as unknown as TitoloEstratto;
-            const riepilogo = buildTitoloRiepilogo(dati);
 
-            finalReply = riepilogo;
-            interactionStep = 'waiting_confirm_titolo';
-            tempData = {
-              _flow_type: 'titolo_pagamento',
-              ...dati,
-              file_url: uploadedFileUrl,
-            };
+            // Pre-match soggetto emittente
+            const emittenteTitolo = dati.emittente?.trim();
+            let skipTitoloRiepilogo = false;
+            if (emittenteTitolo) {
+              const soggettoMatchTit = await matchSoggetto(emittenteTitolo);
+              if (soggettoMatchTit && soggettoMatchTit.confidence >= 0.8) {
+                (dati as any)._soggetto_confermato_id = soggettoMatchTit.id;
+              } else if (soggettoMatchTit && soggettoMatchTit.confidence >= 0.5) {
+                finalReply = `Ho trovato una corrispondenza possibile per "${emittenteTitolo}":\n\n` +
+                  `1. ${soggettoMatchTit.ragione_sociale}\n2. Crea nuovo soggetto\n\n` +
+                  `Rispondi con il numero corretto.`;
+                interactionStep = 'waiting_confirm_soggetto';
+                tempData = {
+                  _flow_type: 'titolo_pagamento',
+                  ...dati,
+                  file_url: uploadedFileUrl,
+                  _soggetti_candidati: [{ id: soggettoMatchTit.id, ragione_sociale: soggettoMatchTit.ragione_sociale }],
+                };
+                skipTitoloRiepilogo = true;
+              }
+            }
+
+            if (!skipTitoloRiepilogo) {
+              const riepilogo = buildTitoloRiepilogo(dati);
+
+              finalReply = riepilogo;
+              interactionStep = 'waiting_confirm_titolo';
+              tempData = {
+                _flow_type: 'titolo_pagamento',
+                ...dati,
+                file_url: uploadedFileUrl,
+              };
+            }
           }
 
           else if (geminiResult.category === 'ddt' && geminiResult.extracted_data) {
