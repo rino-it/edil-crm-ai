@@ -8,6 +8,7 @@ import {
   getScadenzeSoggetto
 } from '@/utils/data-fetcher'
 import { editSoggetto, deleteSoggetto } from '../actions'
+import MergeSoggettoDialog from '../components/MergeSoggettoDialog'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -281,6 +282,15 @@ export default async function SoggettoDetailPage({
                   <p className="text-zinc-400 text-xs">Fatture Aperte</p>
                   <p className="text-xl font-semibold">{esposizione.fatture_aperte}</p>
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-amber-100 bg-amber-50/30">
+              <CardHeader>
+                <CardTitle className="text-amber-800 text-sm">Gestione Duplicati</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <MergeSoggettoDialog currentId={soggetto.id} currentNome={soggetto.ragione_sociale} />
               </CardContent>
             </Card>
 

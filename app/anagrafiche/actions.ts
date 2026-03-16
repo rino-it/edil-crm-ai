@@ -156,3 +156,50 @@ export async function mergeSoggetti(
   revalidatePath('/scadenze')
   return { success: true, merged }
 }
+
+export async function cercaSoggetti(
+  query: string,
+  excludeId?: string
+): Promise<{ id: string; ragione_sociale: string; partita_iva: string | null; tipo: string }[]> {
+  if (!query || query.trim().length < 2) return []
+
+  const supabase = await createClient()
+  let q = supabase
+    .from('anagrafica_soggetti')
+    .select('id, ragione_sociale, partita_iva, tipo')
+    .ilike('ragione_sociale', `%${query.trim()}%`)
+    .order('ragione_sociale')
+    .limit(10)
+
+  if (excludeId) {
+    q = q.neq('id', excludeId)
+  }
+
+  const { data } = await q
+  return data || []
+}
+
+export async function contaRiferimentiSoggetto(
+  soggettoId: string
+): Promise<Record<string, number>> {
+  const supabase = await createClient()
+  const counts: Record<string, number> = {}
+
+  const tabelle = [
+    { table: 'scadenze_pagamento', label: 'Scadenze' },
+    { table: 'fatture_fornitori', label: 'Fatture' },
+    { table: 'titoli', label: 'Titoli' },
+    { table: 'mutui', label: 'Mutui' },
+    { table: 'movimenti_banca', label: 'Movimenti banca' },
+  ]
+
+  for (const { table, label } of tabelle) {
+    const { count } = await supabase
+      .from(table)
+      .select('id', { count: 'exact', head: true })
+      .eq('soggetto_id', soggettoId)
+    counts[label] = count || 0
+  }
+
+  return counts
+}
