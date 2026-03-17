@@ -98,9 +98,54 @@ def calcola_data_scadenza(data_emissione_str, condizioni):
     except:
         return (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
 
+def _cerca_scadenza_esistente(soggetto_id, numero_fattura, importo, data_fattura):
+    """Cerca una scadenza creata da WhatsApp (senza fattura_fornitore_id) che corrisponde.
+    Strategia: 1) numero fattura esatto, 2) importo + data approssimata."""
+    try:
+        res = supabase.table("scadenze_pagamento") \
+            .select("id, file_url") \
+            .eq("soggetto_id", soggetto_id) \
+            .eq("fattura_riferimento", numero_fattura) \
+            .is_("fattura_fornitore_id", "null") \
+            .limit(1).execute()
+        if res.data:
+            return res.data[0]
+    except Exception:
+        pass
+
+    # Fallback: importo + data entro +-15 giorni
+    try:
+        data_base = datetime.strptime(data_fattura, "%Y-%m-%d")
+        data_min = (data_base - timedelta(days=15)).strftime("%Y-%m-%d")
+        data_max = (data_base + timedelta(days=15)).strftime("%Y-%m-%d")
+        res = supabase.table("scadenze_pagamento") \
+            .select("id, file_url") \
+            .eq("soggetto_id", soggetto_id) \
+            .eq("importo_totale", importo) \
+            .gte("data_emissione", data_min) \
+            .lte("data_emissione", data_max) \
+            .is_("fattura_fornitore_id", "null") \
+            .limit(1).execute()
+        if res.data:
+            return res.data[0]
+    except Exception:
+        pass
+
+    return None
+
+
+def _collega_scadenza_esistente(scadenza_id, fattura_id):
+    """Collega una scadenza esistente (da WhatsApp) alla fattura XML."""
+    supabase.table("scadenze_pagamento") \
+        .update({"fattura_fornitore_id": fattura_id, "fonte": "fattura"}) \
+        .eq("id", scadenza_id).execute()
+    _stats["scadenze_recuperate"] += 1
+
+
 def _crea_scadenze_da_xml(percorso_file, fattura_id, soggetto_id, numero_fattura, data_fattura, importo_totale, condizioni_pag):
     """Crea scadenze_pagamento leggendo i dettagli pagamento dall'XML.
-    Ritorna il numero di scadenze create."""
+    Se trova scadenze esistenti (da WhatsApp), le collega invece di crearne di nuove.
+    Ritorna il numero di scadenze create (nuove)."""
     try:
         with open(percorso_file, 'r', encoding='utf-8', errors='ignore') as f:
             xml_raw = f.read()
@@ -138,6 +183,14 @@ def _crea_scadenze_da_xml(percorso_file, fattura_id, soggetto_id, numero_fattura
             is_domiciliazione_rata = modalita_rata in ('MP19', 'MP20') or is_domiciliazione
             if not data_scad_rata:
                 data_scad_rata = calcola_data_scadenza(data_fattura, condizioni_pag)
+
+            # Anti-duplicato: cerca scadenza esistente da WhatsApp
+            existing = _cerca_scadenza_esistente(soggetto_id, numero_fattura, importo_rata, data_fattura)
+            if existing:
+                _collega_scadenza_esistente(existing["id"], fattura_id)
+                safe_print(f"   [MATCH] Rata {i+1}/{len(rate_xml)}: scadenza esistente collegata a XML")
+                continue
+
             scadenza_data = {
                 "tipo": "uscita",
                 "soggetto_id": soggetto_id,
@@ -159,6 +212,13 @@ def _crea_scadenze_da_xml(percorso_file, fattura_id, soggetto_id, numero_fattura
             dom_label = " [SDD]" if is_domiciliazione_rata else ""
             safe_print(f"   Rata {i+1}/{len(rate_xml)}: EUR {importo_rata} scade {data_scad_rata}{dom_label}")
     else:
+        # Anti-duplicato: cerca scadenza esistente da WhatsApp
+        existing = _cerca_scadenza_esistente(soggetto_id, numero_fattura, importo_totale, data_fattura)
+        if existing:
+            _collega_scadenza_esistente(existing["id"], fattura_id)
+            safe_print(f"   [MATCH] Scadenza esistente collegata a fattura XML")
+            return 0
+
         data_scad = calcola_data_scadenza(data_fattura, condizioni_pag)
         scadenza_data = {
             "tipo": "uscita",
@@ -185,7 +245,7 @@ def _crea_scadenze_da_xml(percorso_file, fattura_id, soggetto_id, numero_fattura
 
 
 # Contatori globali per output JSON
-_stats = {"nuove": 0, "scadenze_create": 0, "scadenze_recuperate": 0, "skipped": 0, "errori": 0}
+_stats = {"nuove": 0, "fatture_aggiornate": 0, "scadenze_create": 0, "scadenze_recuperate": 0, "skipped": 0, "errori": 0}
 
 # Set pre-caricato di nome_file_xml gia' importati (popolato in run())
 _xml_gia_importati: set = set()
@@ -244,20 +304,40 @@ def parse_and_upload(percorso_file):
         importo_tag = dati_gen.find("ImportoTotaleDocumento")
         importo_totale = float(importo_tag.text) if importo_tag is not None else 0.0
 
-        # --- INSERT TESTATA FATTURA ---
-        res_insert = supabase.table("fatture_fornitori").insert({
-            "ragione_sociale": ragione_sociale,
-            "piva_fornitore": piva,
-            "numero_fattura": numero_fattura,
-            "data_fattura": data_fattura,
-            "importo_totale": importo_totale,
-            "soggetto_id": soggetto_id,
-            "nome_file_xml": nome_file
-        }).execute()
-        
-        if not res_insert.data: return
-        fattura_id = res_insert.data[0]['id']
-        _stats["nuove"] += 1
+        # --- UPSERT TESTATA FATTURA (anti-duplicato WhatsApp) ---
+        # Se esiste gia' una fattura con stesso numero+PIVA creata da WhatsApp
+        # (senza nome_file_xml), la "promuoviamo" aggiungendo il file XML
+        fattura_id = None
+        try:
+            existing_fatt = supabase.table("fatture_fornitori") \
+                .select("id") \
+                .eq("numero_fattura", numero_fattura) \
+                .eq("piva_fornitore", piva) \
+                .is_("nome_file_xml", "null") \
+                .limit(1).execute()
+            if existing_fatt.data:
+                fattura_id = existing_fatt.data[0]["id"]
+                supabase.table("fatture_fornitori") \
+                    .update({"nome_file_xml": nome_file}) \
+                    .eq("id", fattura_id).execute()
+                _stats["fatture_aggiornate"] += 1
+                safe_print(f"   [LINK] Fattura esistente (da WhatsApp) collegata a XML")
+        except Exception:
+            pass
+
+        if not fattura_id:
+            res_insert = supabase.table("fatture_fornitori").insert({
+                "ragione_sociale": ragione_sociale,
+                "piva_fornitore": piva,
+                "numero_fattura": numero_fattura,
+                "data_fattura": data_fattura,
+                "importo_totale": importo_totale,
+                "soggetto_id": soggetto_id,
+                "nome_file_xml": nome_file
+            }).execute()
+            if not res_insert.data: return
+            fattura_id = res_insert.data[0]['id']
+            _stats["nuove"] += 1
 
         # --- AUTO-GENERAZIONE SCADENZE (delega a funzione riutilizzabile) ---
         n = _crea_scadenze_da_xml(percorso_file, fattura_id, soggetto_id, numero_fattura, data_fattura, importo_totale, condizioni_pag)
@@ -345,8 +425,9 @@ def run():
         parse_and_upload(os.path.join(CARTELLA_ARCHIVIO, f))
     _stats["skipped"] = len(files) - len(nuovi)
     safe_print(f"ELABORAZIONE COMPLETATA.")
-    safe_print(f"   Nuove fatture: {_stats['nuove']}, Scadenze create: {_stats['scadenze_create']}, "
-          f"Scadenze recuperate: {_stats['scadenze_recuperate']}, Skip: {_stats['skipped']}, Errori: {_stats['errori']}")
+    safe_print(f"   Nuove fatture: {_stats['nuove']}, Fatture collegate (WhatsApp): {_stats['fatture_aggiornate']}, "
+          f"Scadenze create: {_stats['scadenze_create']}, Scadenze collegate: {_stats['scadenze_recuperate']}, "
+          f"Skip: {_stats['skipped']}, Errori: {_stats['errori']}")
 
     if "--json" in sys.argv:
         print(f"###JSON_RESULT###{json.dumps(_stats)}")
