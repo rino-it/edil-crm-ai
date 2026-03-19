@@ -396,6 +396,27 @@ def parse_and_upload(percorso_file):
             supabase.table("fatture_dettaglio_righe").insert(righe_da_caricare).execute()
             safe_print(f"   [OK] Caricate {len(righe_da_caricare)} righe dettaglio.")
 
+        # --- COLLEGAMENTO DDT (movimenti) A FATTURA ---
+        ddt_numeri = set(r["ddt_riferimento"] for r in righe_da_caricare if r.get("ddt_riferimento"))
+        if ddt_numeri:
+            primo_token = ragione_sociale.split()[0] if ragione_sociale else ""
+            for ddt_num in ddt_numeri:
+                try:
+                    q = supabase.table("movimenti") \
+                        .select("id") \
+                        .eq("numero_documento", ddt_num) \
+                        .is_("fattura_fornitore_id", "null")
+                    if primo_token:
+                        q = q.ilike("fornitore", f"%{primo_token}%")
+                    existing_mov = q.limit(1).execute()
+                    if existing_mov.data:
+                        supabase.table("movimenti") \
+                            .update({"fattura_fornitore_id": fattura_id}) \
+                            .eq("id", existing_mov.data[0]["id"]).execute()
+                        safe_print(f"   [DDT-LINK] Movimento DDT {ddt_num} collegato a fattura")
+                except Exception:
+                    pass
+
     except Exception as e:
         _stats["errori"] += 1
         safe_print(f"   [ERR] Errore su {nome_file}: {e}")

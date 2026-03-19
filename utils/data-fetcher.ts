@@ -88,26 +88,56 @@ export interface MovimentoInput {
 // RICERCA CANTIERE PER NOME (match parziale con ILIKE)
 // ============================================================
 
+const CANTIERE_STOP_WORDS = new Set([
+  'via', 'di', 'del', 'della', 'delle', 'dei', 'degli',
+  'il', 'la', 'le', 'lo', 'gli', 'un', 'una', 'uno',
+  'e', 'in', 'a', 'da', 'per', 'con', 'su', 'tra', 'fra',
+  'viale', 'piazza', 'corso', 'strada', 'localita', 'loc', 'nr', 'num',
+]);
+
 export async function getCantiereData(
   searchName: string
 ): Promise<CantiereData | null> {
   if (!searchName || searchName.trim().length < 2) {
-    console.warn("⚠️ search_key troppo corta, skip ricerca cantiere");
+    console.warn("search_key troppo corta, skip ricerca cantiere");
     return null;
   }
 
   const supabase = getSupabaseAdmin();
 
   try {
-    const { data, error } = await supabase
+    const cleaned = searchName.trim().replace(/[,;.'"()]/g, ' ').replace(/\s+/g, ' ').trim();
+
+    let { data } = await supabase
       .from("vista_cantieri_budget")
       .select("*")
-      .ilike("nome", `%${searchName.trim()}%`)
+      .ilike("nome", `%${cleaned}%`)
       .limit(1)
       .single();
 
-    if (error || !data) {
-      console.warn(`⚠️ Nessun cantiere trovato per: "${searchName}"`);
+    if (!data) {
+      const parole = cleaned.toLowerCase().split(' ')
+        .filter(p => p.length >= 3 && !CANTIERE_STOP_WORDS.has(p))
+        .sort((a, b) => b.length - a.length);
+
+      for (const parola of parole) {
+        const res = await supabase
+          .from("vista_cantieri_budget")
+          .select("*")
+          .ilike("nome", `%${parola}%`)
+          .eq("stato", "aperto")
+          .limit(1)
+          .single();
+        if (res.data) {
+          data = res.data;
+          console.log(`Cantiere trovato tramite parola chiave "${parola}" per input "${searchName}"`);
+          break;
+        }
+      }
+    }
+
+    if (!data) {
+      console.warn(`Nessun cantiere trovato per: "${searchName}"`);
       return null;
     }
 
